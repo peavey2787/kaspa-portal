@@ -1,0 +1,32 @@
+schema = 1
+
+# Change these two values when Kaspa moves the ordinary or covenant validation
+# target. The run-all prompt can override the standard network for one process;
+# the covenant network stays pinned here unless explicitly overridden by env.
+[defaults]
+standard_network = "testnet-10"
+covenant_network = "testnet-12"
+
+[network.testnet-10]
+wrpc_endpoint = "resolver"
+wrpc_fallback = "wss://photon-10.kaspa.red/kaspa/testnet-10/wrpc/borsh"
+rest_endpoint = "https://api-tn10.kaspa.org"
+faucet = "https://faucet-tn10.kaspanet.io/"
+genesis_hash = "f896a3034873be1739fc4359236899fd3d65d2bc94f9780df0d0da3eb1cc4370"
+funded_spending = true
+
+[network.testnet-12]
+wrpc_endpoint = "resolver"
+wrpc_fallback = "ws://tn12-node.kaspa.com:17210"
+rest_endpoint = "https://api-tn12.kaspa.org"
+faucet = "https://faucet-tn12.kaspanet.io/"
+genesis_hash = "300fe02031119f6132f39ec03c5cf7ddf10cc23d6f5c3e5fe42d6391dc3d5c2a"
+funded_spending = true
+
+[network.mainnet]
+wrpc_endpoint = "resolver"
+wrpc_fallback = "ws://seeder2.kaspad.net:17110"
+rest_endpoint = "https://api.kaspa.org"
+faucet = ""
+genesis_hash = "58c2d4199e21f910d1571d114969cecef48f09f934d42ccb6a281a15868f2999"
+funded_spending = false

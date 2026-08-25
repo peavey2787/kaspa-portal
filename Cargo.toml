@@ -1,0 +1,74 @@
+
+[package]
+name = "kaspa-portal"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.95"
+license = "GPL-3.0-only"
+description = "Security-hardened Rust and WebAssembly SDK for Kaspa"
+repository = "https://github.com/InKasWeRust/kaspa-portal"
+keywords = ["kaspa", "sdk", "wasm", "wallet", "indexer"]
+categories = ["cryptography::cryptocurrencies", "api-bindings", "wasm"]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+wasm = [
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:js-sys",
+    "dep:web-sys",
+]
+secret-export = []
+
+[dependencies]
+sha2 = "0.10"
+ripemd = "0.1.3"
+k256 = { version = "0.13.4", features = ["arithmetic", "ecdsa", "schnorr"] }
+aes-gcm = { version = "0.10.3", features = ["aes"] }
+blake2 = "0.10.6"
+blake2b_simd = "1"
+blake3 = "1"
+zeroize = { version = "1.8.2", features = ["derive"] }
+argon2 = { version = "=0.5.3", features = ["zeroize"] }
+hmac = "0.12"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+getrandom = { version = "0.2", features = ["js"] }
+base64 = "0.22"
+qrcode = { version = "0.14.1", default-features = false }
+ed25519-dalek = "2.2"
+thiserror = "2"
+subtle = "2"
+vrf-rfc9381 = { version = "=0.0.7", features = ["edwards25519"] }
+ark-bn254 = { version = "0.5", default-features = false, features = ["curve"] }
+ark-groth16 = { version = "0.5", default-features = false, features = ["std"] }
+ark-relations = { version = "0.5", default-features = false, features = ["std"] }
+ark-serialize = { version = "0.5", default-features = false, features = ["std"] }
+ark-std = { version = "0.5", default-features = false, features = ["std"] }
+ark-snark = { version = "0.5", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["net", "time", "rt", "sync"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", features = ["sink"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+    "console", "Window", "Crypto", "WebSocket", "CloseEvent", "MessageEvent",
+    "BinaryType", "Event", "Request", "RequestInit", "RequestMode", "Response",
+    "Headers", "IdbFactory", "IdbDatabase", "IdbOpenDbRequest", "IdbRequest",
+    "IdbTransaction", "IdbTransactionMode", "IdbObjectStore", "IdbObjectStoreParameters",
+    "DomStringList", "EventTarget",
+] }
+
+[dev-dependencies]
+proptest = "1"
+futures = "0.3"

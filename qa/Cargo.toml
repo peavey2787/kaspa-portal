@@ -1,0 +1,74 @@
+[package]
+name = "kaspa-portal-qa"
+version = "1.0.0"
+publish = false
+edition = "2021"
+license = "GPL-3.0-only"
+
+[dependencies]
+kaspa-portal = { path = "..", features = ["secret-export"] }
+hex = "0.4"
+proptest = "1"
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt", "time", "net"] }
+futures-util = { version = "0.3", features = ["sink"] }
+getrandom = "0.2"
+zeroize = "1.8.2"
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[[test]]
+name = "conformance-rfc9381"
+path = "tests/conformance/rfc9381/public_api.rs"
+
+[[test]]
+name = "conformance-kaspa-address"
+path = "tests/conformance/kaspa/address.rs"
+
+[[test]]
+name = "integration-portal"
+path = "tests/integration/portal.rs"
+
+[[test]]
+name = "security-beacon"
+path = "tests/security/beacon.rs"
+
+[[test]]
+name = "regression-decimal-u64"
+path = "tests/regression/decimal_u64.rs"
+
+[[test]]
+name = "property-address"
+path = "tests/property/address.rs"
+
+[[test]]
+name = "browser-serialization"
+path = "tests/browser/serialization.rs"
+
+[[test]]
+name = "randomness-vrf"
+path = "tests/randomness/vrf/public_api.rs"
+
+[[test]]
+name = "randomness-beacon"
+path = "tests/randomness/beacon/public_api.rs"
+
+[[test]]
+name = "regression-anti-klepto-v1"
+path = "tests/regression/anti_klepto_v1.rs"
+
+[[test]]
+name = "e2e-rust-offline"
+path = "tests/e2e/rust_offline.rs"
+
+[[test]]
+name = "e2e-rust-live-network"
+path = "tests/e2e/rust_live_standard.rs"
+
+[[test]]
+name = "e2e-rust-funded-networks"
+path = "tests/e2e/rust_funded_networks.rs"
+
+[[test]]
+name = "e2e-network-fault-injection"
+path = "tests/resource/network_faults.rs"

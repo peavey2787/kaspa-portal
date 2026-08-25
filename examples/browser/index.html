@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>kaspa-portal browser example</title>
+<pre id="out">loading…</pre>
+<script type="module">
+import init, { KaspaPortal } from "../../pkg/kaspa_portal.js";
+
+const out = document.querySelector("#out");
+try {
+  await init();
+  const portal = new KaspaPortal(JSON.stringify({ network: "mainnet" }));
+  const randomness = portal.randomness();
+  const indexer = portal.indexer();
+  indexer.start();
+  const matcherId = indexer.watchAddress("kaspa:example");
+  out.textContent = `kaspa-portal ready; matcher ${matcherId}`;
+} catch (error) {
+  out.textContent = String(error);
+}
+</script>

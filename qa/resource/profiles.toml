@@ -1,0 +1,126 @@
+schema = 1
+
+# Quick gates are intended for every release E2E run. Soak gates deliberately
+# run longer and use slope/plateau checks rather than demanding zero allocator
+# growth, which would be both unrealistic and flaky across operating systems.
+
+[[profile]]
+name = "standard"
+native_scenario = "standard"
+browser_scenario = "browser_standard_resources"
+quick_warmup = 20
+quick_batches = 6
+quick_iterations_per_batch = 40
+soak_warmup = 100
+soak_batches = 24
+soak_iterations_per_batch = 200
+max_rss_growth_bytes = 67108864
+max_rss_slope_bytes_per_batch = 4194304
+max_idle_cpu_ratio = 0.10
+max_thread_growth = 4
+max_handle_or_fd_growth = 16
+max_browser_heap_growth_bytes = 16777216
+max_browser_heap_slope_bytes_per_batch = 2097152
+max_browser_backing_growth_bytes = 33554432
+max_browser_backing_slope_bytes_per_batch = 4194304
+max_browser_dom_growth = 8
+
+[[profile]]
+name = "network"
+native_scenario = "network"
+browser_scenario = "browser_network_resources"
+quick_warmup = 1
+quick_batches = 4
+quick_iterations_per_batch = 2
+soak_warmup = 2
+soak_batches = 20
+soak_iterations_per_batch = 3
+max_rss_growth_bytes = 67108864
+max_rss_slope_bytes_per_batch = 4194304
+max_idle_cpu_ratio = 0.10
+max_thread_growth = 6
+max_handle_or_fd_growth = 24
+max_browser_heap_growth_bytes = 16777216
+max_browser_heap_slope_bytes_per_batch = 2097152
+max_browser_backing_growth_bytes = 33554432
+max_browser_backing_slope_bytes_per_batch = 4194304
+max_browser_dom_growth = 8
+
+[[profile]]
+name = "indexer"
+native_scenario = "indexer"
+browser_scenario = "browser_indexer_resources"
+quick_warmup = 5
+quick_batches = 6
+quick_iterations_per_batch = 12
+soak_warmup = 20
+soak_batches = 24
+soak_iterations_per_batch = 50
+max_rss_growth_bytes = 100663296
+max_rss_slope_bytes_per_batch = 6291456
+max_idle_cpu_ratio = 0.10
+max_thread_growth = 4
+max_handle_or_fd_growth = 16
+max_browser_heap_growth_bytes = 25165824
+max_browser_heap_slope_bytes_per_batch = 3145728
+max_browser_backing_growth_bytes = 50331648
+max_browser_backing_slope_bytes_per_batch = 6291456
+max_browser_dom_growth = 8
+
+[[profile]]
+name = "crypto"
+native_scenario = "crypto"
+browser_scenario = "browser_crypto_resources"
+quick_warmup = 5
+quick_batches = 5
+quick_iterations_per_batch = 10
+soak_warmup = 20
+soak_batches = 20
+soak_iterations_per_batch = 30
+max_rss_growth_bytes = 100663296
+max_rss_slope_bytes_per_batch = 6291456
+max_idle_cpu_ratio = 0.10
+max_thread_growth = 4
+max_handle_or_fd_growth = 16
+max_browser_heap_growth_bytes = 25165824
+max_browser_heap_slope_bytes_per_batch = 3145728
+max_browser_backing_growth_bytes = 50331648
+max_browser_backing_slope_bytes_per_batch = 6291456
+max_browser_dom_growth = 8
+
+[[profile]]
+name = "browser_storage"
+browser_scenario = "browser_storage_resources"
+quick_warmup = 2
+quick_batches = 5
+quick_iterations_per_batch = 4
+soak_warmup = 5
+soak_batches = 20
+soak_iterations_per_batch = 10
+max_browser_heap_growth_bytes = 25165824
+max_browser_heap_slope_bytes_per_batch = 3145728
+max_browser_backing_growth_bytes = 50331648
+max_browser_backing_slope_bytes_per_batch = 6291456
+max_browser_dom_growth = 8
+
+[[profile]]
+name = "fault"
+supplemental = true
+native_scenario = "fault"
+browser_scenario = "browser_fault_resources"
+quick_warmup = 1
+quick_batches = 6
+quick_iterations_per_batch = 6
+soak_warmup = 4
+soak_batches = 24
+soak_iterations_per_batch = 20
+max_rss_growth_bytes = 67108864
+max_rss_slope_bytes_per_batch = 4194304
+max_idle_cpu_ratio = 0.10
+max_thread_growth = 6
+max_handle_or_fd_growth = 24
+max_browser_heap_growth_bytes = 16777216
+max_browser_heap_slope_bytes_per_batch = 2097152
+max_browser_backing_growth_bytes = 33554432
+max_browser_backing_slope_bytes_per_batch = 4194304
+max_browser_dom_growth = 8

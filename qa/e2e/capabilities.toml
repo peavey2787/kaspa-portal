@@ -1,0 +1,1895 @@
+schema = 1
+surface = "public-developer-api"
+standard_network = "testnet-10"
+covenant_network = "testnet-12"
+
+[[rust_exclusion]]
+symbol = "NetworkClient::new"
+reason = "platform transport construction, not part of the high-level SDK facade"
+
+[[rust_exclusion]]
+symbol = "NetworkClient::from_shared_transport"
+reason = "platform transport construction, not part of the high-level SDK facade"
+
+[[capability]]
+id = "portal.builder.network"
+domain = "portal"
+rust_symbol = "KaspaPortalBuilder::network"
+wasm_symbols = ["WasmKaspaPortal::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+note = "Browser constructor JSON provides the equivalent builder capability."
+
+[[capability]]
+id = "portal.builder.endpoint"
+domain = "portal"
+rust_symbol = "KaspaPortalBuilder::endpoint"
+wasm_symbols = ["WasmKaspaPortal::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+note = "Browser constructor JSON provides the equivalent builder capability."
+
+[[capability]]
+id = "portal.builder.timeout_ms"
+domain = "portal"
+rust_symbol = "KaspaPortalBuilder::timeout_ms"
+wasm_symbols = ["WasmKaspaPortal::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+note = "Browser constructor JSON provides the equivalent builder capability."
+
+[[capability]]
+id = "portal.builder.max_retries"
+domain = "portal"
+rust_symbol = "KaspaPortalBuilder::max_retries"
+wasm_symbols = ["WasmKaspaPortal::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+note = "Browser constructor JSON provides the equivalent builder capability."
+
+[[capability]]
+id = "portal.builder.indexer"
+domain = "portal"
+rust_symbol = "KaspaPortalBuilder::indexer"
+wasm_symbols = ["WasmKaspaPortal::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+note = "Browser constructor JSON provides the equivalent builder capability."
+
+[[capability]]
+id = "portal.builder.build"
+domain = "portal"
+rust_symbol = "KaspaPortalBuilder::build"
+wasm_symbols = ["WasmKaspaPortal::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+note = "Browser constructor JSON provides the equivalent builder capability."
+
+[[capability]]
+id = "portal.builder.connect"
+domain = "portal"
+rust_symbol = "KaspaPortalBuilder::connect"
+wasm_symbols = ["WasmKaspaPortal::new", "WasmKaspaPortal::connect"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "portal.config.validate"
+domain = "portal"
+rust_symbol = "PortalConfig::validate"
+wasm_symbols = ["WasmKaspaPortal::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+note = "Browser construction validates the supplied configuration."
+
+[[capability]]
+id = "portal.builder"
+domain = "portal"
+rust_symbol = "KaspaPortal::builder"
+wasm_symbols = ["WasmKaspaPortal::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.config"
+domain = "portal"
+rust_symbol = "KaspaPortal::config"
+wasm_symbols = ["WasmKaspaPortal::config"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.network"
+domain = "portal"
+rust_symbol = "KaspaPortal::network"
+wasm_symbols = ["WasmKaspaPortal::network"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.chain"
+domain = "portal"
+rust_symbol = "KaspaPortal::chain"
+wasm_symbols = ["WasmKaspaPortal::chain"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.wallet"
+domain = "portal"
+rust_symbol = "KaspaPortal::wallet"
+wasm_symbols = ["WasmKaspaPortal::wallet"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.transaction"
+domain = "portal"
+rust_symbol = "KaspaPortal::transaction"
+wasm_symbols = ["WasmKaspaPortal::transaction"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.contract"
+domain = "portal"
+rust_symbol = "KaspaPortal::contract"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.privacy"
+domain = "portal"
+rust_symbol = "KaspaPortal::privacy"
+wasm_symbols = ["WasmKaspaPortal::privacy"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.indexer"
+domain = "portal"
+rust_symbol = "KaspaPortal::indexer"
+wasm_symbols = ["WasmKaspaPortal::indexer"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.randomness"
+domain = "portal"
+rust_symbol = "KaspaPortal::randomness"
+wasm_symbols = ["WasmKaspaPortal::randomness"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "portal.connect"
+domain = "portal"
+rust_symbol = "KaspaPortal::connect"
+wasm_symbols = ["WasmKaspaPortal::connect"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "portal.disconnect"
+domain = "portal"
+rust_symbol = "KaspaPortal::disconnect"
+wasm_symbols = ["WasmKaspaPortal::disconnect"]
+execution = "offline"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "network.network_id"
+domain = "network"
+rust_symbol = "NetworkApi::network_id"
+wasm_symbols = ["WasmNetwork::network_id"]
+execution = "offline"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "network.endpoint"
+domain = "network"
+rust_symbol = "NetworkApi::endpoint"
+wasm_symbols = ["WasmNetwork::endpoint"]
+execution = "offline"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "network.client"
+domain = "network"
+rust_symbol = "NetworkApi::client"
+wasm_symbols = ["WasmNetwork::client"]
+execution = "offline"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "network.status"
+domain = "network"
+rust_symbol = "NetworkApi::status"
+wasm_symbols = ["WasmNetwork::status"]
+execution = "offline"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "network.disconnect"
+domain = "network"
+rust_symbol = "NetworkApi::disconnect"
+wasm_symbols = ["WasmNetwork::disconnect"]
+execution = "offline"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_offline_portal_network"
+wasm_e2e = "wasm_offline_portal_network"
+
+[[capability]]
+id = "network.connect"
+domain = "network"
+rust_symbol = "NetworkApi::connect"
+wasm_symbols = ["WasmNetwork::connect"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "network.reconnect"
+domain = "network"
+rust_symbol = "NetworkApi::reconnect"
+wasm_symbols = ["WasmNetwork::reconnect"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "network.health"
+domain = "network"
+rust_symbol = "NetworkApi::health"
+wasm_symbols = ["WasmNetwork::health"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "network.raw_call"
+domain = "network"
+rust_symbol = "NetworkClient::call"
+wasm_symbols = ["WasmNetworkClient::call"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+note = "Low-level wRPC call parity through the platform-provided client."
+
+[[capability]]
+id = "chain.virtual_daa_score"
+domain = "chain"
+rust_symbol = "ChainApi::virtual_daa_score"
+wasm_symbols = ["WasmChain::virtual_daa_score"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "chain.block_raw"
+domain = "chain"
+rust_symbol = "ChainApi::block_raw"
+wasm_symbols = ["WasmChain::block_raw"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "chain.utxos"
+domain = "chain"
+rust_symbol = "ChainApi::utxos"
+wasm_symbols = ["WasmChain::utxos"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "chain.utxos_many"
+domain = "chain"
+rust_symbol = "ChainApi::utxos_many"
+wasm_symbols = ["WasmChain::utxos_many"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "chain.transaction"
+domain = "chain"
+rust_symbol = "ChainApi::transaction"
+wasm_symbols = ["WasmChain::transaction"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "chain.transaction_raw"
+domain = "chain"
+rust_symbol = "ChainApi::transaction_raw"
+wasm_symbols = ["WasmChain::transaction_raw"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "chain.fee_estimate"
+domain = "chain"
+rust_symbol = "ChainApi::fee_estimate"
+wasm_symbols = ["WasmChain::fee_estimate"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
+id = "wallet.import_kpub"
+domain = "wallet"
+rust_symbol = "WalletApi::import_kpub"
+wasm_symbols = ["WasmWallet::import_kpub"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_wallet"
+wasm_e2e = "wasm_offline_wallet"
+
+[[capability]]
+id = "wallet.import_kpub_raw"
+domain = "wallet"
+rust_symbol = "WalletApi::import_kpub_raw"
+wasm_symbols = ["WasmWallet::import_kpub_raw"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_wallet"
+wasm_e2e = "wasm_offline_wallet"
+
+[[capability]]
+id = "wallet.extend_addresses"
+domain = "wallet"
+rust_symbol = "WalletApi::extend_addresses"
+wasm_symbols = ["WasmWallet::extend_addresses"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_wallet"
+wasm_e2e = "wasm_offline_wallet"
+
+[[capability]]
+id = "wallet.mnemonic_12_from_entropy"
+domain = "wallet"
+rust_symbol = "WalletApi::mnemonic_12_from_entropy"
+wasm_symbols = ["WasmWallet::mnemonic_12_from_entropy"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_wallet"
+wasm_e2e = "wasm_offline_wallet"
+
+[[capability]]
+id = "wallet.mnemonic_24_from_entropy"
+domain = "wallet"
+rust_symbol = "WalletApi::mnemonic_24_from_entropy"
+wasm_symbols = ["WasmWallet::mnemonic_24_from_entropy"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_wallet"
+wasm_e2e = "wasm_offline_wallet"
+
+[[capability]]
+id = "wallet.prefix"
+domain = "wallet"
+rust_symbol = "WalletApi::prefix"
+wasm_symbols = ["WasmWallet::prefix"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_wallet"
+wasm_e2e = "wasm_offline_wallet"
+
+[[capability]]
+id = "wallet.utxos"
+domain = "wallet"
+rust_symbol = "WalletApi::utxos"
+wasm_symbols = ["WasmWallet::utxos"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_wallet"
+wasm_e2e = "wasm_live_standard_wallet"
+
+[[capability]]
+id = "wallet.balance"
+domain = "wallet"
+rust_symbol = "WalletApi::balance"
+wasm_symbols = ["WasmWallet::balance"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_wallet"
+wasm_e2e = "wasm_live_standard_wallet"
+
+[[capability]]
+id = "transaction.pskb"
+domain = "transaction"
+rust_symbol = "TransactionApi::pskb"
+wasm_symbols = ["WasmTransaction::pskb"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.plan_send"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_send"
+wasm_symbols = ["WasmTransaction::plan_send"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+
+[[capability]]
+id = "transaction.plan_send_with_payload"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_send_with_payload"
+wasm_symbols = ["WasmTransaction::plan_send_with_payload"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+
+[[capability]]
+id = "transaction.plan_selected_send"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_selected_send"
+wasm_symbols = ["WasmTransaction::plan_selected_send"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+
+[[capability]]
+id = "transaction.plan_consolidation"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_consolidation"
+wasm_symbols = ["WasmTransaction::plan_consolidation"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+
+[[capability]]
+id = "transaction.scan_multisig_branch"
+domain = "transaction"
+rust_symbol = "TransactionApi::scan_multisig_branch"
+wasm_symbols = ["WasmTransaction::scan_multisig_branch"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_transaction_reads"
+wasm_e2e = "wasm_live_standard_transaction_reads"
+
+[[capability]]
+id = "transaction.plan_multisig_consolidation"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_multisig_consolidation"
+wasm_symbols = ["WasmTransaction::plan_multisig_consolidation"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+
+[[capability]]
+id = "transaction.plan_covenant"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_covenant"
+wasm_symbols = ["WasmTransaction::plan_covenant"]
+execution = "funded_covenant"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_covenant_network_transactions"
+wasm_e2e = "wasm_funded_covenant_network_transactions"
+
+[[capability]]
+id = "transaction.plan_covenant_with_binding"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_covenant_with_binding"
+wasm_symbols = ["WasmTransaction::plan_covenant_with_binding"]
+execution = "funded_covenant"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_covenant_network_transactions"
+wasm_e2e = "wasm_funded_covenant_network_transactions"
+
+[[capability]]
+id = "transaction.plan_from_utxos"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_from_utxos"
+wasm_symbols = ["WasmTransaction::plan_from_utxos"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.set_payload"
+domain = "transaction"
+rust_symbol = "TransactionApi::set_payload"
+wasm_symbols = ["WasmTransaction::set_payload"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.set_tx_lane"
+domain = "transaction"
+rust_symbol = "TransactionApi::set_tx_lane"
+wasm_symbols = ["WasmTransaction::set_tx_lane"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.analyze"
+domain = "transaction"
+rust_symbol = "TransactionApi::analyze"
+wasm_symbols = ["WasmTransaction::analyze"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+
+[[capability]]
+id = "transaction.analyze_with_fee_rate"
+domain = "transaction"
+rust_symbol = "TransactionApi::analyze_with_fee_rate"
+wasm_symbols = ["WasmTransaction::analyze_with_fee_rate"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.review"
+domain = "transaction"
+rust_symbol = "TransactionApi::review"
+wasm_symbols = ["WasmTransaction::review"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.finalize"
+domain = "transaction"
+rust_symbol = "TransactionApi::finalize"
+wasm_symbols = ["WasmTransaction::finalize"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.sign_compact_kspt"
+domain = "transaction"
+rust_symbol = "TransactionApi::sign_compact_kspt"
+wasm_symbols = ["WasmTransaction::sign_compact_kspt"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.sign_compact_kspt_with_entropy"
+domain = "transaction"
+rust_symbol = "TransactionApi::sign_compact_kspt_with_entropy"
+wasm_symbols = ["WasmTransaction::sign_compact_kspt_with_entropy"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.apply_sequence_commit_proof"
+domain = "transaction"
+rust_symbol = "TransactionApi::apply_sequence_commit_proof"
+wasm_symbols = ["WasmTransaction::apply_sequence_commit_proof"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "transaction.broadcast"
+domain = "transaction"
+rust_symbol = "TransactionApi::broadcast"
+wasm_symbols = ["WasmTransaction::broadcast"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+
+[[capability]]
+id = "transaction.broadcast_wire"
+domain = "transaction"
+rust_symbol = "TransactionApi::broadcast"
+wasm_symbols = ["WasmTransaction::broadcast_wire"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+note = "Browser convenience combines wire finalization with broadcast."
+
+[[capability]]
+id = "pskb.encode"
+domain = "transaction"
+rust_symbol = "PskbApi::encode"
+wasm_symbols = ["WasmPskb::encode"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "pskb.encode_document"
+domain = "transaction"
+rust_symbol = "PskbApi::encode_document"
+wasm_symbols = ["WasmPskb::encode_document"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "pskb.plan_sweep"
+domain = "transaction"
+rust_symbol = "PskbApi::plan_sweep"
+wasm_symbols = ["WasmPskb::plan_sweep"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "pskb.plan_global_thread_withdrawal"
+domain = "transaction"
+rust_symbol = "PskbApi::plan_global_thread_withdrawal"
+wasm_symbols = ["WasmPskb::plan_global_thread_withdrawal"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "pskb.plan_global_thread_topup"
+domain = "transaction"
+rust_symbol = "PskbApi::plan_global_thread_topup"
+wasm_symbols = ["WasmPskb::plan_global_thread_topup"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_transaction"
+wasm_e2e = "wasm_offline_transaction"
+
+[[capability]]
+id = "contract.surface.script"
+domain = "contract"
+rust_symbol = "ContractApi::script"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.covenant"
+domain = "contract"
+rust_symbol = "ContractApi::covenant"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.commit_reveal"
+domain = "contract"
+rust_symbol = "ContractApi::commit_reveal"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.crowdfund"
+domain = "contract"
+rust_symbol = "ContractApi::crowdfund"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.merkle"
+domain = "contract"
+rust_symbol = "ContractApi::merkle"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.oracle"
+domain = "contract"
+rust_symbol = "ContractApi::oracle"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.sequence_commit"
+domain = "contract"
+rust_symbol = "ContractApi::sequence_commit"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.shipping_escrow"
+domain = "contract"
+rust_symbol = "ContractApi::shipping_escrow"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.vault"
+domain = "contract"
+rust_symbol = "ContractApi::vault"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.surface.zk"
+domain = "contract"
+rust_symbol = "ContractApi::zk"
+wasm_symbols = ["WasmKaspaPortal::contract"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+note = "Rust sub-facades are flattened into KaspaContract in the browser API."
+
+[[capability]]
+id = "contract.script.p2sh_address"
+domain = "contract"
+rust_symbol = "ScriptApi::p2sh_address"
+wasm_symbols = ["WasmContract::p2sh_address"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.script.cltv_locktime"
+domain = "contract"
+rust_symbol = "ScriptApi::cltv_locktime"
+wasm_symbols = ["WasmContract::cltv_locktime"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.script.csv_sequence"
+domain = "contract"
+rust_symbol = "ScriptApi::csv_sequence"
+wasm_symbols = ["WasmContract::csv_sequence"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.covenant.dms"
+domain = "contract"
+rust_symbol = "CovenantApi::dms"
+wasm_symbols = ["WasmContract::dms"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.covenant.private_swap"
+domain = "contract"
+rust_symbol = "CovenantApi::private_swap"
+wasm_symbols = ["WasmContract::private_swap"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.covenant.piggy_bank"
+domain = "contract"
+rust_symbol = "CovenantApi::piggy_bank"
+wasm_symbols = ["WasmContract::piggy_bank"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.covenant.timelocked_savings"
+domain = "contract"
+rust_symbol = "CovenantApi::timelocked_savings"
+wasm_symbols = ["WasmContract::timelocked_savings"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.covenant.payjoin"
+domain = "contract"
+rust_symbol = "CovenantApi::payjoin"
+wasm_symbols = ["WasmContract::payjoin"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.commitreveal.build"
+domain = "contract"
+rust_symbol = "CommitRevealApi::build"
+wasm_symbols = ["WasmContract::commit_reveal"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.crowdfund.campaign_id"
+domain = "contract"
+rust_symbol = "CrowdfundApi::campaign_id"
+wasm_symbols = ["WasmContract::crowdfund_campaign_id"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.crowdfund.redeem_script"
+domain = "contract"
+rust_symbol = "CrowdfundApi::redeem_script"
+wasm_symbols = ["WasmContract::crowdfund_redeem_script"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.merkle.root"
+domain = "contract"
+rust_symbol = "MerkleApi::root"
+wasm_symbols = ["WasmContract::merkle_root"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.merkle.proof"
+domain = "contract"
+rust_symbol = "MerkleApi::proof"
+wasm_symbols = ["WasmContract::merkle_proof"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.oracle.heartbeat_script"
+domain = "contract"
+rust_symbol = "OracleApi::heartbeat_script"
+wasm_symbols = ["WasmContract::oracle_heartbeat_script"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.oracle.heartbeat_sig_script"
+domain = "contract"
+rust_symbol = "OracleApi::heartbeat_sig_script"
+wasm_symbols = ["WasmContract::oracle_heartbeat_sig_script"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.oracle.consumer_sig_script"
+domain = "contract"
+rust_symbol = "OracleApi::consumer_sig_script"
+wasm_symbols = ["WasmContract::oracle_consumer_sig_script"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.sequencecommit.stealth_proof"
+domain = "contract"
+rust_symbol = "SequenceCommitApi::stealth_proof"
+wasm_symbols = ["WasmContract::sequence_commit_stealth_proof"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.shippingescrow.build"
+domain = "contract"
+rust_symbol = "ShippingEscrowApi::build"
+wasm_symbols = ["WasmContract::shipping_escrow"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.vault.tagged"
+domain = "contract"
+rust_symbol = "VaultApi::tagged"
+wasm_symbols = ["WasmContract::tagged_vault"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.vault.split"
+domain = "contract"
+rust_symbol = "VaultApi::split"
+wasm_symbols = ["WasmContract::split_vault"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.vault.covenant_id"
+domain = "contract"
+rust_symbol = "VaultApi::covenant_id"
+wasm_symbols = ["WasmContract::covenant_id"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.zk.trusted_setup"
+domain = "contract"
+rust_symbol = "ZkApi::trusted_setup"
+wasm_symbols = ["WasmContract::zk_trusted_setup"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.zk.prove_crowdfund"
+domain = "contract"
+rust_symbol = "ZkApi::prove_crowdfund"
+wasm_symbols = ["WasmContract::zk_prove_crowdfund"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.zk.verify"
+domain = "contract"
+rust_symbol = "ZkApi::verify"
+wasm_symbols = ["WasmContract::zk_verify"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "privacy.surface.stealth"
+domain = "privacy"
+rust_symbol = "PrivacyApi::stealth"
+wasm_symbols = ["WasmKaspaPortal::privacy"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_privacy"
+wasm_e2e = "wasm_offline_privacy"
+note = "Rust StealthApi is flattened into KaspaPrivacy in the browser API."
+
+[[capability]]
+id = "privacy.stealth.generate_payment"
+domain = "privacy"
+rust_symbol = "StealthApi::generate_payment"
+wasm_symbols = ["WasmPrivacy::generate_stealth_payment"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_privacy"
+wasm_e2e = "wasm_offline_privacy"
+
+[[capability]]
+id = "privacy.stealth.announcement_address"
+domain = "privacy"
+rust_symbol = "StealthApi::announcement_address"
+wasm_symbols = ["WasmPrivacy::announcement_address"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_privacy"
+wasm_e2e = "wasm_offline_privacy"
+
+[[capability]]
+id = "privacy.stealth.decode_metadata"
+domain = "privacy"
+rust_symbol = "StealthApi::decode_metadata"
+wasm_symbols = ["WasmPrivacy::decode_metadata"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_privacy"
+wasm_e2e = "wasm_offline_privacy"
+
+[[capability]]
+id = "privacy.stealth.derive_metadata"
+domain = "privacy"
+rust_symbol = "StealthApi::derive_metadata"
+wasm_symbols = ["WasmPrivacy::derive_metadata"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_privacy"
+wasm_e2e = "wasm_offline_privacy"
+
+[[capability]]
+id = "privacy.stealth.encode_metadata"
+domain = "privacy"
+rust_symbol = "StealthApi::encode_metadata"
+wasm_symbols = ["WasmPrivacy::encode_metadata"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_privacy"
+wasm_e2e = "wasm_offline_privacy"
+
+[[capability]]
+id = "privacy.stealth.scan_raw_for_preimage"
+domain = "privacy"
+rust_symbol = "StealthApi::scan_raw_for_preimage"
+wasm_symbols = ["WasmPrivacy::scan_raw_for_preimage"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_privacy"
+wasm_e2e = "wasm_offline_privacy"
+
+[[capability]]
+id = "indexer.construct"
+domain = "indexer"
+rust_symbol = "IndexerApi::with_clock"
+wasm_symbols = ["WasmIndexer::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+note = "Browser constructor supplies the browser monotonic clock adapter."
+
+[[capability]]
+id = "indexer.start"
+domain = "indexer"
+rust_symbol = "IndexerApi::start"
+wasm_symbols = ["WasmIndexer::start"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.stop"
+domain = "indexer"
+rust_symbol = "IndexerApi::stop"
+wasm_symbols = ["WasmIndexer::stop"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.watch_address"
+domain = "indexer"
+rust_symbol = "IndexerApi::watch_address"
+wasm_symbols = ["WasmIndexer::watch_address"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.watch_payload_prefix"
+domain = "indexer"
+rust_symbol = "IndexerApi::watch_payload_prefix"
+wasm_symbols = ["WasmIndexer::watch_payload_prefix"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.watch_payload_contains"
+domain = "indexer"
+rust_symbol = "IndexerApi::watch_payload_contains"
+wasm_symbols = ["WasmIndexer::watch_payload_contains"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.watch_payload_exact"
+domain = "indexer"
+rust_symbol = "IndexerApi::watch_payload_exact"
+wasm_symbols = ["WasmIndexer::watch_payload_exact"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.watch_payload_suffix"
+domain = "indexer"
+rust_symbol = "IndexerApi::watch_payload_suffix"
+wasm_symbols = ["WasmIndexer::watch_payload_suffix"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.add_matcher"
+domain = "indexer"
+rust_symbol = "IndexerApi::add_matcher"
+wasm_symbols = ["WasmIndexer::add_matcher"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.remove_matcher"
+domain = "indexer"
+rust_symbol = "IndexerApi::remove_matcher"
+wasm_symbols = ["WasmIndexer::remove_matcher"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.ingest_transaction"
+domain = "indexer"
+rust_symbol = "IndexerApi::ingest_transaction"
+wasm_symbols = ["WasmIndexer::ingest_transaction"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.ingest_block"
+domain = "indexer"
+rust_symbol = "IndexerApi::ingest_block"
+wasm_symbols = ["WasmIndexer::ingest_block"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.ingest_block_batch"
+domain = "indexer"
+rust_symbol = "IndexerApi::ingest_block_batch"
+wasm_symbols = ["WasmIndexer::ingest_block_batch"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.transaction"
+domain = "indexer"
+rust_symbol = "IndexerApi::transaction"
+wasm_symbols = ["WasmIndexer::transaction"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.transactions"
+domain = "indexer"
+rust_symbol = "IndexerApi::transactions"
+wasm_symbols = ["WasmIndexer::transactions"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.blocks"
+domain = "indexer"
+rust_symbol = "IndexerApi::blocks"
+wasm_symbols = ["WasmIndexer::blocks"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.matches"
+domain = "indexer"
+rust_symbol = "IndexerApi::matches"
+wasm_symbols = ["WasmIndexer::matches"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.metrics"
+domain = "indexer"
+rust_symbol = "IndexerApi::metrics"
+wasm_symbols = ["WasmIndexer::metrics"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.health"
+domain = "indexer"
+rust_symbol = "IndexerApi::health"
+wasm_symbols = ["WasmIndexer::health"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.snapshot"
+domain = "indexer"
+rust_symbol = "IndexerApi::snapshot"
+wasm_symbols = ["WasmIndexer::snapshot"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.restore_snapshot"
+domain = "indexer"
+rust_symbol = "IndexerApi::restore_snapshot"
+wasm_symbols = ["WasmIndexer::restore_snapshot"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.checkpoint"
+domain = "indexer"
+rust_symbol = "IndexerApi::checkpoint"
+wasm_symbols = ["WasmIndexer::checkpoint"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.set_checkpoint"
+domain = "indexer"
+rust_symbol = "IndexerApi::set_checkpoint"
+wasm_symbols = ["WasmIndexer::set_checkpoint"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.persisted_state"
+domain = "indexer"
+rust_symbol = "IndexerApi::persisted_state"
+wasm_symbols = ["WasmIndexer::persisted_state"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.restore_state"
+domain = "indexer"
+rust_symbol = "IndexerApi::restore_state"
+wasm_symbols = ["WasmIndexer::restore_state"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.apply_sync_batches"
+domain = "indexer"
+rust_symbol = "IndexerApi::apply_sync_batches"
+wasm_symbols = ["WasmIndexer::apply_sync_batches"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.reconcile_virtual_chain"
+domain = "indexer"
+rust_symbol = "IndexerApi::reconcile_virtual_chain"
+wasm_symbols = ["WasmIndexer::reconcile_virtual_chain"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.drain_events"
+domain = "indexer"
+rust_symbol = "IndexerApi::drain_events"
+wasm_symbols = ["WasmIndexer::drain_events"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.clear"
+domain = "indexer"
+rust_symbol = "IndexerApi::clear"
+wasm_symbols = ["WasmIndexer::clear"]
+execution = "offline"
+funds_required = false
+resource_profile = "indexer"
+e2e_status = "covered"
+rust_e2e = "rust_offline_indexer"
+wasm_e2e = "wasm_offline_indexer"
+
+[[capability]]
+id = "indexer.persistence.save"
+domain = "indexer"
+rust_symbol = "IndexerApi::save_to"
+wasm_symbols = ["WasmIndexer::save_indexed_db"]
+execution = "browser_storage"
+funds_required = false
+resource_profile = "browser_storage"
+e2e_status = "covered"
+wasm_e2e = "wasm_browser_storage_indexeddb"
+note = "Browser persistence adapter is IndexedDB."
+
+[[capability]]
+id = "indexer.persistence.restore"
+domain = "indexer"
+rust_symbol = "IndexerApi::restore_from"
+wasm_symbols = ["WasmIndexer::load_indexed_db"]
+execution = "browser_storage"
+funds_required = false
+resource_profile = "browser_storage"
+e2e_status = "covered"
+wasm_e2e = "wasm_browser_storage_indexeddb"
+note = "Browser persistence adapter is IndexedDB."
+
+[[capability]]
+id = "indexer.persistence.clear"
+domain = "indexer"
+rust_symbol = "IndexerApi::clear_persisted"
+wasm_symbols = ["WasmIndexer::clear_indexed_db"]
+execution = "browser_storage"
+funds_required = false
+resource_profile = "browser_storage"
+e2e_status = "covered"
+wasm_e2e = "wasm_browser_storage_indexeddb"
+note = "Browser persistence adapter is IndexedDB."
+
+[[capability]]
+id = "randomness.surface.beacon"
+domain = "randomness"
+rust_symbol = "RandomnessApi::beacon"
+wasm_symbols = ["WasmKaspaPortal::randomness", "WasmRandomness::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+
+[[capability]]
+id = "randomness.surface.vrf"
+domain = "randomness"
+rust_symbol = "RandomnessApi::vrf"
+wasm_symbols = ["WasmKaspaPortal::randomness", "WasmRandomness::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+
+[[capability]]
+id = "randomness.beacon.observe"
+domain = "randomness"
+rust_symbol = "BeaconApi::observe_kaspa_block"
+wasm_symbols = ["WasmRandomness::observe_kaspa_block"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+
+[[capability]]
+id = "randomness.beacon.generate"
+domain = "randomness"
+rust_symbol = "BeaconApi::generate"
+wasm_symbols = ["WasmRandomness::generate_beacon"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+
+[[capability]]
+id = "randomness.beacon.verify"
+domain = "randomness"
+rust_symbol = "BeaconApi::verify"
+wasm_symbols = ["WasmRandomness::verify_beacon"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+
+[[capability]]
+id = "randomness.beacon.generate_live"
+domain = "randomness"
+rust_symbol = "BeaconApi::generate_live"
+wasm_symbols = ["WasmRandomness::generate_live"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_randomness"
+wasm_e2e = "wasm_live_standard_randomness"
+
+[[capability]]
+id = "randomness.vrf.from_bytes"
+domain = "randomness"
+rust_symbol = "VrfSecretKey::from_bytes"
+wasm_symbols = ["WasmVrfSecretKey::new"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+
+[[capability]]
+id = "randomness.vrf.public_key"
+domain = "randomness"
+rust_symbol = "VrfSecretKey::public_key"
+wasm_symbols = ["WasmVrfSecretKey::public_key", "WasmRandomness::vrf_public_key"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+
+[[capability]]
+id = "randomness.vrf.expose_secret"
+domain = "randomness"
+rust_symbol = "VrfSecretKey::expose_secret"
+wasm_symbols = ["WasmVrfSecretKey::expose_secret"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+note = "Feature-gated by secret-export on both Rust and WASM."
+
+[[capability]]
+id = "randomness.vrf.generate_keypair"
+domain = "randomness"
+rust_symbol = "VrfApi::generate_keypair"
+wasm_symbols = ["WasmRandomness::generate_vrf_keypair"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+note = "Browser returns a zeroizing KaspaVrfSecretKey handle instead of exporting generated secret bytes."
+
+[[capability]]
+id = "randomness.vrf.prove"
+domain = "randomness"
+rust_symbol = "VrfApi::prove"
+wasm_symbols = ["WasmRandomness::vrf_prove", "WasmVrfSecretKey::prove"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"
+
+[[capability]]
+id = "randomness.vrf.verify"
+domain = "randomness"
+rust_symbol = "VrfApi::verify"
+wasm_symbols = ["WasmRandomness::vrf_verify"]
+execution = "offline"
+funds_required = false
+resource_profile = "crypto"
+e2e_status = "covered"
+rust_e2e = "rust_offline_randomness"
+wasm_e2e = "wasm_offline_randomness"

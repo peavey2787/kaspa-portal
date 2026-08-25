@@ -1,0 +1,14 @@
+/target/
+/qa/target/
+/qa/benches/target/
+/qa/tests/fuzz/target/
+/node_modules/
+**/node_modules/
+/test-results/
+**/test-results/
+/playwright-report/
+**/playwright-report/
+/.kaspa-portal-e2e/
+__pycache__/
+*.py[cod]
+.DS_Store

@@ -1,0 +1,84 @@
+[package]
+name = "kaspa-portal-fuzz"
+version = "1.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+hex = "0.4"
+kaspa-portal = { path = "../../.." }
+
+[[bin]]
+name = "address"
+path = "fuzz_targets/address.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "kspt"
+path = "fuzz_targets/kspt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "qr_frame"
+path = "fuzz_targets/qr_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "indexer_transaction"
+path = "fuzz_targets/indexer_transaction.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "beacon_proof"
+path = "fuzz_targets/beacon_proof.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pskt"
+path = "fuzz_targets/pskt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "script"
+path = "fuzz_targets/script.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rpc_response"
+path = "fuzz_targets/rpc_response.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pskb"
+path = "fuzz_targets/pskb.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "signed_transaction"
+path = "fuzz_targets/signed_transaction.rs"
+test = false
+doc = false
+bench = false
