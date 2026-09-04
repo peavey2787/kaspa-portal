@@ -2,11 +2,11 @@
 [package]
 name = "kaspa-portal"
 version = "1.0.0"
-edition = "2021"
+edition = "2026"
 rust-version = "1.95"
 license = "GPL-3.0-only"
 description = "Security-hardened Rust and WebAssembly SDK for Kaspa"
-repository = "https://github.com/InKasWeRust/kaspa-portal"
+repository = "https://github.com/peavey2787/kaspa-portal"
 keywords = ["kaspa", "sdk", "wasm", "wallet", "indexer"]
 categories = ["cryptography::cryptocurrencies", "api-bindings", "wasm"]
 
