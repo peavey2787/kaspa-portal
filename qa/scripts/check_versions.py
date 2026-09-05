@@ -15,8 +15,8 @@ def fail(message: str) -> None:
 
 for path in [ROOT / "Cargo.toml", ROOT / "qa/Cargo.toml", ROOT / "qa/benches/Cargo.toml", ROOT / "qa/tests/fuzz/Cargo.toml"]:
     package = read_package(path)
-    if package.get("version") != "1.0.0":
-        fail(f"package must be 1.0.0: {path.relative_to(ROOT)}")
+    if package.get("version") != "1.0.1":
+        fail(f"package must be 1.0.1: {path.relative_to(ROOT)}")
 
 required_markers = {
     "src/transaction/interchange/kspt/format.rs": [

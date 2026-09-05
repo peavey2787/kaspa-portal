@@ -6,6 +6,7 @@ use super::operation::Operation;
 pub enum ResponseKind {
     Success,
     Error(u8),
+    Notification,
 }
 
 pub struct WrpcResponse<'a> {
@@ -37,10 +38,10 @@ fn read_optional_operation(reader: &mut WireReader<'_>) -> Result<Option<u8>, Ne
 }
 
 fn response_kind(code: u8) -> ResponseKind {
-    if code == 0 {
-        ResponseKind::Success
-    } else {
-        ResponseKind::Error(code)
+    match code {
+        0 => ResponseKind::Success,
+        0xff => ResponseKind::Notification,
+        other => ResponseKind::Error(other),
     }
 }
 

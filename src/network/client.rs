@@ -31,4 +31,16 @@ impl NetworkClient {
     ) -> Result<Vec<u8>, NetworkError> {
         self.transport.call(operation, payload).await
     }
+
+    /// Close the persistent transport owned by this client.
+    pub(crate) fn disconnect(&self) {
+        self.transport.disconnect();
+    }
+
+    /// Receive the next asynchronous Kaspa notification from the same native
+    /// wRPC connection used for request/response traffic.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) async fn next_notification(&self) -> Result<Vec<u8>, NetworkError> {
+        self.transport.next_notification().await
+    }
 }

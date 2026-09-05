@@ -44,6 +44,25 @@ Core domains do not import `platform`. Network transports, time and CURBy I/O ar
 
 `qa/scripts/check_architecture.py` enforces these edges and rejects obsolete namespaces.
 
+## Native wRPC lifecycle
+
+Native networking is connection-oriented. `NativeWebSocketTransport` owns a driver task and a single persistent WebSocket shared by cloned `NetworkClient`/`NetworkApi` handles for that Portal. The driver:
+
+- serializes outgoing RPC calls and retains request identity until the matching response arrives;
+- routes server notifications independently, so a BlockAdded frame can arrive between a request and its response;
+- records successful subscription payloads and replays them with fresh request IDs after reconnect;
+- bounds queued notifications and tears down a timed-out socket so a late response cannot be associated with a later request;
+- never automatically retries `SubmitTransaction`, avoiding duplicate-broadcast ambiguity; and
+- responds to explicit `disconnect()` through a separate shutdown channel even when the RPC command queue is full.
+
+The public native BlockAdded decoder/API lives in `network`; transport/WebSocket details remain in `platform/native`. `KaspaPortal::start_live_indexer()` is orchestration at the portal boundary rather than an `indexer -> network` dependency. The live-indexer task is shared across Portal clones and is aborted when the final shared runtime is dropped.
+
+## Transaction payload boundary
+
+KSPT v1's payload length is a little-endian `u16`, so Portal's application-payload ceiling is exactly 65,535 bytes. The transaction model stores payloads in `Vec<u8>` and KSPT encode/decode paths reject values beyond that format limit. Standard PSKT parser offsets/decoded-JSON lengths are wider than `u16`, because a maximum-size binary payload represented as JSON/hex is itself larger than 65,535 bytes.
+
+`plan_send_with_payload()` performs payload-aware mass/fee estimation before final UTXO selection and then validates the resulting plan's actual output-script lengths and payload size before encoding.
+
 ## Testing
 
 ```text

@@ -8,6 +8,12 @@ use crate::transaction::interchange::pskt::PsktFormat;
 
 /// Set `global.txPayload` on the first PSKT in an existing PSKB wire.
 pub fn set_payload(wire_hex: &str, payload: &[u8]) -> Result<String, String> {
+    if payload.len() > crate::transaction::model::MAX_PAYLOAD_SIZE {
+        return Err(format!(
+            "set_payload: payload exceeds KSPT v1 limit of {} bytes",
+            crate::transaction::model::MAX_PAYLOAD_SIZE
+        ));
+    }
     if detect_format_hex(wire_hex) != PsktFormat::Pskb {
         return Err("set_payload: not a PSKB wire".into());
     }
@@ -29,6 +35,12 @@ pub fn set_tx_lane(
     tx_version: u16,
     payload: &[u8],
 ) -> Result<String, String> {
+    if payload.len() > crate::transaction::model::MAX_PAYLOAD_SIZE {
+        return Err(format!(
+            "set_tx_lane: payload exceeds KSPT v1 limit of {} bytes",
+            crate::transaction::model::MAX_PAYLOAD_SIZE
+        ));
+    }
     if detect_format_hex(wire_hex) != PsktFormat::Pskb {
         return Err("set_tx_lane: not a PSKB wire".into());
     }

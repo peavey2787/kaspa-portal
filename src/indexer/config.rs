@@ -78,7 +78,7 @@ impl Default for IndexerConfig {
             dedupe_window: 4_096,
             scanner_stale_after_ms: 60_000,
             transaction_ttl_ms: 24 * 60 * 60 * 1000,
-            max_payload_bytes: 16_384,
+            max_payload_bytes: u16::MAX as usize,
             max_addresses_per_transaction: 256,
             max_query_page: 500,
         }

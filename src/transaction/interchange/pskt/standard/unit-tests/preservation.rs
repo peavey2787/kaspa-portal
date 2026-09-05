@@ -28,11 +28,7 @@ fn captured_unknown_ranges_enforce_every_json_boundary() {
     for (start, end) in [(9usize, 10usize), (20, 19), (10, 31), (65_536, 65_536)] {
         let mut invalid = PsktParsed::empty();
         invalid.json_start = 10;
-        invalid.json_len = if end > u16::MAX as usize {
-            u16::MAX
-        } else {
-            20
-        };
+        invalid.json_len = 20;
         assert_eq!(
             capture_unknown(&mut invalid, scope, start, end),
             Err(PskError::JsonTooLarge),
@@ -159,9 +155,9 @@ fn preservation_scope_rejects_output_index_equal_to_output_count() {
 
     let scratch = b"\"x\":1";
     let mut parsed = PsktParsed::empty();
-    parsed.json_len = scratch.len() as u16;
+    parsed.json_len = scratch.len() as u32;
     parsed.unknowns_count = 1;
-    parsed.unknowns[0] = (0, scratch.len() as u16);
+    parsed.unknowns[0] = (0, scratch.len() as u32);
     parsed.unknown_scopes[0] = PsktUnknownScope::output(1);
 
     assert_eq!(
@@ -181,7 +177,7 @@ fn duplicate_preserved_names_in_one_scope_are_rejected() {
     parsed.unknowns[1] = (6, 11);
     parsed.unknown_scopes[0] = PsktUnknownScope::global();
     parsed.unknown_scopes[1] = PsktUnknownScope::global();
-    parsed.json_len = scratch.len() as u16;
+    parsed.json_len = scratch.len() as u32;
 
     let mut output = vec![0u8; 4096];
     assert_eq!(
@@ -197,20 +193,20 @@ fn duplicate_preserved_names_in_one_scope_are_rejected() {
 }
 
 #[test]
-fn preservation_range_accepts_u16_end_boundary_and_rejects_empty_regions() {
+fn preservation_range_accepts_offsets_above_u16_and_rejects_empty_regions() {
     use super::super::preservation::capture_unknown;
 
     let mut parsed = PsktParsed::empty();
-    parsed.json_len = u16::MAX;
+    parsed.json_len = u16::MAX as u32 + 2;
     capture_unknown(
         &mut parsed,
         PsktUnknownScope::global(),
-        0,
         u16::MAX as usize,
+        u16::MAX as usize + 1,
     )
-    .expect("u16::MAX end offset is representable");
+    .expect("offsets above u16::MAX are representable");
     assert_eq!(parsed.unknowns_count, 1);
-    assert_eq!(parsed.unknowns[0], (0, u16::MAX));
+    assert_eq!(parsed.unknowns[0], (u16::MAX as u32, u16::MAX as u32 + 1));
 
     let mut empty = PsktParsed::empty();
     empty.json_len = 16;
@@ -240,7 +236,7 @@ fn preservation_accepts_exact_region_capacity_and_rejects_exact_scope_boundary()
     }
 
     let mut parsed = PsktParsed::empty();
-    parsed.json_len = scratch.len() as u16;
+    parsed.json_len = scratch.len() as u32;
     for (start, end) in ranges {
         capture_unknown(&mut parsed, PsktUnknownScope::global(), start, end)
             .expect("exact preservation capacity");
@@ -266,7 +262,7 @@ fn preservation_accepts_exact_region_capacity_and_rejects_exact_scope_boundary()
 fn captured_field_rejects_each_independent_range_violation() {
     use super::super::preservation::captured_field_at;
 
-    fn parsed(start: u16, end: u16, json_start: u16, json_len: u16) -> PsktParsed {
+    fn parsed(start: u32, end: u32, json_start: u32, json_len: u32) -> PsktParsed {
         let mut parsed = PsktParsed::empty();
         parsed.unknowns_count = 1;
         parsed.unknowns[0] = (start, end);

@@ -20,7 +20,7 @@ pub use multisig::{
 };
 pub use standard::{
     create_consolidation, create_pskb_with_utxos, create_send, create_send_limited,
-    create_send_selected,
+    create_send_selected, create_send_with_payload,
 };
 
 #[cfg(test)]

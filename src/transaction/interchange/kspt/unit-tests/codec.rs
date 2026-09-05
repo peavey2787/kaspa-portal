@@ -209,24 +209,23 @@ fn compact_codec_accepts_dynamic_inputs_and_fixed_global_boundaries() {
     }
     tx.num_inputs = MANY_INPUTS;
     tx.num_outputs = MAX_OUTPUTS;
-    tx.payload_len = MAX_PAYLOAD_SIZE;
-    tx.payload[..MAX_PAYLOAD_SIZE].fill(0x5a);
+    tx.payload = vec![0x5a; MAX_PAYLOAD_SIZE];
     tx.inputs[0].utxo_entry.script_public_key.script_len = MAX_SCRIPT_SIZE;
     tx.inputs[0].utxo_entry.script_public_key.script[..MAX_SCRIPT_SIZE].fill(0x61);
     tx.outputs[0].script_public_key.script_len = MAX_SCRIPT_SIZE;
     tx.outputs[0].script_public_key.script[..MAX_SCRIPT_SIZE].fill(0x62);
     add_single_signature(&mut tx, 0, [0x63; 64]);
 
-    let mut wire = [0u8; 16_384];
+    let mut wire = vec![0u8; 128 * 1024];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize exact limits");
     let mut parsed = Transaction::new();
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse exact limits");
     assert_eq!(parsed.num_inputs, MANY_INPUTS);
     assert_eq!(parsed.num_outputs, MAX_OUTPUTS);
-    assert_eq!(parsed.payload_len, MAX_PAYLOAD_SIZE);
+    assert_eq!(parsed.payload.len(), MAX_PAYLOAD_SIZE);
     assert_eq!(
-        &parsed.payload[..MAX_PAYLOAD_SIZE],
-        &[0x5a; MAX_PAYLOAD_SIZE]
+        parsed.payload.as_slice(),
+        vec![0x5a; MAX_PAYLOAD_SIZE].as_slice()
     );
     assert_eq!(
         parsed.inputs[0].utxo_entry.script_public_key.script_len,
@@ -323,7 +322,7 @@ fn compact_parser_rejects_monetary_overflow_and_accepts_exact_u64_max_boundary()
 }
 
 #[test]
-fn compact_parser_rejects_each_global_count_and_payload_overflow_boundary() {
+fn compact_parser_rejects_each_global_count_boundary() {
     for (offset, value, expected) in [
         (V1_INPUT_COUNT_OFFSET, 0u8, PsktError::NoInputs),
         (V1_OUTPUT_COUNT_OFFSET, 0, PsktError::NoOutputs),
@@ -338,15 +337,6 @@ fn compact_parser_rejects_each_global_count_and_payload_overflow_boundary() {
         let mut parsed = Transaction::new();
         assert_eq!(parse_compact_kspt(&wire[..len], &mut parsed), Err(expected));
     }
-
-    let (mut wire, len) = unsigned_compact_wire();
-    wire[V1_PAYLOAD_LEN_OFFSET..V1_PAYLOAD_LEN_OFFSET + 2]
-        .copy_from_slice(&((MAX_PAYLOAD_SIZE + 1) as u16).to_le_bytes());
-    let mut parsed = Transaction::new();
-    assert_eq!(
-        parse_compact_kspt(&wire[..len], &mut parsed),
-        Err(PsktError::PayloadTooLong)
-    );
 }
 
 #[test]

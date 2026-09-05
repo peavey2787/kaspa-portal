@@ -28,6 +28,21 @@ fn block_subscription_vector_is_stable() {
 }
 
 #[test]
+fn block_subscription_body_can_be_replayed_with_a_fresh_request_id() {
+    let payload = subscription::block_added_payload().expect("subscription payload");
+    let encoded = request::encode(&WrpcRequest {
+        id: 7,
+        operation: Operation::Subscribe,
+        payload: &payload,
+    })
+    .expect("subscription request");
+    assert_eq!(
+        encoded,
+        subscription::block_added(7).expect("compatibility subscription request")
+    );
+}
+
+#[test]
 fn all_request_codec_boundaries_are_covered() {
     use crate::network::codec::{
         primitives::WireWriter,

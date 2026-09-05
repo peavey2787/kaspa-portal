@@ -64,10 +64,10 @@ pub fn parse_pskt(
     let body_hex = strip_pskt_magic(wire)?;
     let is_bundle = bundle_format(wire)?;
     let json_len = hex_decode_strict(body_hex, scratch)?;
-    let json_len_u16 = u16::try_from(json_len).map_err(|_| PskError::JsonTooLarge)?;
+    let json_len_u32 = u32::try_from(json_len).map_err(|_| PskError::JsonTooLarge)?;
     *parsed = PsktParsed::empty();
     parsed.json_start = 0;
-    parsed.json_len = json_len_u16;
+    parsed.json_len = json_len_u32;
     tx.clear();
     parse_decoded_json(&scratch[..json_len], tx, parsed, is_bundle)
 }

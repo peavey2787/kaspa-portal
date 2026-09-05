@@ -45,8 +45,9 @@ impl TransactionApi {
         fee: u64,
         payload: &[u8],
     ) -> Result<String> {
-        let wire = self.plan_send(wallet, destination, amount, fee).await?;
-        self.set_payload(&wire, payload)
+        builder::create_send_with_payload(wallet, destination, amount, fee, payload, self.client()?)
+            .await
+            .map_err(Error::Transaction)
     }
 
     pub async fn plan_selected_send(

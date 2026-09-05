@@ -15,7 +15,7 @@ fn same_transaction_header(left: &Transaction, right: &Transaction) -> bool {
         left.locktime,
         left.subnetwork_id,
         left.gas,
-        left.payload_len,
+        left.payload.len(),
         left.has_stealth_tweak,
         left.stealth_tweak,
     ) == (
@@ -26,10 +26,10 @@ fn same_transaction_header(left: &Transaction, right: &Transaction) -> bool {
         right.locktime,
         right.subnetwork_id,
         right.gas,
-        right.payload_len,
+        right.payload.len(),
         right.has_stealth_tweak,
         right.stealth_tweak,
-    ) && left.payload[..left.payload_len] == right.payload[..right.payload_len]
+    ) && left.payload == right.payload
 }
 
 fn same_transaction_inputs(left: &Transaction, right: &Transaction) -> bool {

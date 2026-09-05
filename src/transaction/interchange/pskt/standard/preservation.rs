@@ -10,9 +10,9 @@ use super::PskError;
 #[derive(Debug, Clone, Copy)]
 pub(super) struct CapturedField<'a> {
     pub(super) key: &'a [u8],
-    pub(super) field_start: u16,
-    pub(super) value_start: u16,
-    pub(super) end: u16,
+    pub(super) field_start: u32,
+    pub(super) value_start: u32,
+    pub(super) end: u32,
 }
 
 /// Record a field range together with its logical owner.
@@ -26,14 +26,14 @@ pub(super) fn capture_unknown(
     let Some(json_end) = json_start.checked_add(parsed.json_len as usize) else {
         return Err(PskError::JsonTooLarge);
     };
-    if start < json_start || start >= end || end > json_end || end > u16::MAX as usize {
+    if start < json_start || start >= end || end > json_end || end > u32::MAX as usize {
         return Err(PskError::JsonTooLarge);
     }
     let index = parsed.unknowns_count as usize;
     if index >= MAX_PSKT_UNKNOWN_REGIONS {
         return Err(PskError::TooManyUnknownRegions);
     }
-    parsed.unknowns[index] = (start as u16, end as u16);
+    parsed.unknowns[index] = (start as u32, end as u32);
     parsed.unknown_scopes[index] = scope;
     parsed.unknowns_count += 1;
     Ok(())
@@ -129,8 +129,8 @@ pub(super) fn captured_field_at<'a>(
         parsed.unknown_scopes[index],
         CapturedField {
             key,
-            field_start: field_start as u16,
-            value_start: value_start as u16,
+            field_start: field_start as u32,
+            value_start: value_start as u32,
             end: parsed.unknowns[index].1,
         },
     )))
@@ -142,7 +142,7 @@ pub(super) fn find_captured_value(
     scratch: &[u8],
     scope: PsktUnknownScope,
     name: &[u8],
-) -> Result<Option<(u16, u16)>, PskError> {
+) -> Result<Option<(u32, u32)>, PskError> {
     for index in 0..parsed.unknowns_count as usize {
         let Some((captured_scope, field)) = captured_field_at(parsed, scratch, index)? else {
             continue;

@@ -59,7 +59,7 @@ impl<'a> HexWriter<'a> {
 
     /// Splice a byte-range from scratch into the output, hex-encoded.
     /// Used for captured unknown regions during parse.
-    pub(super) fn scratch_range(&mut self, start: u16, end: u16) -> Result<(), PskError> {
+    pub(super) fn scratch_range(&mut self, start: u32, end: u32) -> Result<(), PskError> {
         let (s, e) = (start as usize, end as usize);
         let slice = self.scratch.get(s..e).ok_or(PskError::UnexpectedToken)?;
         self.bytes(slice)

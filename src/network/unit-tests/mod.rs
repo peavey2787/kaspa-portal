@@ -1,9 +1,11 @@
+mod block_added;
 mod dag;
 mod error;
 mod fee_response;
 mod queries;
 mod request;
 mod response;
+mod transport;
 mod utxo_response;
 
 #[test]

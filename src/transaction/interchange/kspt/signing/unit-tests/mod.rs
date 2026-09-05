@@ -757,9 +757,8 @@ fn anti_klepto_transaction_round_trip_verifies_and_rejects_mutations() {
     reject_body_mutation!("subnetwork", |tx: &mut Transaction| tx.subnetwork_id[0] ^=
         1);
     reject_body_mutation!("gas", |tx: &mut Transaction| tx.gas = 1);
-    reject_body_mutation!("payload length", |tx: &mut Transaction| {
-        tx.payload_len = 1;
-        tx.payload[0] = 0x91;
+    reject_body_mutation!("payload", |tx: &mut Transaction| {
+        tx.payload = vec![0x91];
     });
     reject_body_mutation!("stealth presence", |tx: &mut Transaction| tx
         .has_stealth_tweak =

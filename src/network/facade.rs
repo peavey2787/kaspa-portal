@@ -66,6 +66,7 @@ impl NetworkApi {
     }
 
     pub fn disconnect(&self) {
+        self.client.disconnect();
         self.set_status(ConnectionStatus::Disconnected);
     }
 
@@ -83,6 +84,43 @@ impl NetworkApi {
             endpoint: self.endpoint().to_owned(),
             virtual_daa_score: Some(score),
         })
+    }
+
+    /// Subscribe to Kaspa BlockAdded notifications on this Portal's persistent
+    /// native wRPC connection. The transport owns request ids and reconnect
+    /// replay; callers never construct or decode raw wRPC frames.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn subscribe_block_added(&self) -> Result<()> {
+        use crate::network::{codec::requests::subscription, wrpc::operation::Operation};
+
+        let payload = subscription::block_added_payload()
+            .map_err(|error| Error::Network(error.to_string()))?;
+        self.client
+            .call(Operation::Subscribe, &payload)
+            .await
+            .map(|_| ())
+            .map_err(|error| Error::Network(error.to_string()))
+    }
+
+    /// Receive the next decoded BlockAdded notification from this Portal's
+    /// persistent native wRPC connection. Other notification operations are
+    /// ignored without leaking wire-level framing to the application.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn next_block_added(
+        &self,
+    ) -> Result<crate::network::wrpc::block_added::OwnedBlockAddedNotification> {
+        loop {
+            let frame = self
+                .client
+                .next_notification()
+                .await
+                .map_err(|error| Error::Network(error.to_string()))?;
+            if let Some(notification) = crate::network::wrpc::block_added::decode(&frame)
+                .map_err(|error| Error::Network(error.to_string()))?
+            {
+                return Ok(notification.into());
+            }
+        }
     }
 
     fn set_status(&self, value: ConnectionStatus) {

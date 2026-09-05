@@ -302,10 +302,9 @@ fn component_hashes_cover_all_sighash_and_covenant_payload_branches() {
     assert_ne!(outputs_hash(&tx, SigHashType::All, 0), all);
 
     assert_eq!(payload_hash(&Transaction::new()), [0; 32]);
-    tx.payload[..3].copy_from_slice(b"KSP");
-    tx.payload_len = 3;
+    tx.payload = b"KSP".to_vec();
     assert_ne!(payload_hash(&tx), [0; 32]);
-    tx.payload_len = 0;
+    tx.payload.clear();
     tx.subnetwork_id = [1; 20];
     assert_ne!(payload_hash(&tx), [0; 32]);
 }
@@ -445,8 +444,7 @@ fn final_sighash_binds_every_serialized_field_and_version_zero_sigops_only() {
         tx.locktime = 9;
         tx.subnetwork_id = [0x44; 20];
         tx.gas = 10;
-        tx.payload[..3].copy_from_slice(b"abc");
-        tx.payload_len = 3;
+        tx.payload = b"abc".to_vec();
         tx
     }
 

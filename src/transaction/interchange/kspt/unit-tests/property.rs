@@ -68,11 +68,8 @@ fn compact_kspt_roundtrip_is_canonical_for_generated_transactions() {
             case.wrapping_add(2),
         );
         transaction.locktime = u64::from(case) * 17;
-        transaction.payload_len = usize::from(case % 17);
-        for (index, byte) in transaction.payload[..transaction.payload_len]
-            .iter_mut()
-            .enumerate()
-        {
+        transaction.payload = vec![0u8; usize::from(case % 17)];
+        for (index, byte) in transaction.payload.iter_mut().enumerate() {
             *byte = case.wrapping_add(index as u8);
         }
 

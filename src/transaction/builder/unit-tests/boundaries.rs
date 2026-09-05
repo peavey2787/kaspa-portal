@@ -104,18 +104,31 @@ fn storage_mass_uses_relaxed_harmonic_rule_for_two_by_two_plurality() {
 }
 
 #[test]
-fn storage_mass_fee_distinguishes_dust_and_non_dust_change() {
+fn storage_mass_fee_accounts_for_omitted_dust_change_as_fee() {
     let dust_selected = vec![super::utxo(0x51, 0, 15_000_000)];
     assert_eq!(
         super::super::standard::storage_mass_fee(&dust_selected, 15_000_000, 10_000_000, 0,)
             .expect("dust-change fee"),
-        3_666_740
+        5_000_000
     );
 
-    let non_dust_selected = vec![super::utxo(0x52, 0, 30_000_000)];
+    // This case used to oscillate between a two-output fee and a one-output
+    // fee. Once the mass-required fee makes change dust, the change output is
+    // omitted and the full 20M input-minus-payment remainder is the actual fee.
+    let oscillating_selected = vec![super::utxo(0x52, 0, 30_000_000)];
     assert_eq!(
-        super::super::standard::storage_mass_fee(&non_dust_selected, 30_000_000, 10_000_000, 0,)
+        super::super::standard::storage_mass_fee(&oscillating_selected, 30_000_000, 10_000_000, 0,)
+            .expect("stable dust-boundary fee"),
+        20_000_000
+    );
+}
+
+#[test]
+fn storage_mass_fee_converges_for_non_dust_change() {
+    let selected = vec![super::utxo(0x53, 0, 100_000_000)];
+    assert_eq!(
+        super::super::standard::storage_mass_fee(&selected, 100_000_000, 20_000_000, 0,)
             .expect("non-dust-change fee"),
-        16_017_540
+        5_884_120
     );
 }

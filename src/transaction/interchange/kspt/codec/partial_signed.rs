@@ -195,7 +195,7 @@ pub fn serialize_compact_kspt_vec(tx: &Transaction) -> Result<alloc::vec::Vec<u8
     let capacity = 1024usize
         .saturating_add(tx.num_inputs.saturating_mul(192))
         .saturating_add(tx.num_outputs.saturating_mul(640))
-        .saturating_add(tx.payload_len)
+        .saturating_add(tx.payload.len())
         .saturating_add(tx.redeem_pool_used);
     serialize_compact_vec_with_capacity(tx, capacity)
 }

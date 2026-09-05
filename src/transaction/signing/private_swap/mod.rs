@@ -167,7 +167,7 @@ pub fn private_swap_claim_sighash(
 }
 
 fn validate_claim_transaction_shape(tx: &Transaction) -> Result<SigHashType, PrivateSwapError> {
-    if tx.num_inputs != 1 || tx.num_outputs != 1 || tx.payload_len != 0 {
+    if tx.num_inputs != 1 || tx.num_outputs != 1 || !tx.payload.is_empty() {
         return Err(PrivateSwapError::InvalidTransaction);
     }
     let input = &tx.inputs[0];

@@ -35,6 +35,7 @@ This reference lists the high-level developer-facing API surface exposed by the 
 | `indexer` | none | `&IndexerApi` |
 | `randomness` | none | `&RandomnessApi` |
 | `connect` | none | `async Result<NetworkHealth>` |
+| `start_live_indexer` *(native)* | none | `async Result<()>` |
 | `disconnect` | none | `Result<()>` |
 
 ### `PortalConfig`
@@ -63,6 +64,10 @@ Public fields:
 | `disconnect` | none | `()` |
 | `reconnect` | none | `async Result<NetworkHealth>` |
 | `health` | none | `async Result<NetworkHealth>` |
+| `subscribe_block_added` *(native)* | none | `async Result<()>` |
+| `next_block_added` *(native)* | none | `async Result<OwnedBlockAddedNotification>` |
+
+Native `NetworkApi` calls share one persistent WebSocket per Portal transport. Notifications are demultiplexed from RPC responses on that connection, and successful subscriptions are replayed after reconnect. `next_block_added()` returns decoded block identity, DAA score, and transaction payloads; callers do not handle wRPC envelope kinds or operation numbers.
 
 ## Chain API
 
@@ -113,6 +118,9 @@ Public fields:
 | `set_tx_lane` | `wire_hex: &str`, `subnetwork_id_hex: &str`, `gas: u64`, `transaction_version: u16`, `payload: &[u8]` | `Result<String>` |
 | `analyze` | `wire_hex: &str` | `async Result<TransactionAnalysis>` |
 | `analyze_with_fee_rate` | `wire_hex: &str`, `recommended_fee_rate_sompi_per_gram: u64` | `Result<TransactionAnalysis>` |
+
+`plan_send_with_payload` incorporates the payload length into non-contextual mass/fee estimation before final UTXO selection and rechecks the resulting plan before PSKB encoding. KSPT v1 uses a `u16` payload length, so the supported application payload range is 0 through 65,535 bytes. Larger payloads are rejected.
+When a computed fee makes the would-be change output dust, Portal omits that change and accounts the complete input-minus-output remainder as the transaction fee; fee solving does not alternate between one-output and two-output estimates.
 
 `analyze` and `analyze_with_fee_rate` operate on a signed/finalizable PSKB because exact serialized mass depends on the completed input signature scripts. Use the planner fee estimates while a transaction is still unsigned.
 | `review` | `wire_hex: &str`, `network_prefix: &str` | `Result<PsktSummary>` |
@@ -350,7 +358,7 @@ Common indexer request objects:
 - `dedupe_window: usize`
 - `scanner_stale_after_ms: u64`
 - `transaction_ttl_ms: u64`
-- `max_payload_bytes: usize`
+- `max_payload_bytes: usize` (defaults to 65,535, matching the KSPT v1 application-payload ceiling)
 - `max_addresses_per_transaction: usize`
 - `max_query_page: usize`
 

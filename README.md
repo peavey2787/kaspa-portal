@@ -1,6 +1,6 @@
 # kaspa-portal
 
-`kaspa-portal` 1.0.0 is a capability-oriented Rust SDK for connecting to and interacting with Kaspa from native Rust and WebAssembly. It exposes one small `KaspaPortal` facade while keeping specialized protocol, cryptographic, transaction, contract, indexing, privacy, and randomness APIs directly accessible.
+`kaspa-portal` 1.0.1 is a capability-oriented Rust SDK for connecting to and interacting with Kaspa from native Rust and WebAssembly. It exposes one small `KaspaPortal` facade while keeping specialized protocol, cryptographic, transaction, contract, indexing, privacy, and randomness APIs directly accessible.
 
 ## Design
 
@@ -19,13 +19,19 @@ The public domains are:
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for dependency rules and internal layout.
 
+### 1.0.1 native networking and payload behavior
+
+On native targets, one `KaspaPortal` owns one persistent Kaspa wRPC WebSocket. RPC responses and asynchronous notifications are multiplexed on that socket, successful subscriptions are replayed after reconnect, and native transport futures are `Send` so the facade can be used directly from multithreaded async application frameworks. Browser/WASM transport semantics remain target-appropriate.
+
+KSPT v1 payload length remains a `u16`; Portal therefore supports application payloads from 0 through **65,535 bytes** and rejects larger payloads instead of imposing the former 768-byte SDK ceiling. `Transaction.payload` is heap-backed, and PSKT parser bookkeeping uses wider offsets so the JSON/hex representation of a maximum-size KSPT payload does not reintroduce a 65,535-byte parser ceiling. `plan_send_with_payload()` includes payload mass in fee calculation and UTXO selection before encoding the plan.
+
 For the developer-facing method reference, including parameters and return values for the Rust facades and browser/WASM classes, see [docs/PUBLIC_API.md](docs/PUBLIC_API.md) | [docs/E2E_CAPABILITIES.md](docs/E2E_CAPABILITIES.md).
 
 ## Rust quick start
 
 ```toml
 [dependencies]
-kaspa-portal = "1.0.0"
+kaspa-portal = "1.0.1"
 ```
 
 Build an offline portal when no node connection is needed:
@@ -63,6 +69,28 @@ println!("{health:?} {daa_score}");
 # Ok(())
 # }
 ```
+
+Native applications can consume decoded `BlockAdded` notifications without opening a second WebSocket or decoding wRPC frames themselves:
+
+```rust
+# use kaspa_portal::{KaspaPortal, primitives::NetworkId};
+# async fn example() -> kaspa_portal::Result<()> {
+let portal = KaspaPortal::builder()
+    .network(NetworkId::Mainnet)
+    .endpoint("wss://node.example/ws")
+    .connect()
+    .await?;
+
+portal.network()?.subscribe_block_added().await?;
+let block = portal.network()?.next_block_added().await?;
+for transaction in block.transactions {
+    println!("payload bytes: {}", transaction.payload.len());
+}
+# Ok(())
+# }
+```
+
+Applications using Portal's lightweight indexer can instead call `portal.start_live_indexer().await?` after configuring matcher rules; Portal then feeds its decoded BlockAdded stream into the indexer internally.
 
 The facade is intentionally thin. Advanced callers can import focused APIs directly, for example `kaspa_portal::transaction::interchange::pskt`, `kaspa_portal::contract`, `kaspa_portal::crypto`, or `kaspa_portal::randomness`.
 

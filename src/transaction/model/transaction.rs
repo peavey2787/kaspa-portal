@@ -18,8 +18,8 @@ use alloc::vec::Vec;
 
 use super::{
     constants::{
-        SubnetworkId, DEFAULT_INPUT_CAPACITY, MAX_OUTPUTS, MAX_PAYLOAD_SIZE, MAX_REDEEM_SIZE,
-        MAX_SCRIPT_SIZE, REDEEM_POOL_SIZE, SUBNETWORK_ID_NATIVE,
+        SubnetworkId, DEFAULT_INPUT_CAPACITY, MAX_OUTPUTS, MAX_REDEEM_SIZE, MAX_SCRIPT_SIZE,
+        REDEEM_POOL_SIZE, SUBNETWORK_ID_NATIVE,
     },
     input::TransactionInput,
     output::TransactionOutput,
@@ -63,8 +63,8 @@ pub struct Transaction {
     pub locktime: u64,
     pub subnetwork_id: SubnetworkId,
     pub gas: u64,
-    pub payload: [u8; MAX_PAYLOAD_SIZE],
-    pub payload_len: usize,
+    /// Heap-backed application payload. KSPT v1 limits this to `u16::MAX` bytes.
+    pub payload: Vec<u8>,
     /// Stealth address tweak: if non-zero, the signing key is
     /// account_privkey + stealth_tweak (scalar addition mod n).
     /// Set by KasSee when spending a stealth UTXO.
@@ -101,8 +101,7 @@ impl Transaction {
             locktime: 0,
             subnetwork_id: SUBNETWORK_ID_NATIVE,
             gas: 0,
-            payload: [0u8; MAX_PAYLOAD_SIZE],
-            payload_len: 0,
+            payload: Vec::new(),
             stealth_tweak: [0u8; 32],
             has_stealth_tweak: false,
             redeem_pool: [0u8; REDEEM_POOL_SIZE],
@@ -125,8 +124,7 @@ impl Transaction {
         self.locktime = 0;
         self.subnetwork_id = SUBNETWORK_ID_NATIVE;
         self.gas = 0;
-        self.payload.fill(0);
-        self.payload_len = 0;
+        self.payload.clear();
         self.stealth_tweak.fill(0);
         self.has_stealth_tweak = false;
         self.redeem_pool.fill(0);

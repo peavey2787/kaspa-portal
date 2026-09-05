@@ -11,6 +11,18 @@ reason = "platform transport construction, not part of the high-level SDK facade
 symbol = "NetworkClient::from_shared_transport"
 reason = "platform transport construction, not part of the high-level SDK facade"
 
+[[rust_exclusion]]
+symbol = "NetworkApi::subscribe_block_added"
+reason = "native-only persistent wRPC notification API; browser WebSocket transport remains request scoped"
+
+[[rust_exclusion]]
+symbol = "NetworkApi::next_block_added"
+reason = "native-only persistent wRPC notification API; browser WebSocket transport remains request scoped"
+
+[[rust_exclusion]]
+symbol = "KaspaPortal::start_live_indexer"
+reason = "native-only BlockAdded-to-indexer orchestration; no browser persistent notification stream exists"
+
 [[capability]]
 id = "portal.builder.network"
 domain = "portal"

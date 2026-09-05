@@ -32,9 +32,10 @@ fn read_global_tail(reader: &mut ByteReader<'_>, tx: &mut Transaction) -> Result
     if payload_len > MAX_PAYLOAD_SIZE {
         return Err(PsktError::PayloadTooLong);
     }
-    tx.payload_len = payload_len;
+    tx.payload.clear();
     if payload_len != 0 {
-        tx.payload[..payload_len].copy_from_slice(reader.read_bytes(payload_len)?);
+        tx.payload
+            .extend_from_slice(reader.read_bytes(payload_len)?);
     }
     Ok(())
 }
@@ -57,8 +58,9 @@ pub(super) fn write_global(writer: &mut ByteWriter<'_>, tx: &Transaction) -> Res
     writer.write_u64_le(tx.locktime)?;
     writer.write_bytes(&tx.subnetwork_id)?;
     writer.write_u64_le(tx.gas)?;
-    writer.write_u16_le(tx.payload_len as u16)?;
-    writer.write_bytes(&tx.payload[..tx.payload_len])
+    let payload_len = u16::try_from(tx.payload.len()).map_err(|_| PsktError::PayloadTooLong)?;
+    writer.write_u16_le(payload_len)?;
+    writer.write_bytes(&tx.payload)
 }
 
 fn write_input_count(writer: &mut ByteWriter<'_>, count: usize) -> Result<(), PsktError> {

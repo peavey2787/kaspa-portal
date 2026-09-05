@@ -1,13 +1,7 @@
 use alloc::{format, string::ToString, vec, vec::Vec};
 
-use crate::transaction::interchange::pskt::shared::PsktParsed;
-
-use crate::transaction::model::Transaction;
-
-use super::super::{
-    hex_decode_strict, parse_pskt, parse_u64_num, PskError, PSKB_MAGIC, PSKT_MAGIC,
-};
-use super::common::{encode_wire, parse_json, transaction_json, COVENANT_ID, TXID_ZERO};
+use super::super::{hex_decode_strict, parse_u64_num, PskError, PSKB_MAGIC, PSKT_MAGIC};
+use super::common::{parse_json, transaction_json, COVENANT_ID, TXID_ZERO};
 
 #[test]
 fn strict_hex_decoder_covers_each_fail_closed_boundary() {
@@ -299,27 +293,24 @@ fn pskb_bundle_rejects_a_second_element_at_the_comma_boundary() {
 }
 
 #[test]
-fn decoded_json_accepts_exact_u16_offset_capacity() {
+fn decoded_json_accepts_exact_u16_offset_capacity_and_wider_bookkeeping() {
     let mut json = transaction_json("", "", "");
     assert!(json.len() < u16::MAX as usize);
     json.resize(u16::MAX as usize, b' ');
     let (tx, parsed, _) = parse_json(PSKT_MAGIC, &json).expect("exact u16 JSON length");
-    assert_eq!(parsed.json_len, u16::MAX);
+    assert_eq!(parsed.json_len, u16::MAX as u32);
     assert_eq!(tx.num_inputs, 1);
     assert_eq!(tx.num_outputs, 1);
 }
 
 #[test]
-fn decoded_json_larger_than_u16_offsets_is_rejected() {
-    let json = vec![b'a'; u16::MAX as usize + 1];
-    let wire = encode_wire(PSKT_MAGIC, &json);
-    let mut scratch = vec![0u8; json.len()];
-    let mut tx = Transaction::new();
-    let mut parsed = PsktParsed::empty();
-    assert_eq!(
-        parse_pskt(&wire, &mut scratch, &mut tx, &mut parsed),
-        Err(PskError::JsonTooLarge)
-    );
+fn decoded_json_larger_than_u16_offsets_is_supported() {
+    let mut json = transaction_json("", "", "");
+    json.resize(u16::MAX as usize + 1024, b' ');
+    let (tx, parsed, _) = parse_json(PSKT_MAGIC, &json).expect("large PSKT JSON");
+    assert_eq!(parsed.json_len as usize, json.len());
+    assert_eq!(tx.num_inputs, 1);
+    assert_eq!(tx.num_outputs, 1);
 }
 
 #[test]

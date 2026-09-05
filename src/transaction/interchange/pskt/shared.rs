@@ -97,11 +97,11 @@ impl PsktUnknownScope {
 /// `unknown_scopes`. The ranges point into the decoded JSON scratch buffer.
 #[derive(Debug, Clone, Copy)]
 pub struct PsktParsed {
-    pub unknowns: [(u16, u16); MAX_PSKT_UNKNOWN_REGIONS],
+    pub unknowns: [(u32, u32); MAX_PSKT_UNKNOWN_REGIONS],
     pub unknown_scopes: [PsktUnknownScope; MAX_PSKT_UNKNOWN_REGIONS],
     pub unknowns_count: u8,
-    pub json_start: u16,
-    pub json_len: u16,
+    pub json_start: u32,
+    pub json_len: u32,
     /// Bit `n` is set when output `n` explicitly carried a
     /// `covenantBinding` field, including an explicit `null` value.
     pub output_covenant_binding_present: u16,

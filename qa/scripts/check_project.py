@@ -9,14 +9,14 @@ errors=[]
 def fail(msg): errors.append(msg)
 manifest={'package': read_package(ROOT/'Cargo.toml')}
 if manifest.get('package',{}).get('name')!='kaspa-portal': fail('root package must be kaspa-portal')
-if manifest.get('package',{}).get('version')!='1.0.0': fail('root package must be version 1.0.0')
+if manifest.get('package',{}).get('version')!='1.0.1': fail('root package must be version 1.0.1')
 for manifest_path in [ROOT/'qa/Cargo.toml', ROOT/'qa/benches/Cargo.toml', ROOT/'qa/tests/fuzz/Cargo.toml']:
     if not manifest_path.is_file():
         fail(f'missing QA manifest: {manifest_path.relative_to(ROOT)}')
         continue
     qa_manifest={'package': read_package(manifest_path)}
-    if qa_manifest.get('package',{}).get('version')!='1.0.0':
-        fail(f'QA package must be version 1.0.0: {manifest_path.relative_to(ROOT)}')
+    if qa_manifest.get('package',{}).get('version')!='1.0.1':
+        fail(f'QA package must be version 1.0.1: {manifest_path.relative_to(ROOT)}')
 required={'portal','network','chain','wallet','transaction','contract','privacy','indexer','randomness','crypto','primitives','platform'}
 actual={x.name for x in (ROOT/'src').iterdir() if x.is_dir()}
 missing=required-actual

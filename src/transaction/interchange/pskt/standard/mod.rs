@@ -15,7 +15,7 @@
 //! be augmented. Opaque and future fields are retained as scope-tagged ranges
 //! into the caller-owned decoded JSON scratch buffer and re-emitted within a
 //! fixed preservation budget. Parsing fails instead of silently dropping a
-//! field when that budget or the u16 offset range is exceeded.
+//! field when that budget or the u32 decoded-JSON offset range is exceeded.
 //!
 //! Known metadata that is not represented directly by `Transaction`, such as
 //! non-default UTXO metadata, output redeem scripts, modifiability flags, and

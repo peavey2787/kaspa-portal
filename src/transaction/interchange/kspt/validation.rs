@@ -80,7 +80,7 @@ fn validate_transaction_shape(tx: &Transaction) -> Result<(), PsktError> {
     if tx.num_outputs > MAX_OUTPUTS {
         return Err(PsktError::TooManyOutputs);
     }
-    if tx.payload_len > MAX_PAYLOAD_SIZE {
+    if tx.payload.len() > MAX_PAYLOAD_SIZE {
         return Err(PsktError::PayloadTooLong);
     }
     if tx.redeem_pool_used > REDEEM_POOL_SIZE {

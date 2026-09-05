@@ -51,6 +51,12 @@ fn encode_document(
     payload: Option<&[u8]>,
     include_covenant_binding: bool,
 ) -> Result<String, String> {
+    if payload.is_some_and(|value| value.len() > crate::transaction::model::MAX_PAYLOAD_SIZE) {
+        return Err(format!(
+            "transaction payload exceeds KSPT v1 limit of {} bytes",
+            crate::transaction::model::MAX_PAYLOAD_SIZE
+        ));
+    }
     let input_count = u32::try_from(inputs.len())
         .map_err(|_| "PSKB input count exceeds KSPT v1 capacity".to_string())?;
     let output_count =

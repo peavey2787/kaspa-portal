@@ -739,7 +739,7 @@ fn consolidation_planning_covers_success_and_balance_failures() {
 fn standard_send_preparation_and_utxo_paths_are_host_testable() {
     use super::standard::{
         create_consolidation_from_utxos, create_send_from_utxos, create_send_selected_from_utxos,
-        prepare_send, storage_mass_fee, validate_recipient_amount,
+        prepare_send, storage_mass_fee, storage_mass_fee_with_payload, validate_recipient_amount,
     };
 
     let wallet = watch_wallet();
@@ -812,7 +812,33 @@ fn standard_send_preparation_and_utxo_paths_are_host_testable() {
     )
     .expect("storage fee");
     assert!(fee >= 500_000);
-    assert!(storage_mass_fee(&[utxo(0xba, 0, u64::MAX)], u64::MAX, u64::MAX, 0,).is_err());
+    assert_eq!(
+        storage_mass_fee(&[utxo(0xba, 0, u64::MAX)], u64::MAX, u64::MAX, 0,).unwrap_err(),
+        "Amount plus fee exceeds supported monetary range"
+    );
+
+    let selected = [utxo(0xbb, 0, 100_000_000)];
+    let base_fee = storage_mass_fee_with_payload(
+        &selected,
+        100_000_000,
+        20_000_000,
+        300_000,
+        0,
+        &[34, 34],
+        110,
+    )
+    .expect("base payload-aware fee");
+    let large_payload_fee = storage_mass_fee_with_payload(
+        &selected,
+        100_000_000,
+        20_000_000,
+        300_000,
+        60 * 1024,
+        &[34, 34],
+        110,
+    )
+    .expect("large payload-aware fee");
+    assert!(large_payload_fee > base_fee);
 }
 
 #[test]

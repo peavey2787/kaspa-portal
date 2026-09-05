@@ -36,7 +36,7 @@ fn base_validation_classifies_transaction_shape_and_capacity_failures() {
     );
 
     let mut tx = transaction();
-    tx.payload_len = MAX_PAYLOAD_SIZE + 1;
+    tx.payload = vec![0u8; MAX_PAYLOAD_SIZE + 1];
     assert_eq!(
         validate_base_transaction(&tx),
         Err(PsktError::PayloadTooLong)
@@ -240,7 +240,7 @@ fn validation_accepts_dynamic_inputs_and_fixed_output_boundaries() {
         .expect("grow input model");
     tx.num_inputs = MANY_INPUTS;
     tx.num_outputs = MAX_OUTPUTS;
-    tx.payload_len = MAX_PAYLOAD_SIZE;
+    tx.payload = vec![0u8; MAX_PAYLOAD_SIZE];
     tx.redeem_pool_used = REDEEM_POOL_SIZE;
     for input in &mut tx.inputs[..MANY_INPUTS] {
         input.utxo_entry.script_public_key.script_len = MAX_SCRIPT_SIZE;

@@ -132,12 +132,12 @@ fn hash_output(hasher: &mut KaspaBlake2b, output: &TransactionOutput, tx_version
 /// If native with empty payload -> 0x0000...0000
 /// Otherwise -> keyed Blake2b(write_var_bytes(payload))
 pub(super) fn payload_hash(tx: &Transaction) -> Hash256 {
-    if tx.is_native() && tx.payload_len == 0 {
+    if tx.is_native() && tx.payload.is_empty() {
         return [0u8; 32];
     }
     let mut hasher = KaspaBlake2b::new();
     // write_var_bytes: length prefix (u64 LE) + raw bytes
-    hasher.update(&(tx.payload_len as u64).to_le_bytes());
-    hasher.update(&tx.payload[..tx.payload_len]);
+    hasher.update(&(tx.payload.len() as u64).to_le_bytes());
+    hasher.update(&tx.payload);
     hasher.finalize()
 }

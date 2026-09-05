@@ -308,6 +308,9 @@ pub(super) fn validate_response(
             "kind={code}: {}",
             error_payload::decode(response.payload)
         ))),
+        ResponseKind::Notification => Err(NetworkError::UnexpectedResponse(
+            "Kaspa notification received where browser RPC response was required".into(),
+        )),
     }
 }
 

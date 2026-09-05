@@ -1,7 +1,7 @@
 //! Canonical v1 host-assisted anti-klepto transaction-signing wire protocol.
 //!
 //! The v1 framing uses 32-bit transaction lengths, proof counts, and input
-//! indices. `kaspa-portal` 1.0.0 accepts this canonical format only; historical
+//! indices. `kaspa-portal` 1.0.1 accepts this canonical format only; historical
 //! application framing is intentionally not part of the SDK surface.
 
 use sha2::{Digest, Sha256};

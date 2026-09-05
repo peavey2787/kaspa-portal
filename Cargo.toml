@@ -1,7 +1,7 @@
 
 [package]
 name = "kaspa-portal"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 rust-version = "1.95"
 license = "GPL-3.0-only"
@@ -52,7 +52,7 @@ ark-std = { version = "0.5", default-features = false, features = ["std"] }
 ark-snark = { version = "0.5", default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1", features = ["net", "time", "rt", "sync"] }
+tokio = { version = "1", features = ["net", "time", "rt", "sync", "macros"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", features = ["sink"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

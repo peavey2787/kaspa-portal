@@ -1,26 +1,64 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{atomic::AtomicU64, Mutex};
 use std::time::Duration;
 
-use futures_util::{SinkExt, Stream, StreamExt};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio::net::TcpStream;
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio::time::Instant;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
-use crate::network::{
-    error::NetworkError,
-    wrpc::{
-        error_payload,
-        operation::Operation,
-        request::{self, WrpcRequest},
-        response::{self, ResponseKind},
-    },
-};
+use crate::network::{error::NetworkError, wrpc::operation::Operation};
 
-static NEXT_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+use super::websocket_driver::run_driver;
+use super::websocket_io::reconnectable_transport_error;
+
+pub(super) static NEXT_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
+const DRIVER_COMMAND_CAPACITY: usize = 128;
+pub(super) const MAX_QUEUED_NOTIFICATIONS: usize = 256;
 
+pub(super) type NativeStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+pub(super) enum DriverCommand {
+    Call {
+        operation: Operation,
+        payload: Vec<u8>,
+        response: oneshot::Sender<Result<Vec<u8>, NetworkError>>,
+    },
+    NextNotification {
+        response: oneshot::Sender<Result<Vec<u8>, NetworkError>>,
+    },
+}
+
+#[derive(Clone)]
+struct DriverHandle {
+    commands: mpsc::Sender<DriverCommand>,
+    shutdown: watch::Sender<bool>,
+}
+
+pub(super) struct QueuedCall {
+    pub(super) operation: Operation,
+    pub(super) payload: Vec<u8>,
+    pub(super) response: oneshot::Sender<Result<Vec<u8>, NetworkError>>,
+}
+
+pub(super) struct ActiveCall {
+    pub(super) request_id: u64,
+    pub(super) operation: Operation,
+    pub(super) payload: Vec<u8>,
+    pub(super) response: oneshot::Sender<Result<Vec<u8>, NetworkError>>,
+    pub(super) deadline: Instant,
+}
+
+/// Native Kaspa wRPC transport with one reusable websocket per Portal instance.
+///
+/// A single driver task owns the socket. RPC request/response traffic and
+/// asynchronous notifications are demultiplexed on that socket. Successful
+/// subscriptions are remembered by the driver and replayed after reconnect.
 pub struct NativeWebSocketTransport {
     endpoint: String,
     timeout: Duration,
     max_retries: u8,
+    driver: Mutex<Option<DriverHandle>>,
 }
 
 impl NativeWebSocketTransport {
@@ -41,36 +79,88 @@ impl NativeWebSocketTransport {
             endpoint: endpoint.to_owned(),
             timeout: Duration::from_millis(timeout_ms),
             max_retries,
+            driver: Mutex::new(None),
         })
     }
 
-    async fn connect(
-        &self,
-    ) -> Result<
-        tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >,
-        NetworkError,
-    > {
-        let mut retry = 0u8;
-        loop {
-            let result = tokio::time::timeout(self.timeout, connect_async(&self.endpoint)).await;
-            match result {
-                Ok(Ok((stream, _))) => return Ok(stream),
-                Ok(Err(_error)) if retry < self.max_retries => {
-                    let delay_ms = 250u64.saturating_mul(1u64 << u32::from(retry.min(4)));
-                    retry = retry.saturating_add(1);
-                    tokio::time::sleep(Duration::from_millis(delay_ms.min(4_000))).await;
-                }
-                Err(_) if retry < self.max_retries => {
-                    let delay_ms = 250u64.saturating_mul(1u64 << u32::from(retry.min(4)));
-                    retry = retry.saturating_add(1);
-                    tokio::time::sleep(Duration::from_millis(delay_ms.min(4_000))).await;
-                }
-                Ok(Err(error)) => return Err(NetworkError::ConnectionFailed(error.to_string())),
-                Err(_) => return Err(NetworkError::ConnectTimeout),
+    fn driver_sender(&self) -> mpsc::Sender<DriverCommand> {
+        let mut slot = self
+            .driver
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(handle) = slot.as_ref() {
+            if !handle.commands.is_closed() {
+                return handle.commands.clone();
             }
         }
+
+        let (commands, receiver) = mpsc::channel(DRIVER_COMMAND_CAPACITY);
+        let (shutdown, shutdown_rx) = watch::channel(false);
+        let endpoint = self.endpoint.clone();
+        let timeout = self.timeout;
+        let max_retries = self.max_retries;
+        tokio::spawn(async move {
+            run_driver(endpoint, timeout, max_retries, receiver, shutdown_rx).await;
+        });
+        *slot = Some(DriverHandle {
+            commands: commands.clone(),
+            shutdown,
+        });
+        commands
+    }
+
+    fn reset_driver_if_closed(&self) {
+        let mut slot = self
+            .driver
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if slot
+            .as_ref()
+            .is_some_and(|handle| handle.commands.is_closed())
+        {
+            *slot = None;
+        }
+    }
+
+    fn shutdown_driver(&self) {
+        let handle = self
+            .driver
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        if let Some(handle) = handle {
+            // A watch channel is used for shutdown so a full bounded RPC queue
+            // cannot prevent an explicit disconnect from reaching the driver.
+            let _ = handle.shutdown.send(true);
+        }
+    }
+
+    async fn call_once(
+        &self,
+        operation: Operation,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, NetworkError> {
+        let sender = self.driver_sender();
+        let (response_tx, response_rx) = oneshot::channel();
+        if sender
+            .send(DriverCommand::Call {
+                operation,
+                payload: payload.to_vec(),
+                response: response_tx,
+            })
+            .await
+            .is_err()
+        {
+            self.reset_driver_if_closed();
+            return Err(NetworkError::ConnectionFailed(
+                "Kaspa wRPC driver stopped before request submission".into(),
+            ));
+        }
+        response_rx.await.unwrap_or_else(|_| {
+            Err(NetworkError::ConnectionFailed(
+                "Kaspa wRPC driver stopped before request completion".into(),
+            ))
+        })
     }
 
     async fn call_inner(
@@ -78,76 +168,64 @@ impl NativeWebSocketTransport {
         operation: Operation,
         payload: &[u8],
     ) -> Result<Vec<u8>, NetworkError> {
-        let mut stream = self.connect().await?;
-        let request_id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
-        let bytes = request::encode(&WrpcRequest {
-            id: request_id,
-            operation,
-            payload,
-        })?;
-        stream
-            .send(Message::Binary(bytes.into()))
+        let mut retried_stale_connection = false;
+        loop {
+            match self.call_once(operation, payload).await {
+                Ok(value) => return Ok(value),
+                Err(error)
+                    if operation != Operation::SubmitTransaction
+                        && !retried_stale_connection
+                        && reconnectable_transport_error(&error) =>
+                {
+                    retried_stale_connection = true;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    async fn next_notification_once(&self) -> Result<Vec<u8>, NetworkError> {
+        let sender = self.driver_sender();
+        let (response_tx, response_rx) = oneshot::channel();
+        if sender
+            .send(DriverCommand::NextNotification {
+                response: response_tx,
+            })
             .await
-            .map_err(|_| NetworkError::SendFailed)?;
-        let response = tokio::time::timeout(self.timeout, receive_binary(&mut stream))
-            .await
-            .map_err(|_| NetworkError::ResponseTimeout)??;
-        validate_response(&response, request_id, operation)
+            .is_err()
+        {
+            self.reset_driver_if_closed();
+            return Err(NetworkError::ConnectionFailed(
+                "Kaspa wRPC driver stopped before notification wait".into(),
+            ));
+        }
+        response_rx.await.unwrap_or_else(|_| {
+            Err(NetworkError::ConnectionFailed(
+                "Kaspa wRPC driver stopped during notification wait".into(),
+            ))
+        })
+    }
+
+    async fn next_notification_inner(&self) -> Result<Vec<u8>, NetworkError> {
+        let mut retried_stale_connection = false;
+        loop {
+            match self.next_notification_once().await {
+                Ok(notification) => return Ok(notification),
+                Err(error)
+                    if !retried_stale_connection && reconnectable_transport_error(&error) =>
+                {
+                    retried_stale_connection = true;
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 }
 
-async fn receive_binary<S>(stream: &mut S) -> Result<Vec<u8>, NetworkError>
-where
-    S: Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
-{
-    while let Some(frame) = stream.next().await {
-        match frame.map_err(|error| NetworkError::ConnectionFailed(error.to_string()))? {
-            Message::Binary(bytes) => return Ok(bytes.to_vec()),
-            Message::Close(frame) => {
-                return Err(NetworkError::ConnectionFailed(format!(
-                    "closed before RPC response: {frame:?}"
-                )))
-            }
-            Message::Text(_) => {
-                return Err(NetworkError::UnexpectedResponse("non-binary frame".into()))
-            }
-            _ => {}
-        }
-    }
-    Err(NetworkError::ConnectionFailed(
-        "connection ended before RPC response".into(),
-    ))
-}
-
-fn validate_response(
-    bytes: &[u8],
-    expected_id: u64,
-    expected_operation: Operation,
-) -> Result<Vec<u8>, NetworkError> {
-    let decoded = response::decode(bytes)?;
-    if let Some(actual) = decoded.id {
-        if actual != expected_id {
-            return Err(NetworkError::MismatchedRequestId {
-                expected: expected_id,
-                actual,
-            });
-        }
-    }
-    if let Some(actual) = decoded.raw_operation {
-        if decoded.operation != Some(expected_operation) {
-            return Err(NetworkError::MismatchedOperation {
-                expected: expected_operation.code(),
-                actual,
-            });
-        }
-    }
-    match decoded.kind {
-        ResponseKind::Success => Ok(decoded.payload.to_vec()),
-        ResponseKind::Error(code) => Err(NetworkError::RemoteError(format!(
-            "kind={code}: {}",
-            error_payload::decode(decoded.payload)
-        ))),
-    }
+pub(super) async fn sleep_connect_backoff(retry: u8) {
+    let exponent = u32::from(retry.saturating_sub(1).min(4));
+    let delay_ms = 250u64.saturating_mul(1u64 << exponent).min(4_000);
+    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
 }
 
 impl crate::network::transport::traits::Transport for NativeWebSocketTransport {
@@ -157,5 +235,15 @@ impl crate::network::transport::traits::Transport for NativeWebSocketTransport {
         payload: &'a [u8],
     ) -> crate::network::transport::traits::TransportFuture<'a> {
         Box::pin(self.call_inner(operation, payload))
+    }
+
+    fn disconnect(&self) {
+        self.shutdown_driver();
+    }
+
+    fn next_notification<'a>(
+        &'a self,
+    ) -> crate::network::transport::traits::NotificationFuture<'a> {
+        Box::pin(self.next_notification_inner())
     }
 }

@@ -1,4 +1,7 @@
-use crate::network::wrpc::{operation::Operation, response};
+use crate::network::wrpc::{
+    operation::Operation,
+    response::{self, ResponseKind},
+};
 
 #[test]
 fn response_retains_request_identity() {
@@ -10,6 +13,17 @@ fn response_retains_request_identity() {
     assert_eq!(decoded.id, Some(42));
     assert_eq!(decoded.operation, Some(Operation::GetBlock));
     assert_eq!(decoded.raw_operation, Some(Operation::GetBlock.code()));
+    assert_eq!(decoded.payload, [0xaa, 0xbb]);
+}
+
+#[test]
+fn response_classifies_notification_frames_without_request_ids() {
+    let bytes = [0, 0xff, 1, 60, 0xaa, 0xbb];
+    let decoded = response::decode(&bytes).expect("notification should decode");
+    assert_eq!(decoded.id, None);
+    assert_eq!(decoded.kind, ResponseKind::Notification);
+    assert_eq!(decoded.operation, None);
+    assert_eq!(decoded.raw_operation, Some(60));
     assert_eq!(decoded.payload, [0xaa, 0xbb]);
 }
 
