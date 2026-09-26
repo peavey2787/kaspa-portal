@@ -2,6 +2,7 @@ mod block_added;
 mod dag;
 mod error;
 mod fee_response;
+mod notification;
 mod queries;
 mod request;
 mod response;

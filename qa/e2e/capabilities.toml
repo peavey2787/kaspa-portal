@@ -13,11 +13,23 @@ reason = "platform transport construction, not part of the high-level SDK facade
 
 [[rust_exclusion]]
 symbol = "NetworkApi::subscribe_block_added"
-reason = "native-only persistent wRPC notification API; browser WebSocket transport remains request scoped"
+reason = "live wRPC notification stream; driven against a node by downstream apps, no offline E2E fixture"
 
 [[rust_exclusion]]
 symbol = "NetworkApi::next_block_added"
-reason = "native-only persistent wRPC notification API; browser WebSocket transport remains request scoped"
+reason = "live wRPC notification stream; driven against a node by downstream apps, no offline E2E fixture"
+
+[[rust_exclusion]]
+symbol = "NetworkApi::subscribe_utxos_changed"
+reason = "live wRPC notification stream; driven against a node by downstream apps, no offline E2E fixture"
+
+[[rust_exclusion]]
+symbol = "NetworkApi::subscribe_virtual_daa_score_changed"
+reason = "live wRPC notification stream; driven against a node by downstream apps, no offline E2E fixture"
+
+[[rust_exclusion]]
+symbol = "NetworkApi::next_notification"
+reason = "live wRPC notification stream; driven against a node by downstream apps, no offline E2E fixture"
 
 [[rust_exclusion]]
 symbol = "KaspaPortal::start_live_indexer"

@@ -1,5 +1,6 @@
 pub mod block_added;
 pub(crate) mod error_payload;
+pub mod notification;
 pub mod operation;
 pub(crate) mod request;
 pub(crate) mod response;

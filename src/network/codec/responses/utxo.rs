@@ -17,7 +17,7 @@ fn entries_blob(data: &[u8]) -> Result<&[u8], NetworkError> {
     outer_reader.read_bytes(MAX_BLOB_BYTES)
 }
 
-fn decode_entries(entries_blob: &[u8]) -> Result<Vec<UtxoEntry>, NetworkError> {
+pub(crate) fn decode_entries(entries_blob: &[u8]) -> Result<Vec<UtxoEntry>, NetworkError> {
     let mut reader = WireReader::new(entries_blob);
     let count = usize::try_from(reader.read_u32()?).map_err(|_| NetworkError::InvalidLength)?;
     if count > MAX_UTXOS {

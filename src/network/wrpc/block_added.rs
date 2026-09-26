@@ -124,14 +124,20 @@ pub fn decode(frame: &[u8]) -> Result<Option<BlockAddedNotification<'_>>, Networ
     decode_rpc_block(block).map(Some)
 }
 
-fn decode_exact_payload<'a>(data: &'a [u8], label: &str) -> Result<&'a [u8], NetworkError> {
+pub(super) fn decode_exact_payload<'a>(
+    data: &'a [u8],
+    label: &str,
+) -> Result<&'a [u8], NetworkError> {
     let mut reader = WireReader::new(data);
     let payload = reader.read_bytes(MAX_WRPC_BLOB_BYTES)?;
     require_empty(&reader, label)?;
     Ok(payload)
 }
 
-fn expect_u16_version(reader: &mut WireReader<'_>, label: &str) -> Result<(), NetworkError> {
+pub(super) fn expect_u16_version(
+    reader: &mut WireReader<'_>,
+    label: &str,
+) -> Result<(), NetworkError> {
     let version = reader.read_u16()?;
     if version != SERIALIZER_VERSION_V1 {
         return Err(NetworkError::InvalidEncoding(format!(
@@ -141,7 +147,7 @@ fn expect_u16_version(reader: &mut WireReader<'_>, label: &str) -> Result<(), Ne
     Ok(())
 }
 
-fn require_empty(reader: &WireReader<'_>, label: &str) -> Result<(), NetworkError> {
+pub(super) fn require_empty(reader: &WireReader<'_>, label: &str) -> Result<(), NetworkError> {
     if reader.remaining().is_empty() {
         Ok(())
     } else {

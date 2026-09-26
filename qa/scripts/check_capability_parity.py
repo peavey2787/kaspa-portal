@@ -17,6 +17,7 @@ RUST_FILES = [
     "src/portal/facade.rs",
     "src/portal/config.rs",
     "src/network/facade.rs",
+    "src/network/facade/subscriptions.rs",
     "src/network/client.rs",
     "src/chain/facade.rs",
     "src/wallet/facade.rs",

@@ -10,9 +10,8 @@ pub type TransportFuture<'a> =
 #[cfg(target_arch = "wasm32")]
 pub type TransportFuture<'a> = Pin<Box<dyn Future<Output = Result<Vec<u8>, NetworkError>> + 'a>>;
 
-#[cfg(not(target_arch = "wasm32"))]
-pub type NotificationFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<Vec<u8>, NetworkError>> + Send + 'a>>;
+/// Future resolving to one raw notification (or subscription ack) frame.
+pub type NotificationFuture<'a> = TransportFuture<'a>;
 
 /// Platform transport contract used by the Kaspa wRPC domain.
 ///
@@ -26,7 +25,12 @@ pub trait Transport: Send + Sync {
     /// default is intentionally a no-op.
     fn disconnect(&self) {}
 
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Register a Kaspa notification scope. Persistent transports send it on
+    /// their shared connection; browser transports use a notification socket.
+    fn subscribe<'a>(&'a self, payload: &'a [u8]) -> TransportFuture<'a> {
+        self.call(Operation::Subscribe, payload)
+    }
+
     fn next_notification<'a>(&'a self) -> NotificationFuture<'a> {
         Box::pin(async {
             Err(NetworkError::UnexpectedResponse(

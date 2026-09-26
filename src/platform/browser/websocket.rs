@@ -45,6 +45,7 @@ type TimeoutHandler = Closure<dyn FnMut()>;
 pub struct BrowserWebSocketTransport {
     endpoint: String,
     timeout_ms: i32,
+    notification_key: std::sync::Mutex<Option<u64>>,
 }
 
 impl BrowserWebSocketTransport {
@@ -60,6 +61,7 @@ impl BrowserWebSocketTransport {
         Ok(Self {
             endpoint: endpoint.to_owned(),
             timeout_ms,
+            notification_key: std::sync::Mutex::new(None),
         })
     }
 
@@ -321,5 +323,29 @@ impl crate::network::transport::traits::Transport for BrowserWebSocketTransport 
         payload: &'a [u8],
     ) -> crate::network::transport::traits::TransportFuture<'a> {
         Box::pin(self.call_inner(operation, payload))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn subscribe<'a>(
+        &'a self,
+        payload: &'a [u8],
+    ) -> crate::network::transport::traits::TransportFuture<'a> {
+        Box::pin(super::notifications::subscribe_on(
+            &self.notification_key,
+            &self.endpoint,
+            payload,
+        ))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn next_notification<'a>(
+        &'a self,
+    ) -> crate::network::transport::traits::NotificationFuture<'a> {
+        Box::pin(super::notifications::next_on(&self.notification_key))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn disconnect(&self) {
+        super::notifications::close_on(&self.notification_key);
     }
 }

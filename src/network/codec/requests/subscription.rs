@@ -11,6 +11,7 @@ use crate::network::{
 enum SubscriptionScope {
     BlockAdded = 0,
     UtxosChanged = 4,
+    VirtualDaaScoreChanged = 6,
 }
 
 fn encode_subscription_payload(
@@ -53,6 +54,24 @@ pub fn block_added(request_id: u64) -> Result<Vec<u8>, NetworkError> {
         operation: Operation::Subscribe,
         payload: &payload,
     })
+}
+
+/// Encode a UtxosChanged subscription body for `addresses` (replayable).
+pub fn utxos_changed_payload(addresses: &[String]) -> Result<Vec<u8>, NetworkError> {
+    let mut inner = WireWriter::new();
+    inner.write_u16(1);
+    inner.write_u32(u32::try_from(addresses.len()).map_err(|_| NetworkError::InvalidLength)?);
+    for address in addresses {
+        write_address(&mut inner, address)?;
+    }
+    encode_subscription_payload(SubscriptionScope::UtxosChanged, inner.into_vec())
+}
+
+/// Encode a VirtualDaaScoreChanged subscription body (replayable).
+pub fn virtual_daa_score_changed_payload() -> Result<Vec<u8>, NetworkError> {
+    let mut inner = WireWriter::new();
+    inner.write_u16(1);
+    encode_subscription_payload(SubscriptionScope::VirtualDaaScoreChanged, inner.into_vec())
 }
 
 pub fn utxos_changed(address: &str, request_id: u64) -> Result<Vec<u8>, NetworkError> {

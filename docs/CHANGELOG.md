@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+
+- Cross-target Kaspa notification subscriptions on `NetworkApi`: `subscribe_block_added`, `subscribe_utxos_changed`, `subscribe_virtual_daa_score_changed`, `next_notification`, and `next_block_added` now work on native and browser/WASM hosts.
+- Decoded `Notification` enum (`BlockAdded`, `UtxosChanged`, `VirtualDaaScoreChanged`) in `network::wrpc::notification`.
+- Browser transport keeps a dedicated persistent notification WebSocket behind the `Transport` trait (`Transport::subscribe`), so apps no longer need a separate Kaspa RPC client for live events.
+
 ## 1.0.1
 
 ### Fixed
