@@ -17,7 +17,7 @@ pub(super) fn transaction_json(
     output_extra: &str,
 ) -> Vec<u8> {
     format!(
-        "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1{global_extra}}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1{input_extra}}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"{output_extra}}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1{global_extra}}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1{input_extra}}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"{output_extra}}}]}}"
     )
     .into_bytes()
 }

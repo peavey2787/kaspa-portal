@@ -56,7 +56,10 @@ fn output_value(output: &PskbOutputPlan) -> Value {
         object.insert("covenantBinding".to_string(), binding.clone());
     }
     object.insert("bip32Derivations".to_string(), Value::Object(Map::new()));
-    object.insert("proprietaries".to_string(), standard_map(&output.proprietaries));
+    object.insert(
+        "proprietaries".to_string(),
+        standard_map(&output.proprietaries),
+    );
     Value::Object(object)
 }
 

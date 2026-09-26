@@ -17,16 +17,6 @@ pub enum NetworkId {
 }
 
 impl NetworkId {
-    // Preserve the existing public API while allowing future testnet suffixes
-    // (for example `NetworkId::Testnet(14)`) without a crate release solely to
-    // add another enum variant.
-    #[allow(non_upper_case_globals)]
-    pub const Testnet10: Self = Self::Testnet(10);
-    #[allow(non_upper_case_globals)]
-    pub const Testnet11: Self = Self::Testnet(11);
-    #[allow(non_upper_case_globals)]
-    pub const Testnet12: Self = Self::Testnet(12);
-
     pub const fn address_prefix(self) -> &'static str {
         match self {
             Self::Mainnet => "kaspa",
@@ -106,9 +96,7 @@ impl Serialize for NetworkId {
     where
         S: serde::Serializer,
     {
-        // Preserve the historical serde representation ("Testnet10", etc.)
-        // while extending it naturally to future suffixes such as
-        // "Testnet14".
+        // Serialized as the variant name with its suffix ("Testnet10").
         serializer.serialize_str(&format!("{self:?}"))
     }
 }
@@ -193,13 +181,5 @@ mod network_id_tests {
             network
         );
         assert_eq!(NetworkId::parse("kaspa:testnet-14").unwrap(), network);
-    }
-
-    #[test]
-    fn legacy_testnet_constants_remain_compatible() {
-        assert_eq!(NetworkId::Testnet10, NetworkId::Testnet(10));
-        assert_eq!(NetworkId::Testnet11, NetworkId::Testnet(11));
-        assert_eq!(NetworkId::Testnet12, NetworkId::Testnet(12));
-        assert_eq!(format!("{:?}", NetworkId::Testnet12), "Testnet12");
     }
 }

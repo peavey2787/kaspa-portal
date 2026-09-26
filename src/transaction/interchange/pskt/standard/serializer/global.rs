@@ -33,7 +33,7 @@ pub(super) fn emit_global(
 }
 
 fn emit_global_version(writer: &mut HexWriter<'_>, tx: &Transaction) -> Result<(), PskError> {
-    writer.lit(b"{\"version\":1,\"txVersion\":")?;
+    writer.lit(b"{\"version\":0,\"txVersion\":")?;
     writer.u64(tx.version as u64)
 }
 

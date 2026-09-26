@@ -23,7 +23,6 @@ required_markers = {
         "KSPT_VERSION_CURRENT: u8 = 0x01",
         "KSSN_VERSION_CURRENT: u8 = 0x01",
     ],
-    "src/transaction/interchange/pskt/standard/parser/mod.rs": ["PSKT_VERSION: u64 = 1"],
     "src/transaction/interchange/qr/frame.rs": ["FRAME_VERSION: u8 = 1"],
     "src/transaction/signing/anti_klepto/protocol.rs": ["pub const VERSION: u8 = 1"],
     "src/transaction/signing/covenant/protocol/mod.rs": ["pub const VERSION: u8 = 1"],
@@ -32,6 +31,17 @@ required_markers = {
     "src/indexer/storage/mod.rs": ["INDEXER_STATE_SCHEMA: u32 = 1"],
     "src/platform/browser/indexed_db.rs": ["INDEX_DB_VERSION: u32 = 1"],
 }
+# PSKT is rusty-kaspa's interchange format, not a Portal-owned one: its
+# global.version is Version::Zero and no other value is accepted.
+external_format_markers = {
+    "src/transaction/interchange/pskt/standard/parser/mod.rs": ["PSKT_VERSION: u64 = 0"],
+}
+for rel, markers in external_format_markers.items():
+    text = (ROOT / rel).read_text(errors="replace")
+    for marker in markers:
+        if marker not in text:
+            fail(f"standard format version drifted in {rel}: missing `{marker}`")
+
 for rel, markers in required_markers.items():
     path = ROOT / rel
     if not path.is_file():

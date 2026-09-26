@@ -11,7 +11,7 @@ use kaspa_portal::{
 #[test]
 fn same_canonical_public_evidence_produces_same_beacon_output() {
     let request = BeaconRequest {
-        network: NetworkId::Testnet10,
+        network: NetworkId::Testnet(10),
         context: b"deterministic-public-draw".to_vec(),
         kaspa: vec![
             KaspaEntropyEvidence::finalized([3; 32], Some(10)),

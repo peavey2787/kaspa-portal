@@ -29,7 +29,7 @@ fn strict_hex_decoder_covers_each_fail_closed_boundary() {
 #[test]
 fn declared_counts_are_validated_after_field_order_is_resolved() {
     let json = format!(
-        "{{\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[],\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":0,\"outputCount\":0}}}}"
+        "{{\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[],\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":0,\"outputCount\":0}}}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, json.as_bytes()).unwrap_err(),
@@ -38,26 +38,24 @@ fn declared_counts_are_validated_after_field_order_is_resolved() {
 }
 
 #[test]
-fn pskt_version_zero_is_canonical_and_legacy_one_is_still_accepted() {
-    for version in [0, 1] {
+fn pskt_version_zero_is_the_only_accepted_version() {
+    let current = br#"{"global":{"version":0,"txVersion":1,"inputCount":0,"outputCount":0},"inputs":[],"outputs":[]}"#;
+    assert!(parse_json(PSKT_MAGIC, current).is_ok());
+    for version in [1, 2] {
         let json = format!(
             r#"{{"global":{{"version":{version},"txVersion":1,"inputCount":0,"outputCount":0}},"inputs":[],"outputs":[]}}"#
         );
-        assert!(
-            parse_json(PSKT_MAGIC, json.as_bytes()).is_ok(),
+        assert_eq!(
+            parse_json(PSKT_MAGIC, json.as_bytes()).unwrap_err(),
+            PskError::VersionNotSupported,
             "version {version}"
         );
     }
-    let unsupported = br#"{"global":{"version":2,"txVersion":1,"inputCount":0,"outputCount":0},"inputs":[],"outputs":[]}"#;
-    assert_eq!(
-        parse_json(PSKT_MAGIC, unsupported).unwrap_err(),
-        PskError::VersionNotSupported
-    );
 }
 
 #[test]
 fn zero_count_transaction_uses_the_explicit_empty_array_grammar() {
-    let json = br#"{"global":{"version":1,"txVersion":1,"inputCount":0,"outputCount":0},"inputs":[],"outputs":[]}"#;
+    let json = br#"{"global":{"version":0,"txVersion":1,"inputCount":0,"outputCount":0},"inputs":[],"outputs":[]}"#;
     let (tx, _, _) = parse_json(PSKT_MAGIC, json).expect("zero-count PSKT grammar");
     assert_eq!(tx.num_inputs, 0);
     assert_eq!(tx.num_outputs, 0);
@@ -67,7 +65,7 @@ fn zero_count_transaction_uses_the_explicit_empty_array_grammar() {
 fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
     let max = u64::MAX;
     let input_overflow = format!(
-        "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":2,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}},{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":1}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":2,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}},{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":1}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, input_overflow.as_bytes()).unwrap_err(),
@@ -75,7 +73,7 @@ fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
     );
 
     let output_overflow = format!(
-        "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":2}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":2}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, output_overflow.as_bytes()).unwrap_err(),
@@ -83,7 +81,7 @@ fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
     );
 
     let outputs_exceed_inputs = format!(
-        "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"41\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"42\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"41\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"42\",\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, outputs_exceed_inputs.as_bytes()).unwrap_err(),
@@ -91,7 +89,7 @@ fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
     );
 
     let exact_max = format!(
-        "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":2,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}},{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":1}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}}]}}",
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":2,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}},{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":1}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}}]}}",
         max - 1
     );
     let (parsed, _, _) = parse_json(PSKT_MAGIC, exact_max.as_bytes()).expect("exact max parses");
@@ -108,7 +106,7 @@ fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
 #[test]
 fn mismatched_nested_delimiters_are_rejected() {
     let json = format!(
-        "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"future\":{{\"a\":[1}}],\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"future\":{{\"a\":[1}}],\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, json.as_bytes()).unwrap_err(),
@@ -151,7 +149,7 @@ fn empty_required_objects_and_opaque_nested_objects_have_distinct_grammar_result
 fn opaque_json_nesting_is_bounded() {
     let mut nested = Vec::new();
     nested.extend_from_slice(
-        b"{\"global\":{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1},\"future\":",
+        b"{\"global\":{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1},\"future\":",
     );
     nested.extend(core::iter::repeat_n(b'[', 33));
     nested.push(b'0');
@@ -258,7 +256,7 @@ fn duplicate_global_and_top_level_fields_are_rejected() {
     }
 
     let duplicate_top_level = format!(
-        "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, duplicate_top_level.as_bytes()).unwrap_err(),
@@ -406,7 +404,7 @@ fn bip32_derivations_cover_null_objects_duplicates_and_limits() {
 #[test]
 fn outpoint_parser_covers_unknown_duplicate_missing_and_bounds() {
     let unknown = format!(
-        "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"future\":{{\"nested\":true}},\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"future\":{{\"nested\":true}},\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
     );
     let (_, parsed, _) = parse_json(PSKT_MAGIC, unknown.as_bytes()).unwrap();
     assert!(parsed.unknowns_count > 0);
@@ -421,7 +419,7 @@ fn outpoint_parser_covers_unknown_duplicate_missing_and_bounds() {
         "{\"transactionId\":\"00\",\"index\":0}".to_string(),
     ] {
         let json = format!(
-            "{{\"global\":{{\"version\":1,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{outpoint},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+            "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{outpoint},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
         );
         assert!(parse_json(PSKT_MAGIC, json.as_bytes()).is_err());
     }
@@ -529,7 +527,7 @@ fn tokenizer_number_string_and_keyword_boundaries_are_exact() {
 
 #[test]
 fn required_pskt_schema_fields_are_independently_enforced() {
-    let valid_global = r#"{"version":1,"txVersion":1,"inputCount":1,"outputCount":1}"#;
+    let valid_global = r#"{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}"#;
     let valid_utxo = r#"{"amount":"1","scriptPublicKey":"0000"}"#;
     let valid_outpoint = format!(r#"{{"transactionId":"{TXID_ZERO}","index":0}}"#);
     let valid_input = format!(
@@ -542,9 +540,9 @@ fn required_pskt_schema_fields_are_independently_enforced() {
 
     for global in [
         r#"{"txVersion":1,"inputCount":1,"outputCount":1}"#,
-        r#"{"version":1,"inputCount":1,"outputCount":1}"#,
-        r#"{"version":1,"txVersion":1,"outputCount":1}"#,
-        r#"{"version":1,"txVersion":1,"inputCount":1}"#,
+        r#"{"version":0,"inputCount":1,"outputCount":1}"#,
+        r#"{"version":0,"txVersion":1,"outputCount":1}"#,
+        r#"{"version":0,"txVersion":1,"inputCount":1}"#,
     ] {
         assert_eq!(
             parse_json(
@@ -627,7 +625,7 @@ fn pskt_parser_accepts_dynamic_inputs_and_fixed_output_boundaries() {
     .join(",");
 
     let dynamic_inputs = format!(
-        r#"{{"global":{{"version":1,"txVersion":1,"inputCount":16,"outputCount":1}},"inputs":[{inputs_sixteen}],"outputs":[{output}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":16,"outputCount":1}},"inputs":[{inputs_sixteen}],"outputs":[{output}]}}"#
     );
     let parsed_inputs = parse_json(PSKT_MAGIC, dynamic_inputs.as_bytes()).expect("dynamic inputs");
     assert_eq!(parsed_inputs.0.num_inputs, 16);
@@ -639,7 +637,7 @@ fn pskt_parser_accepts_dynamic_inputs_and_fixed_output_boundaries() {
         r#"{{"utxoEntry":{{"amount":"8","scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}"#
     );
     let max_outputs = format!(
-        r#"{{"global":{{"version":1,"txVersion":1,"inputCount":1,"outputCount":8}},"inputs":[{input_for_eight_outputs}],"outputs":[{outputs_eight}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":8}},"inputs":[{input_for_eight_outputs}],"outputs":[{outputs_eight}]}}"#
     );
     let parsed_outputs = parse_json(PSKT_MAGIC, max_outputs.as_bytes()).expect("eight outputs");
     assert_eq!(parsed_outputs.0.num_outputs, 8);
@@ -653,7 +651,7 @@ fn pskt_parser_accepts_dynamic_inputs_and_fixed_output_boundaries() {
     );
 
     let tx_version_zero = format!(
-        r#"{{"global":{{"version":1,"txVersion":0,"inputCount":1,"outputCount":1}},"inputs":[{input}],"outputs":[{output}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":0,"inputCount":1,"outputCount":1}},"inputs":[{input}],"outputs":[{output}]}}"#
     );
     assert!(parse_json(PSKT_MAGIC, tx_version_zero.as_bytes()).is_ok());
 
@@ -661,7 +659,7 @@ fn pskt_parser_accepts_dynamic_inputs_and_fixed_output_boundaries() {
         r#"{{"utxoEntry":{{"amount":"1","scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":4294967295}},"sighashType":1,"sigOpCount":5}}"#
     );
     let max_index_document = format!(
-        r#"{{"global":{{"version":1,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{max_index_input}],"outputs":[{output}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{max_index_input}],"outputs":[{output}]}}"#
     );
     let parsed = parse_json(PSKT_MAGIC, max_index_document.as_bytes()).expect("u32 max index");
     assert_eq!(parsed.0.inputs[0].previous_outpoint.index, u32::MAX);
@@ -691,7 +689,7 @@ fn pskt_parser_accepts_dynamic_inputs_and_fixed_output_boundaries() {
     let spk_at_limit = format!("0000{}", "aa".repeat(512));
     let large_output = format!(r#"{{"amount":"1","scriptPublicKey":"{spk_at_limit}"}}"#);
     let large_output_document = format!(
-        r#"{{"global":{{"version":1,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{input}],"outputs":[{large_output}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{input}],"outputs":[{large_output}]}}"#
     );
     let parsed = parse_json(PSKT_MAGIC, large_output_document.as_bytes()).expect("512-byte SPK");
     assert_eq!(parsed.0.outputs[0].script_public_key.script_len, 512);
@@ -719,7 +717,7 @@ fn optional_numeric_string_and_default_utxo_metadata_paths_remain_distinct() {
     assert!(parsed.unknowns_count >= 4);
 
     let default_metadata = format!(
-        r#"{{"global":{{"version":1,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{{"utxoEntry":{{"amount":"1","scriptPublicKey":"0000","blockDaaScore":"0","isCoinbase":false}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}],"outputs":[{{"amount":"1","scriptPublicKey":"0000"}}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{{"utxoEntry":{{"amount":"1","scriptPublicKey":"0000","blockDaaScore":"0","isCoinbase":false}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}],"outputs":[{{"amount":"1","scriptPublicKey":"0000"}}]}}"#
     );
     let (_, parsed, _) =
         parse_json(PSKT_MAGIC, default_metadata.as_bytes()).expect("default metadata");
@@ -756,7 +754,7 @@ fn covenant_binding_accepts_dynamic_authorizer_and_requires_both_members() {
         r#"{{"amount":"1","scriptPublicKey":"0000","covenantBinding":{{"authorizingInput":{max_authorizer},"covenantId":"{COVENANT_ID}"}}}}"#
     );
     let document = format!(
-        r#"{{"global":{{"version":1,"txVersion":1,"inputCount":{MANY_INPUTS},"outputCount":1}},"inputs":[{inputs}],"outputs":[{output}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":{MANY_INPUTS},"outputCount":1}},"inputs":[{inputs}],"outputs":[{output}]}}"#
     );
 
     let (tx, _, _) = parse_json(PSKT_MAGIC, document.as_bytes())
@@ -801,7 +799,7 @@ fn global_parser_covers_version_count_and_modifiable_branch_boundaries() {
 
     for (from, to, expected) in [
         (
-            "\"version\":1",
+            "\"version\":0",
             "\"version\":2",
             PskError::VersionNotSupported,
         ),
