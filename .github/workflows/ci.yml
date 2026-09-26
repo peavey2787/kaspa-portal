@@ -1,0 +1,96 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  static-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Architecture, SRP, duplication, complexity, parity and coverage registries
+        run: |
+          python3 qa/scripts/check_project.py
+          python3 qa/scripts/check_versions.py
+          python3 qa/scripts/check_architecture.py
+          python3 qa/scripts/check_srp.py
+          python3 qa/scripts/check_duplication.py
+          python3 qa/scripts/check_complexity.py
+          python3 qa/scripts/check_capability_parity.py
+          python3 qa/scripts/check_rust_e2e_coverage.py
+          python3 qa/scripts/check_wasm_e2e_coverage.py
+          python3 qa/scripts/check_resource_coverage.py
+      - name: NIST randomness vectors
+        run: node qa/tests/randomness/nist/run.mjs
+
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pinned toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy (all targets, all features, warnings denied)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Unit, integration and doc tests
+        run: |
+          cargo test --all-targets
+          cargo test --doc
+      - name: QA crate tests
+        run: cargo test --manifest-path qa/Cargo.toml --all-targets
+      - name: Offline facade E2E
+        env:
+          KASPA_PORTAL_E2E_SKIP_STANDARD_FUNDED: "1"
+          KASPA_PORTAL_E2E_SKIP_COVENANT_FUNDED: "1"
+        run: cargo test --manifest-path qa/Cargo.toml --test e2e-rust-offline -- --ignored --nocapture --test-threads=1
+      - name: Benches and fuzz targets build
+        run: |
+          cargo test --manifest-path qa/benches/Cargo.toml --no-run
+          cargo check --manifest-path qa/tests/fuzz/Cargo.toml
+
+  wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Browser build
+        run: cargo check --target wasm32-unknown-unknown --features wasm
+
+  live-network:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Read-only public testnet E2E
+        run: cargo test --manifest-path qa/Cargo.toml --test e2e-rust-live-network -- --ignored --nocapture --test-threads=1
