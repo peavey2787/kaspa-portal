@@ -5,6 +5,7 @@
 ### Fixed
 
 - PSKB/PSKT encoders now emit the standard PSKT format version `"version": 0` (rusty-kaspa `Version::Zero`). The transaction builder previously omitted it and the interchange encoder wrote `1`, so strict signers such as KasKold 2.0 rejected Portal PSKBs. The parser accepts version 0 and still accepts the legacy 1 on input.
+- The transaction builder's PSKB now uses the standard PSKT shape its interchange encoder already produced: explicit `sighashType` (SIGHASH_ALL) per input, `inputsModifiable`/`outputsModifiable`, `xpubs`, and JSON objects for `proprietaries`/`bip32Derivations` (previously the KasKold 1.x Companion envelope with `*ModifiableFlag` and empty arrays). KasKold 2.0 accepts Portal PSKBs directly.
 
 ## 1.1.0
 

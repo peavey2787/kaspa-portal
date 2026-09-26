@@ -156,12 +156,12 @@ fn typed_sweep_matches_the_browser_pskb_shape() {
             "txVersion": 0,
             "fallbackLockTime": "77",
             "covenantBranch": "savings",
-            "inputsModifiableFlag": false,
-            "outputsModifiableFlag": false,
+            "inputsModifiable": false,
+            "outputsModifiable": false,
             "inputCount": 1,
             "outputCount": 1,
-            "bip32Derivations": [],
-            "proprietaries": []
+            "xpubs": {},
+            "proprietaries": {}
         },
         "inputs": [{
             "previousOutpoint": {
@@ -170,6 +170,7 @@ fn typed_sweep_matches_the_browser_pskb_shape() {
             },
             "sequence": "0",
             "sigOpCount": 1,
+            "sighashType": 1,
             "utxoEntry": {
                 "amount": inputs[0].amount.to_string(),
                 "scriptPublicKey": "0000aabb",
@@ -179,16 +180,16 @@ fn typed_sweep_matches_the_browser_pskb_shape() {
             "redeemScript": "51ac",
             "partialSigs": {},
             "minimumSignatures": 1,
-            "bip32Derivations": [],
-            "proprietaries": [],
+            "bip32Derivations": {},
+            "proprietaries": {},
             "finalScriptSig": serde_json::Value::Null,
             "minTime": "0"
         }],
         "outputs": [{
             "amount": "41000",
             "scriptPublicKey": "0000ccdd",
-            "bip32Derivations": [],
-            "proprietaries": []
+            "bip32Derivations": {},
+            "proprietaries": {}
         }]
     });
 
@@ -217,12 +218,12 @@ fn typed_p2pk_sweep_matches_the_stealth_pskb_shape() {
             "version": 0,
             "txVersion": 0,
             "fallbackLockTime": serde_json::Value::Null,
-            "inputsModifiableFlag": false,
-            "outputsModifiableFlag": false,
+            "inputsModifiable": false,
+            "outputsModifiable": false,
             "inputCount": 1,
             "outputCount": 1,
-            "bip32Derivations": [],
-            "proprietaries": []
+            "xpubs": {},
+            "proprietaries": {}
         },
         "inputs": [{
             "previousOutpoint": {
@@ -231,6 +232,7 @@ fn typed_p2pk_sweep_matches_the_stealth_pskb_shape() {
             },
             "sequence": "0",
             "sigOpCount": 1,
+            "sighashType": 1,
             "utxoEntry": {
                 "amount": inputs[0].amount.to_string(),
                 "scriptPublicKey": "00001122",
@@ -240,7 +242,7 @@ fn typed_p2pk_sweep_matches_the_stealth_pskb_shape() {
             "redeemScript": serde_json::Value::Null,
             "partialSigs": {},
             "minimumSignatures": 1,
-            "bip32Derivations": [],
+            "bip32Derivations": {},
             "proprietaries": { "stealthTweak": "aa".repeat(32) },
             "finalScriptSig": serde_json::Value::Null,
             "minTime": "0"
@@ -248,8 +250,8 @@ fn typed_p2pk_sweep_matches_the_stealth_pskb_shape() {
         "outputs": [{
             "amount": "59000",
             "scriptPublicKey": "00003344",
-            "bip32Derivations": [],
-            "proprietaries": []
+            "bip32Derivations": {},
+            "proprietaries": {}
         }]
     });
 
@@ -300,12 +302,12 @@ fn global_thread_allowance_withdrawal_matches_browser_wire_shape() {
             "txVersion": 1,
             "fallbackLockTime": "123",
             "covenantBranch": "beneficiary",
-            "inputsModifiableFlag": false,
-            "outputsModifiableFlag": false,
+            "inputsModifiable": false,
+            "outputsModifiable": false,
             "inputCount": 1,
             "outputCount": 2,
-            "bip32Derivations": [],
-            "proprietaries": []
+            "xpubs": {},
+            "proprietaries": {}
         },
         "inputs": [{
             "previousOutpoint": {
@@ -314,6 +316,7 @@ fn global_thread_allowance_withdrawal_matches_browser_wire_shape() {
             },
             "sequence": "9",
             "sigOpCount": 1,
+            "sighashType": 1,
             "utxoEntry": {
                 "amount": thread.amount.to_string(),
                 "scriptPublicKey": "0000aabb",
@@ -323,8 +326,8 @@ fn global_thread_allowance_withdrawal_matches_browser_wire_shape() {
             "redeemScript": "51ac",
             "partialSigs": {},
             "minimumSignatures": 1,
-            "bip32Derivations": [],
-            "proprietaries": [],
+            "bip32Derivations": {},
+            "proprietaries": {},
             "finalScriptSig": serde_json::Value::Null,
             "minTime": "0"
         }],
@@ -335,14 +338,14 @@ fn global_thread_allowance_withdrawal_matches_browser_wire_shape() {
                 "authorizingInput": 0,
                 "covenantId": hex::encode(covenant_id)
             },
-            "bip32Derivations": [],
-            "proprietaries": []
+            "bip32Derivations": {},
+            "proprietaries": {}
         }, {
             "amount": "19000000",
             "scriptPublicKey": "0000ccdd",
             "covenantBinding": serde_json::Value::Null,
-            "bip32Derivations": [],
-            "proprietaries": []
+            "bip32Derivations": {},
+            "proprietaries": {}
         }]
     });
 
@@ -402,17 +405,18 @@ fn global_thread_topup_matches_mixed_input_shape() {
             "txVersion": 1,
             "fallbackLockTime": "0",
             "covenantBranch": serde_json::Value::Null,
-            "inputsModifiableFlag": false,
-            "outputsModifiableFlag": false,
+            "inputsModifiable": false,
+            "outputsModifiable": false,
             "inputCount": 3,
             "outputCount": 1,
-            "bip32Derivations": [],
-            "proprietaries": []
+            "xpubs": {},
+            "proprietaries": {}
         },
         "inputs": [{
             "previousOutpoint": { "transactionId": thread.tx_id, "index": thread.index },
             "sequence": "11",
             "sigOpCount": 1,
+            "sighashType": 1,
             "utxoEntry": {
                 "amount": thread.amount.to_string(),
                 "scriptPublicKey": "0000aabb",
@@ -422,14 +426,15 @@ fn global_thread_topup_matches_mixed_input_shape() {
             "redeemScript": "51ac",
             "partialSigs": {},
             "minimumSignatures": 1,
-            "bip32Derivations": [],
-            "proprietaries": [],
+            "bip32Derivations": {},
+            "proprietaries": {},
             "finalScriptSig": serde_json::Value::Null,
             "minTime": "0"
         }, {
             "previousOutpoint": { "transactionId": wallet_one.tx_id, "index": wallet_one.index },
             "sequence": "0",
             "sigOpCount": 1,
+            "sighashType": 1,
             "utxoEntry": {
                 "amount": wallet_one.amount.to_string(),
                 "scriptPublicKey": "00001122",
@@ -439,14 +444,15 @@ fn global_thread_topup_matches_mixed_input_shape() {
             "redeemScript": serde_json::Value::Null,
             "partialSigs": {},
             "minimumSignatures": 1,
-            "bip32Derivations": [],
-            "proprietaries": [],
+            "bip32Derivations": {},
+            "proprietaries": {},
             "finalScriptSig": serde_json::Value::Null,
             "minTime": "0"
         }, {
             "previousOutpoint": { "transactionId": wallet_two.tx_id, "index": wallet_two.index },
             "sequence": "0",
             "sigOpCount": 1,
+            "sighashType": 1,
             "utxoEntry": {
                 "amount": wallet_two.amount.to_string(),
                 "scriptPublicKey": "00003344",
@@ -456,8 +462,8 @@ fn global_thread_topup_matches_mixed_input_shape() {
             "redeemScript": serde_json::Value::Null,
             "partialSigs": {},
             "minimumSignatures": 1,
-            "bip32Derivations": [],
-            "proprietaries": [],
+            "bip32Derivations": {},
+            "proprietaries": {},
             "finalScriptSig": serde_json::Value::Null,
             "minTime": "0"
         }],
@@ -468,8 +474,8 @@ fn global_thread_topup_matches_mixed_input_shape() {
                 "authorizingInput": 0,
                 "covenantId": hex::encode(covenant_id)
             },
-            "bip32Derivations": [],
-            "proprietaries": []
+            "bip32Derivations": {},
+            "proprietaries": {}
         }]
     });
 
