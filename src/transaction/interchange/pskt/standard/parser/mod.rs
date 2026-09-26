@@ -20,7 +20,10 @@ use inputs::parse_inputs_array;
 use outputs::parse_outputs_array;
 
 pub(super) const MAX_TX_VERSION: u16 = 1;
-pub(super) const PSKT_VERSION: u64 = 1;
+/// PSKT format version (rusty-kaspa `Version::Zero`), emitted by every encoder.
+pub(super) const PSKT_VERSION: u64 = 0;
+/// Earlier Portal releases emitted 1; still accepted on input.
+pub(super) const LEGACY_PSKT_VERSION: u64 = 1;
 pub(super) const SIGHASH_ALL: u8 = 1;
 
 #[derive(Debug, Default)]

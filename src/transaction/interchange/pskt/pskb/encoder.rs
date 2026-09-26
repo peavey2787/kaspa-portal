@@ -71,7 +71,7 @@ fn encode_document(
         .collect::<Vec<_>>();
 
     let mut global = json!({
-        "version": 1u8,
+        "version": 0u8,
         "txVersion": tx_version,
         "fallbackLockTime": Value::Null,
         "inputsModifiable": false,

@@ -1,6 +1,6 @@
 # kaspa-portal
 
-`kaspa-portal` 1.1.0 is a capability-oriented Rust SDK for connecting to and interacting with Kaspa from native Rust and WebAssembly. It exposes one small `KaspaPortal` facade while keeping specialized protocol, cryptographic, transaction, contract, indexing, privacy, and randomness APIs directly accessible.
+`kaspa-portal` 1.1.1 is a capability-oriented Rust SDK for connecting to and interacting with Kaspa from native Rust and WebAssembly. It exposes one small `KaspaPortal` facade while keeping specialized protocol, cryptographic, transaction, contract, indexing, privacy, and randomness APIs directly accessible.
 
 ## Design
 
@@ -31,7 +31,7 @@ For the developer-facing method reference, including parameters and return value
 
 ```toml
 [dependencies]
-kaspa-portal = "1.1.0"
+kaspa-portal = "1.1.1"
 ```
 
 Build an offline portal when no node connection is needed:

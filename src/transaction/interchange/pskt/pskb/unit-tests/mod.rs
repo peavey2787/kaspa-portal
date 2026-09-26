@@ -23,7 +23,7 @@ fn standard_pskb_exact_integer_wire_digest_is_stable() {
     assert_eq!(&wire[..4], b"PSKB");
     assert_eq!(
         hex::encode(Sha256::digest(&wire)),
-        "23872ae2d75b94f4fd1662102ae660f44869732d66069ed11f45f9455faef4b9"
+        "efff1d67f8f15990d1b2730b86b9daf42225cfbad23c289427feacaa4cb79355"
     );
 
     let body = hex::decode(std::str::from_utf8(&wire[4..]).expect("body hex")).expect("body");

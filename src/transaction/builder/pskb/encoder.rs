@@ -55,6 +55,9 @@ pub fn encode_wire(plan: &PskbPlan) -> Result<String, String> {
     let outputs = plan.outputs.iter().map(output_value).collect::<Vec<_>>();
 
     let mut global = Map::new();
+    // PSKT format version 0 (rusty-kaspa `Version::Zero`); signers such as
+    // KasKold reject a global without it.
+    global.insert("version".to_string(), Value::from(0u8));
     global.insert("txVersion".to_string(), Value::from(plan.global.tx_version));
     global.insert(
         "fallbackLockTime".to_string(),

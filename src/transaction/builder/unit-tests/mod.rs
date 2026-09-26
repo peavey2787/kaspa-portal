@@ -101,6 +101,7 @@ fn typed_pskb_sweep_preserves_contract_metadata() {
     let document = decode_pskb_wire(&super::pskb::encode_wire(&plan).expect("encode"));
     let pskt = &document[0];
 
+    assert_eq!(pskt["global"]["version"], 0, "PSKT format version 0");
     assert_eq!(pskt["global"]["txVersion"], 0);
     assert_eq!(pskt["global"]["subnetworkId"], "00".repeat(20));
     assert_eq!(pskt["global"]["fallbackLockTime"], "123");
@@ -151,6 +152,7 @@ fn typed_sweep_matches_the_browser_pskb_shape() {
 
     let source = serde_json::json!({
         "global": {
+            "version": 0,
             "txVersion": 0,
             "fallbackLockTime": "77",
             "covenantBranch": "savings",
@@ -212,6 +214,7 @@ fn typed_p2pk_sweep_matches_the_stealth_pskb_shape() {
 
     let source = serde_json::json!({
         "global": {
+            "version": 0,
             "txVersion": 0,
             "fallbackLockTime": serde_json::Value::Null,
             "inputsModifiableFlag": false,
@@ -293,6 +296,7 @@ fn global_thread_allowance_withdrawal_matches_browser_wire_shape() {
 
     let source = serde_json::json!({
         "global": {
+            "version": 0,
             "txVersion": 1,
             "fallbackLockTime": "123",
             "covenantBranch": "beneficiary",
@@ -394,6 +398,7 @@ fn global_thread_topup_matches_mixed_input_shape() {
 
     let source = serde_json::json!({
         "global": {
+            "version": 0,
             "txVersion": 1,
             "fallbackLockTime": "0",
             "covenantBranch": serde_json::Value::Null,

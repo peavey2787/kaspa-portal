@@ -38,6 +38,24 @@ fn declared_counts_are_validated_after_field_order_is_resolved() {
 }
 
 #[test]
+fn pskt_version_zero_is_canonical_and_legacy_one_is_still_accepted() {
+    for version in [0, 1] {
+        let json = format!(
+            r#"{{"global":{{"version":{version},"txVersion":1,"inputCount":0,"outputCount":0}},"inputs":[],"outputs":[]}}"#
+        );
+        assert!(
+            parse_json(PSKT_MAGIC, json.as_bytes()).is_ok(),
+            "version {version}"
+        );
+    }
+    let unsupported = br#"{"global":{"version":2,"txVersion":1,"inputCount":0,"outputCount":0},"inputs":[],"outputs":[]}"#;
+    assert_eq!(
+        parse_json(PSKT_MAGIC, unsupported).unwrap_err(),
+        PskError::VersionNotSupported
+    );
+}
+
+#[test]
 fn zero_count_transaction_uses_the_explicit_empty_array_grammar() {
     let json = br#"{"global":{"version":1,"txVersion":1,"inputCount":0,"outputCount":0},"inputs":[],"outputs":[]}"#;
     let (tx, _, _) = parse_json(PSKT_MAGIC, json).expect("zero-count PSKT grammar");

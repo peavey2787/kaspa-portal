@@ -9,7 +9,7 @@ use super::helpers::{
     capture_nonempty_object, consume_object_separator, expect, expect_bool, expect_string,
     expect_u64, mark_seen_u16, reject_empty_object, skip_value,
 };
-use super::{ParseContext, MAX_TX_VERSION, PSKT_VERSION};
+use super::{ParseContext, LEGACY_PSKT_VERSION, MAX_TX_VERSION, PSKT_VERSION};
 
 const FIELD_VERSION: u16 = 0x0001;
 const FIELD_TX_VERSION: u16 = 0x0002;
@@ -103,7 +103,8 @@ impl GlobalParser<'_> {
 
     fn parse_pskt_version(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
         mark_seen_u16(&mut self.seen, FIELD_VERSION)?;
-        if expect_u64(tok)? != PSKT_VERSION {
+        let version = expect_u64(tok)?;
+        if version != PSKT_VERSION && version != LEGACY_PSKT_VERSION {
             return Err(PskError::VersionNotSupported);
         }
         Ok(())
