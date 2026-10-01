@@ -404,6 +404,18 @@ rust_e2e = "rust_live_standard_network_chain"
 wasm_e2e = "wasm_live_standard_network_chain"
 
 [[capability]]
+id = "chain.blocks_since"
+domain = "chain"
+rust_symbol = "ChainApi::blocks_since"
+wasm_symbols = ["WasmChain::blocks_since"]
+execution = "public_standard"
+funds_required = false
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_live_standard_network_chain"
+wasm_e2e = "wasm_live_standard_network_chain"
+
+[[capability]]
 id = "chain.block_raw"
 domain = "chain"
 rust_symbol = "ChainApi::block_raw"

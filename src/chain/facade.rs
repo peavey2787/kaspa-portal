@@ -3,7 +3,10 @@ use std::sync::Arc;
 use crate::{
     chain::{tx_lookup::ChainTransaction, utxo::UtxoEntry},
     error::{Error, Result},
-    network::{client::NetworkClient, model::fee_estimate::FeeEstimate, queries},
+    network::{
+        client::NetworkClient, model::fee_estimate::FeeEstimate, queries,
+        wrpc::block_added::OwnedBlockAddedNotification,
+    },
     primitives::{BlockHash, DaaScore},
 };
 
@@ -37,6 +40,18 @@ impl ChainApi {
 
     pub async fn block_raw(&self, hash: &BlockHash) -> Result<Vec<u8>> {
         queries::blocks::get_raw(&self.client, &hash.0)
+            .await
+            .map_err(|error| Error::Network(error.to_string()))
+    }
+
+    /// Blocks with their transactions accepted after `low_hash`, so a
+    /// consumer can backfill what it missed while a notification stream was
+    /// down. The node answers one bounded page; call again from the last hash.
+    pub async fn blocks_since(
+        &self,
+        low_hash: &BlockHash,
+    ) -> Result<Vec<OwnedBlockAddedNotification>> {
+        queries::blocks::since(&self.client, &low_hash.0)
             .await
             .map_err(|error| Error::Network(error.to_string()))
     }

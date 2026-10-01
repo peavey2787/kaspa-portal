@@ -1,4 +1,5 @@
 mod block_added;
+mod blocks_response;
 mod dag;
 mod error;
 mod fee_response;

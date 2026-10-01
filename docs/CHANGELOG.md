@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+- Added `ChainApi::blocks_since` / `KaspaChain.blocksSince`: wRPC `GetBlocks`
+  (with transactions) past a low hash, so a consumer can backfill blocks it
+  missed while its BlockAdded stream was disconnected. The response decoder is
+  bounded, rejects trailing bytes and requires the success payload marker;
+  covered by unit tests and the Rust and browser live-network scenarios.
+
 ## 1.1.1
 
 ### Added

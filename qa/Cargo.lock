@@ -1206,7 +1206,7 @@ dependencies = [
 
 [[package]]
 name = "kaspa-portal"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -1242,7 +1242,7 @@ dependencies = [
 
 [[package]]
 name = "kaspa-portal-qa"
-version = "1.1.1"
+version = "1.2.0"
 dependencies = [
  "futures-util",
  "getrandom 0.2.17",

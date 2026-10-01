@@ -4,6 +4,15 @@ use crate::{chain::ChainApi, primitives::BlockHash};
 
 use super::{encode, js_error};
 
+fn parse_block_hash(hash_hex: &str) -> Result<BlockHash, JsValue> {
+    let bytes = hex::decode(hash_hex)
+        .map_err(|error| JsValue::from_str(&format!("invalid block hash: {error}")))?;
+    let hash: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| JsValue::from_str("block hash must be 32 bytes"))?;
+    Ok(BlockHash::new(hash))
+}
+
 #[wasm_bindgen(js_name = KaspaChain)]
 pub struct WasmChain {
     inner: ChainApi,
@@ -28,15 +37,35 @@ impl WasmChain {
 
     #[wasm_bindgen(js_name = blockRaw)]
     pub async fn block_raw(&self, hash_hex: &str) -> Result<Vec<u8>, JsValue> {
-        let bytes = hex::decode(hash_hex)
-            .map_err(|error| JsValue::from_str(&format!("invalid block hash: {error}")))?;
-        let hash: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| JsValue::from_str("block hash must be 32 bytes"))?;
         self.inner
-            .block_raw(&BlockHash::new(hash))
+            .block_raw(&parse_block_hash(hash_hex)?)
             .await
             .map_err(js_error)
+    }
+
+    /// JSON `[{blockHash, daaScore, transactions: [{transactionId, payloadHex}]}]`
+    /// for blocks accepted after `low_hash_hex` (one bounded node page).
+    #[wasm_bindgen(js_name = blocksSince)]
+    pub async fn blocks_since(&self, low_hash_hex: &str) -> Result<String, JsValue> {
+        let blocks = self
+            .inner
+            .blocks_since(&parse_block_hash(low_hash_hex)?)
+            .await
+            .map_err(js_error)?;
+        let blocks: Vec<_> = blocks
+            .into_iter()
+            .map(|block| {
+                serde_json::json!({
+                    "blockHash": block.block_hash,
+                    "daaScore": block.daa_score.to_string(),
+                    "transactions": block.transactions.into_iter().map(|tx| serde_json::json!({
+                        "transactionId": tx.transaction_id,
+                        "payloadHex": hex::encode(tx.payload),
+                    })).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        encode(&blocks)
     }
 
     pub async fn utxos(&self, address: &str) -> Result<String, JsValue> {

@@ -20,6 +20,11 @@ export async function wasm_live_standard_network_chain(page, fixture, config) {
     const chain = portal.chain();
     const daa = await chain.virtualDaaScore();
     const genesis = await chain.blockRaw(config.genesisHash);
+    // GetSink(120) -> [marker, u32 len, u16 version, 32-byte sink hash].
+    const sinkResponse = await network.client().call(120, Uint8Array.from([1, 0]));
+    const sinkHash = Array.from(sinkResponse.slice(7, 39), (b) => b.toString(16).padStart(2, '0')).join('');
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const sinceSink = JSON.parse(await chain.blocksSince(sinkHash));
     const address = fixture.wallet.wallet.receive_addresses[0];
     const single = JSON.parse(await chain.utxos(address));
     const many = JSON.parse(await chain.utxosMany(JSON.stringify(fixture.wallet.wallet.receive_addresses.slice(0, 2))));
@@ -41,6 +46,7 @@ export async function wasm_live_standard_network_chain(page, fixture, config) {
     return {
       builderHealth, portalHealth, direct, health, reconnected,
       rawLength: raw.length, daa: daa.toString(), genesisLength: genesis.length,
+      sinkHash, sinceSink,
       singleCount: single.length, manyCount: many.length, fee, transaction, transactionRaw,
       statusAfterDisconnect: network.status(),
     };
@@ -54,6 +60,13 @@ export async function wasm_live_standard_network_chain(page, fixture, config) {
   expect(result.rawLength).toBeGreaterThan(0);
   expect(BigInt(result.daa)).toBeGreaterThan(0n);
   expect(result.genesisLength).toBeGreaterThan(0);
+  expect(result.sinkHash).toMatch(/^[0-9a-f]{64}$/);
+  expect(result.sinceSink.length).toBeGreaterThan(0);
+  for (const block of result.sinceSink) {
+    expect(block.blockHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(BigInt(block.daaScore)).toBeGreaterThan(0n);
+    expect(block.transactions.length).toBeGreaterThan(0);
+  }
   expect(result.manyCount).toBeGreaterThanOrEqual(result.singleCount);
   expect(Number(result.fee.normal_sompi_per_gram ?? result.fee.normalSompiPerGram)).toBeGreaterThanOrEqual(0);
   expect(result.transaction.txid).toBe(INDEXED_FIXTURE_TXID);

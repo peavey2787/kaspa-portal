@@ -86,6 +86,30 @@ async fn rust_live_standard_network_chain() {
         .expect("live multi-address UTXO query");
     assert!(many.len() >= single.len());
 
+    // Backfill: blocks accepted after a fresh BlockAdded hash decode fully and
+    // never include the low hash itself as a newer block.
+    let stream = portal.network().expect("network facade");
+    stream
+        .subscribe_block_added()
+        .await
+        .expect("subscribe BlockAdded");
+    let anchor = stream.next_block_added().await.expect("live BlockAdded");
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    let anchor_hash: [u8; 32] = hex::decode(&anchor.block_hash)
+        .expect("anchor hash hex")
+        .try_into()
+        .expect("32-byte anchor hash");
+    let newer = chain
+        .blocks_since(&BlockHash::new(anchor_hash))
+        .await
+        .expect("live GetBlocks backfill");
+    assert!(!newer.is_empty(), "GetBlocks returned no blocks past the anchor");
+    assert!(newer.iter().all(|block| block.block_hash.len() == 64));
+    assert!(newer.iter().all(|block| !block.transactions.is_empty()));
+    assert!(newer
+        .iter()
+        .any(|block| block.block_hash != anchor.block_hash && block.daa_score >= anchor.daa_score));
+
     let fee = chain.fee_estimate().await.expect("live fee estimate");
     assert!(fee.normal_sompi_per_gram.is_finite());
     assert!(fee.normal_sompi_per_gram >= 0.0);

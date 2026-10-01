@@ -61,7 +61,13 @@ fn rpc_transaction(transaction_id: [u8; 32], app_payload: &[u8]) -> Vec<u8> {
     writer.into_vec()
 }
 
-fn block_added_frame(block_hash: [u8; 32], daa_score: u64, txid: [u8; 32], app: &[u8]) -> Vec<u8> {
+/// One `RpcBlock(v1)` carrying a single transaction.
+pub(super) fn rpc_block(
+    block_hash: [u8; 32],
+    daa_score: u64,
+    txid: [u8; 32],
+    app: &[u8],
+) -> Vec<u8> {
     let tx = rpc_transaction(txid, app);
 
     let mut transactions = WireWriter::new();
@@ -77,12 +83,15 @@ fn block_added_frame(block_hash: [u8; 32], daa_score: u64, txid: [u8; 32], app: 
         .write_bytes(&transactions.into_vec())
         .expect("transactions payload");
     block.write_bytes(&[0]).expect("None block verbose payload");
+    block.into_vec()
+}
+
+fn block_added_frame(block_hash: [u8; 32], daa_score: u64, txid: [u8; 32], app: &[u8]) -> Vec<u8> {
+    let block = rpc_block(block_hash, daa_score, txid, app);
 
     let mut block_added = WireWriter::new();
     block_added.write_u16(1); // BlockAddedNotification serializer version
-    block_added
-        .write_bytes(&block.into_vec())
-        .expect("RpcBlock payload");
+    block_added.write_bytes(&block).expect("RpcBlock payload");
 
     let mut notification = WireWriter::new();
     notification.write_u16(1); // Notification serializer version

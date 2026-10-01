@@ -157,7 +157,7 @@ pub(super) fn require_empty(reader: &WireReader<'_>, label: &str) -> Result<(), 
     }
 }
 
-fn decode_rpc_block(block: &[u8]) -> Result<BlockAddedNotification<'_>, NetworkError> {
+pub(crate) fn decode_rpc_block(block: &[u8]) -> Result<BlockAddedNotification<'_>, NetworkError> {
     let mut reader = WireReader::new(block);
     expect_u16_version(&mut reader, "RpcBlock")?;
 
