@@ -1,7 +1,5 @@
 use kaspa_portal::{
-    primitives::BlockHash,
-    randomness::source::kaspa::KaspaEntropyEvidence,
-    KaspaPortal,
+    primitives::BlockHash, randomness::source::kaspa::KaspaEntropyEvidence, KaspaPortal,
 };
 
 use crate::support::{live_endpoint, live_genesis_hash, live_network, live_network_name};
@@ -11,12 +9,14 @@ use crate::support::{live_endpoint, live_genesis_hash, live_network, live_networ
 async fn rust_live_standard_randomness() {
     let portal = KaspaPortal::builder()
         .network(live_network())
-        .endpoint(live_endpoint())
+        .endpoint(live_endpoint().await)
         .connect()
         .await
         .expect("connect public selected network");
     let bytes = hex::decode(live_genesis_hash()).expect("selected-network genesis hex");
-    let hash: [u8; 32] = bytes.try_into().expect("32-byte selected-network genesis hash");
+    let hash: [u8; 32] = bytes
+        .try_into()
+        .expect("32-byte selected-network genesis hash");
     let raw = portal
         .chain()
         .expect("chain")
@@ -34,7 +34,9 @@ async fn rust_live_standard_randomness() {
             live_network(),
             1,
             false,
-            format!("kaspa-portal-live-{}", live_network_name()).as_bytes().to_vec(),
+            format!("kaspa-portal-live-{}", live_network_name())
+                .as_bytes()
+                .to_vec(),
         )
         .await
         .expect("generate live beacon from selected-network evidence");

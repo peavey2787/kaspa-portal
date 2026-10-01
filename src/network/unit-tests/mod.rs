@@ -5,6 +5,7 @@ mod fee_response;
 mod notification;
 mod queries;
 mod request;
+mod resolver;
 mod response;
 mod transport;
 mod utxo_response;

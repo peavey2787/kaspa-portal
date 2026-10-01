@@ -8,8 +8,6 @@ use kaspa_portal::{
 };
 
 pub const DEFAULT_STANDARD_NETWORK: &str = "testnet-10";
-pub const DEFAULT_STANDARD_ENDPOINT: &str =
-    "wss://photon-10.kaspa.red/kaspa/testnet-10/wrpc/borsh";
 pub const DEFAULT_STANDARD_GENESIS_HASH: &str =
     "f896a3034873be1739fc4359236899fd3d65d2bc94f9780df0d0da3eb1cc4370";
 pub const INDEXED_FIXTURE_TXID: &str =
@@ -32,10 +30,19 @@ pub fn live_network() -> NetworkId {
     NetworkId::parse(&live_network_name()).expect("valid standard E2E network")
 }
 
-pub fn live_endpoint() -> String {
-    std::env::var("KASPA_PORTAL_E2E_STANDARD_ENDPOINT")
-        .or_else(|_| std::env::var("KASPA_PORTAL_E2E_ENDPOINT"))
-        .unwrap_or_else(|_| DEFAULT_STANDARD_ENDPOINT.to_owned())
+/// Explicit endpoint override, else a healthy public node from the resolvers.
+pub async fn live_endpoint() -> String {
+    if let Ok(endpoint) = std::env::var("KASPA_PORTAL_E2E_STANDARD_ENDPOINT") {
+        return endpoint;
+    }
+    let portal = KaspaPortal::builder()
+        .network(live_network())
+        .connect()
+        .await
+        .expect("a public resolver offers a healthy node");
+    let endpoint = portal.network().expect("network").endpoint().to_owned();
+    let _ = portal.disconnect();
+    endpoint
 }
 
 pub fn live_genesis_hash() -> String {

@@ -12,8 +12,8 @@ use kaspa_portal::{
 use serde_json::json;
 
 use crate::support::{
-    decode_pskb_wire, deterministic_account_xprv, deterministic_wallet, dummy_utxo,
-    covenant_network, sign_pskb_for_account, standard_network, RELAY_KSPT_HEX,
+    covenant_network, decode_pskb_wire, deterministic_account_xprv, deterministic_wallet,
+    dummy_utxo, sign_pskb_for_account, standard_network, RELAY_KSPT_HEX,
 };
 
 #[test]
@@ -42,7 +42,9 @@ fn rust_offline_transaction() {
             vec![utxo.clone()],
         )
         .expect("offline send planning");
-    let reviewed = tx.review(&planned, standard.address_prefix()).expect("review planned transaction");
+    let reviewed = tx
+        .review(&planned, standard.address_prefix())
+        .expect("review planned transaction");
     assert_eq!(reviewed.input_count, 1);
     assert!(reviewed.output_count >= 1);
 
@@ -65,7 +67,7 @@ fn rust_offline_transaction() {
         .expect("finalize signed offline PSKB");
     assert_eq!(finalized.payload, payload.to_vec());
     assert_eq!(finalized.inputs.len(), 1);
-    assert!(finalized.outputs.len() >= 1);
+    assert!(!finalized.outputs.is_empty());
 
     let lane = tx
         .set_tx_lane(&planned, &"00".repeat(20), 7, 1, payload)
@@ -103,18 +105,26 @@ fn rust_offline_transaction() {
         .apply_sequence_commit_proof(&covenant_planned, &proof)
         .expect("apply sequence-commit proof");
     let proof_doc = decode_pskb_wire(&proof_wire);
-    assert_eq!(proof_doc[0]["global"]["txPayload"], hex::encode(&proof.payload));
+    assert_eq!(
+        proof_doc[0]["global"]["txPayload"],
+        hex::encode(proof.payload)
+    );
 
     let sweep = pskb.plan_sweep(
         std::slice::from_ref(&utxo),
         &source_script,
         &destination_script,
         499_000_000,
-        PskbGlobalPlan::standard().with_lock_time(12).with_branch("e2e"),
+        PskbGlobalPlan::standard()
+            .with_lock_time(12)
+            .with_branch("e2e"),
         &SweepInputPolicy::p2pk(json!({"case": "e2e"})),
     );
     let sweep_wire = pskb.encode(&sweep).expect("encode typed sweep");
-    assert_eq!(decode_pskb_wire(&sweep_wire)[0]["outputs"][0]["amount"], "499000000");
+    assert_eq!(
+        decode_pskb_wire(&sweep_wire)[0]["outputs"][0]["amount"],
+        "499000000"
+    );
 
     let typed = PskbPlan {
         global: PskbGlobalPlan::standard(),

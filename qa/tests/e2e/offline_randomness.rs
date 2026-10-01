@@ -1,8 +1,6 @@
 use kaspa_portal::{
     randomness::{
-        beacon::BeaconRequest,
-        extractor::ExtractorConfig,
-        source::kaspa::KaspaEntropyEvidence,
+        beacon::BeaconRequest, extractor::ExtractorConfig, source::kaspa::KaspaEntropyEvidence,
         vrf::VrfSecretKey,
     },
     KaspaPortal,
@@ -48,7 +46,8 @@ fn rust_offline_randomness() {
         .expect("VRF verify");
     assert_eq!(fixed_output, fixed_result.output);
 
-    let (generated_secret, generated_public) = vrf.generate_keypair().expect("generate VRF keypair");
+    let (generated_secret, generated_public) =
+        vrf.generate_keypair().expect("generate VRF keypair");
     assert_eq!(generated_secret.public_key(), generated_public);
     let generated_result = vrf
         .prove(&generated_secret, b"generated-key-e2e")
@@ -62,12 +61,11 @@ fn rust_offline_randomness() {
         .expect("generated-key VRF verify"),
         generated_result.output
     );
-    assert!(
-        vrf.verify(
+    assert!(vrf
+        .verify(
             &generated_public,
             b"tampered-input",
             &generated_result.proof,
         )
-        .is_err()
-    );
+        .is_err());
 }

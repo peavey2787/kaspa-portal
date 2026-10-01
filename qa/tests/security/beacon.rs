@@ -1,9 +1,7 @@
 use kaspa_portal::{
     primitives::NetworkId,
     randomness::{
-        beacon::BeaconRequest,
-        extractor::ExtractorConfig,
-        source::kaspa::KaspaEntropyEvidence,
+        beacon::BeaconRequest, extractor::ExtractorConfig, source::kaspa::KaspaEntropyEvidence,
     },
     KaspaPortal,
 };

@@ -1,6 +1,6 @@
 use kaspa_portal::transaction::signing::anti_klepto::protocol::{
-    encode_request, encode_reveal, is_message, parse_request, parse_reveal, MessageKind,
-    WireError, HASH_LEN, SESSION_ID_LEN, VERSION,
+    encode_request, encode_reveal, is_message, parse_request, parse_reveal, MessageKind, WireError,
+    HASH_LEN, SESSION_ID_LEN, VERSION,
 };
 
 #[test]

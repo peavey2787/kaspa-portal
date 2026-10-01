@@ -9,6 +9,7 @@ pub mod codec;
 pub mod error;
 pub mod model;
 pub mod queries;
+pub mod resolver;
 pub mod wrpc;
 
 #[cfg(test)]

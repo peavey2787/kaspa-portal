@@ -51,7 +51,10 @@ fn funded_wallet(
     let len = serialize_account_kpub(&imported.key, imported.parent_fingerprint, &mut encoded)
         .expect("serialize funded account kpub");
     let kpub = std::str::from_utf8(&encoded[..len]).expect("funded kpub UTF-8");
-    let wallet = portal.wallet().import_kpub(kpub).expect("import funded wallet");
+    let wallet = portal
+        .wallet()
+        .import_kpub(kpub)
+        .expect("import funded wallet");
     (imported, wallet)
 }
 
@@ -83,7 +86,10 @@ fn sign_and_merge(wire: &str, imported: &ImportedAccountXprv, network_name: &str
         &[0x7au8; 32],
     )
     .expect("sign funded wallet inputs");
-    assert!(signed > 0, "funded transaction had no signable wallet inputs");
+    assert!(
+        signed > 0,
+        "funded transaction had no signable wallet inputs"
+    );
     merge_signed_transaction(wire, &transaction)
 }
 
@@ -105,7 +111,11 @@ async fn plan_signed_send_with_adaptive_fee(
     amount: u64,
     payload: Option<&[u8]>,
     network_name: &str,
-) -> (String, kaspa_portal::transaction::mass::TransactionAnalysis, u64) {
+) -> (
+    String,
+    kaspa_portal::transaction::mass::TransactionAnalysis,
+    u64,
+) {
     let tx = portal.transaction();
     let mut fee = PRIORITY_FEE_SOMPI;
     for _ in 0..6 {
@@ -124,7 +134,10 @@ async fn plan_signed_send_with_adaptive_fee(
             .analyze(&signed_wire)
             .await
             .expect("analyze signed funded transaction");
-        assert!(analysis.mass_valid, "signed funded transaction exceeds mass limits");
+        assert!(
+            analysis.mass_valid,
+            "signed funded transaction exceeds mass limits"
+        );
         if analysis.fee_sufficient {
             return (signed_wire, analysis, fee);
         }
@@ -178,7 +191,10 @@ async fn plan_multisig_spend_with_adaptive_fee(
             .analyze(&signed_wire)
             .await
             .expect("analyze signed multisig transaction");
-        assert!(analysis.mass_valid, "signed multisig transaction exceeds mass limits");
+        assert!(
+            analysis.mass_valid,
+            "signed multisig transaction exceeds mass limits"
+        );
         if analysis.fee_sufficient {
             return (
                 tx.finalize(&signed_wire)
@@ -230,7 +246,8 @@ fn multisig_fixture(network: NetworkId) -> (String, String) {
     let keys = descriptor
         .public_keys_at(0, 0, 0)
         .expect("multisig receive keys");
-    let redeem = build_redeem_script(descriptor.threshold(), &keys).expect("multisig redeem script");
+    let redeem =
+        build_redeem_script(descriptor.threshold(), &keys).expect("multisig redeem script");
     let address = script_to_address(&redeem, network.address_prefix()).expect("multisig address");
     (descriptor_text, address)
 }
@@ -283,7 +300,10 @@ async fn rust_funded_standard_network_transactions() {
         &network_name,
     )
     .await;
-    assert!(analysis.fee_sufficient, "adaptive payload fee must be sufficient");
+    assert!(
+        analysis.fee_sufficient,
+        "adaptive payload fee must be sufficient"
+    );
     eprintln!(
         "funded {network_name} payload fee: {payload_fee} sompi (recommended {} sompi)",
         analysis.recommended_fee_sompi
@@ -298,13 +318,7 @@ async fn rust_funded_standard_network_transactions() {
     let utxos = portal.wallet().utxos(&wallet).await.expect("funded UTXOs");
     assert!(!utxos.is_empty(), "funded wallet returned no UTXOs");
     let selected = tx
-        .plan_selected_send(
-            &wallet,
-            destination,
-            20_000_000,
-            payload_fee,
-            &[0],
-        )
+        .plan_selected_send(&wallet, destination, 20_000_000, payload_fee, &[0])
         .await
         .expect("live plan_selected_send");
     assert!(tx.review(&selected, address_prefix).is_ok());
@@ -315,7 +329,11 @@ async fn rust_funded_standard_network_transactions() {
     let payload_txid = broadcast_consensus(&portal, &signed_payload, destination).await;
     assert_eq!(payload_txid.len(), 64);
 
-    let post_send_utxos = portal.wallet().utxos(&wallet).await.expect("post-send UTXOs");
+    let post_send_utxos = portal
+        .wallet()
+        .utxos(&wallet)
+        .await
+        .expect("post-send UTXOs");
     assert!(
         post_send_utxos.len() >= 2,
         "funded E2E requires at least two wallet UTXOs after the bootstrap self-payment"
@@ -345,8 +363,7 @@ async fn rust_funded_standard_network_transactions() {
     let multisig_funding_tx = tx
         .finalize(&signed_multisig_funding)
         .expect("finalize fee-sufficient multisig funding transaction");
-    let multisig_txid =
-        broadcast_consensus(&portal, &multisig_funding_tx, &multisig_address).await;
+    let multisig_txid = broadcast_consensus(&portal, &multisig_funding_tx, &multisig_address).await;
     let multisig_utxos = portal
         .chain()
         .expect("chain")
@@ -376,7 +393,9 @@ async fn rust_funded_standard_network_transactions() {
     let recovered_txid =
         broadcast_consensus(&portal, &multisig_spend, &wallet.receive_addresses[2]).await;
     assert_eq!(recovered_txid.len(), 64);
-    portal.disconnect().expect("disconnect standard funded portal");
+    portal
+        .disconnect()
+        .expect("disconnect standard funded portal");
 }
 
 #[tokio::test]
@@ -438,8 +457,13 @@ async fn rust_funded_covenant_network_transactions() {
         })
         .await
         .expect("live plan_covenant_with_binding");
-    assert!(binding.is_some(), "tagged genesis must return a covenant binding");
+    assert!(
+        binding.is_some(),
+        "tagged genesis must return a covenant binding"
+    );
     assert!(tx.review(&bound_wire, address_prefix).is_ok());
     assert_eq!(covenant_network_name(), network.canonical_name());
-    portal.disconnect().expect("disconnect covenant funded portal");
+    portal
+        .disconnect()
+        .expect("disconnect covenant funded portal");
 }

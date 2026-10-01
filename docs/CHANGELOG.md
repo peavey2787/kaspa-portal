@@ -2,6 +2,10 @@
 
 ## 1.1.1
 
+### Added
+
+- `network::resolver`: public node discovery through the community wRPC resolvers (TLS `wss://` endpoints only, bounded HTTPS answers). `KaspaPortal::builder().connect()` with no endpoint resolves and connects to the first healthy public node, on native and browser targets.
+
 ### Fixed
 
 - PSKB/PSKT encoders now emit the standard PSKT format version `"version": 0` (rusty-kaspa `Version::Zero`). The transaction builder previously omitted it and the interchange encoder wrote `1`, so strict signers such as KasKold 2.0 rejected Portal PSKBs. The parser accepts only version 0.

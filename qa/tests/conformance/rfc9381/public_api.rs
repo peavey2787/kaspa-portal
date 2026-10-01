@@ -53,7 +53,11 @@ fn official_proofs_reject_modified_input() {
     let vector = &VECTORS[1];
     let public = VrfPublicKey(bytes32(vector.public));
     let proof = VrfProof(hex::decode(vector.proof).unwrap());
-    assert!(portal.randomness().vrf().verify(&public, b"s", &proof).is_err());
+    assert!(portal
+        .randomness()
+        .vrf()
+        .verify(&public, b"s", &proof)
+        .is_err());
 }
 
 fn verify_vector(vrf: &kaspa_portal::randomness::vrf::VrfApi, vector: &Vector) {

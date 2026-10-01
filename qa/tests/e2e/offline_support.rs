@@ -1,7 +1,7 @@
 use kaspa_portal::{
-    primitives::NetworkId,
     chain::utxo::UtxoEntry,
     primitives::address::address_to_script_pubkey,
+    primitives::NetworkId,
     transaction::{
         interchange::{
             kspt::{
@@ -15,9 +15,9 @@ use kaspa_portal::{
     wallet::{
         account::derivation::WalletData,
         key::xpub::{
-            derive_account_raw_kpub_payload, derive_and_serialize_kpub,
-            derive_and_serialize_xprv, import_xprv_with_metadata, ImportedAccountXprv,
-            KPUB_MAX_LEN, XPRV_MAX_LEN, XPUB_PAYLOAD_LEN,
+            derive_account_raw_kpub_payload, derive_and_serialize_kpub, derive_and_serialize_xprv,
+            import_xprv_with_metadata, ImportedAccountXprv, KPUB_MAX_LEN, XPRV_MAX_LEN,
+            XPUB_PAYLOAD_LEN,
         },
     },
     KaspaPortal,
@@ -71,7 +71,10 @@ pub fn sign_pskb_for_account(
         &[entropy_byte; 32],
     )
     .expect("sign deterministic offline wallet inputs");
-    assert!(signed > 0, "offline transaction had no signable wallet inputs");
+    assert!(
+        signed > 0,
+        "offline transaction had no signable wallet inputs"
+    );
     assert!(
         is_fully_signed(&transaction),
         "offline transaction is not fully signed"

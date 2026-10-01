@@ -57,11 +57,8 @@ impl ProbeConfig {
             batches: 1,
             iterations: 1,
             idle_ms: 3_000,
-            endpoint: std::env::var("KASPA_PORTAL_E2E_STANDARD_ENDPOINT")
-                .or_else(|_| std::env::var("KASPA_PORTAL_E2E_ENDPOINT"))
-                .unwrap_or_else(|_| {
-                    "wss://photon-10.kaspa.red/kaspa/testnet-10/wrpc/borsh".to_string()
-                }),
+            // Set by qa/scripts (resolved public node or explicit override).
+            endpoint: std::env::var("KASPA_PORTAL_E2E_STANDARD_ENDPOINT").unwrap_or_default(),
         };
         while let Some(flag) = args.next() {
             let value = args
@@ -72,9 +69,7 @@ impl ProbeConfig {
                 "--batches" => config.batches = parse_positive(&value, "batches")?,
                 "--iterations" => config.iterations = parse_positive(&value, "iterations")?,
                 "--idle-ms" => {
-                    config.idle_ms = value
-                        .parse()
-                        .map_err(|_| "invalid idle-ms".to_string())?
+                    config.idle_ms = value.parse().map_err(|_| "invalid idle-ms".to_string())?
                 }
                 "--endpoint" => config.endpoint = value,
                 other => return Err(format!("unknown argument: {other}")),
@@ -85,8 +80,7 @@ impl ProbeConfig {
 }
 
 pub fn standard_network_name() -> String {
-    std::env::var("KASPA_PORTAL_E2E_STANDARD_NETWORK")
-        .unwrap_or_else(|_| "testnet-10".to_owned())
+    std::env::var("KASPA_PORTAL_E2E_STANDARD_NETWORK").unwrap_or_else(|_| "testnet-10".to_owned())
 }
 
 pub fn standard_network() -> NetworkId {

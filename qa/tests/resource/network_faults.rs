@@ -2,11 +2,7 @@
 mod fault_server;
 
 use kaspa_portal::{
-    network::{
-        client::NetworkClient,
-        error::NetworkError,
-        wrpc::operation::Operation,
-    },
+    network::{client::NetworkClient, error::NetworkError, wrpc::operation::Operation},
     platform::native::websocket::NativeWebSocketTransport,
 };
 
@@ -26,7 +22,10 @@ async fn actual_websocket_transport_handles_simulated_faults_fail_closed() {
     let task = tokio::spawn(server.serve());
 
     for mode in [FaultMode::Valid, FaultMode::Delayed, FaultMode::Duplicate] {
-        assert_eq!(call(&endpoint, mode).await.expect("valid fault response"), b"fault-ok");
+        assert_eq!(
+            call(&endpoint, mode).await.expect("valid fault response"),
+            b"fault-ok"
+        );
     }
 
     assert!(matches!(

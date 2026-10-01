@@ -15,10 +15,14 @@ fn rust_offline_privacy() {
     let stealth = portal.privacy().stealth();
     let kpub = deterministic_kpub(0x31);
 
-    let metadata = stealth.derive_metadata(&kpub).expect("derive stealth metadata");
+    let metadata = stealth
+        .derive_metadata(&kpub)
+        .expect("derive stealth metadata");
     let encoded = stealth.encode_metadata(&metadata);
     assert_eq!(encoded.len(), 128);
-    let decoded = stealth.decode_metadata(&encoded).expect("decode stealth metadata");
+    let decoded = stealth
+        .decode_metadata(&encoded)
+        .expect("decode stealth metadata");
     assert_eq!(stealth.encode_metadata(&decoded), encoded);
 
     let payment = stealth

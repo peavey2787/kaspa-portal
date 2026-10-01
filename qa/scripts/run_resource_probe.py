@@ -231,10 +231,7 @@ def run_profile(binary: Path, profile: dict, mode: str, idle_ms: int) -> dict:
         "--iterations", str(profile[f"{prefix}_iterations_per_batch"]),
         "--idle-ms", str(idle_ms),
     ]
-    endpoint = (
-        os.environ.get("KASPA_PORTAL_E2E_STANDARD_ENDPOINT")
-        or os.environ.get("KASPA_PORTAL_E2E_ENDPOINT")
-    )
+    endpoint = os.environ.get("KASPA_PORTAL_E2E_STANDARD_ENDPOINT")
     if endpoint:
         command.extend(["--endpoint", endpoint])
     process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)

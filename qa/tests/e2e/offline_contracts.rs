@@ -50,7 +50,10 @@ fn rust_offline_contracts() {
 
     let piggy = covenant.piggy_bank(&owner, 25_000_000, 8_000, &[0x66; 8]);
     assert!(!piggy.is_empty());
-    assert_eq!(script_api.cltv_locktime(&piggy).expect("piggy CLTV"), Some(8_000));
+    assert_eq!(
+        script_api.cltv_locktime(&piggy).expect("piggy CLTV"),
+        Some(8_000)
+    );
 
     let savings = covenant.timelocked_savings(&owner, &second, 12_345);
     assert!(!savings.is_empty());
@@ -61,12 +64,20 @@ fn rust_offline_contracts() {
 
     let payjoin = covenant.payjoin(&owner, &second, 9_999, 2, 2);
     assert!(!payjoin.is_empty());
-    assert_eq!(script_api.cltv_locktime(&payjoin).expect("payjoin CLTV"), Some(9_999));
+    assert_eq!(
+        script_api.cltv_locktime(&payjoin).expect("payjoin CLTV"),
+        Some(9_999)
+    );
 
     let commitment = [0x77; 32];
     let commit = commit_reveal.build(&owner, &commitment, 7_777);
     assert!(!commit.is_empty());
-    assert_eq!(script_api.cltv_locktime(&commit).expect("commit-reveal CLTV"), Some(7_777));
+    assert_eq!(
+        script_api
+            .cltv_locktime(&commit)
+            .expect("commit-reveal CLTV"),
+        Some(7_777)
+    );
 
     let organizer_spk = {
         let mut value = vec![0x00, 0x00, 0x20];
@@ -88,7 +99,9 @@ fn rust_offline_contracts() {
         })
         .expect("crowdfund script");
     assert!(!crowdfund_script.is_empty());
-    assert!(crowdfund_script.windows(32).any(|window| window == campaign_id));
+    assert!(crowdfund_script
+        .windows(32)
+        .any(|window| window == campaign_id));
 
     let leaves = vec![b"alpha".to_vec(), b"beta".to_vec(), b"gamma".to_vec()];
     let root = merkle.root(&leaves);
@@ -133,7 +146,10 @@ fn rust_offline_contracts() {
     let covenant_id = vault.covenant_id(
         &[0x88; 32],
         3,
-        &[(0, 123_000_000, 0, tagged.as_slice()), (1, 45_000_000, 0, split.as_slice())],
+        &[
+            (0, 123_000_000, 0, tagged.as_slice()),
+            (1, 45_000_000, 0, split.as_slice()),
+        ],
     );
     assert_ne!(covenant_id, [0u8; 32]);
 
@@ -144,11 +160,12 @@ fn rust_offline_contracts() {
         .prove_crowdfund(&proving_key, &[10_000_000, 20_000_000, 30_000_000])
         .expect("crowdfund proof");
     assert_eq!(total, 60_000_000);
-    assert!(
-        zk.verify(&verifying_key, &proof_bytes, &public_input)
-            .expect("crowdfund proof verification")
-    );
+    assert!(zk
+        .verify(&verifying_key, &proof_bytes, &public_input)
+        .expect("crowdfund proof verification"));
     let mut tampered = proof_bytes.clone();
     tampered[0] ^= 1;
-    assert!(!zk.verify(&verifying_key, &tampered, &public_input).unwrap_or(false));
+    assert!(!zk
+        .verify(&verifying_key, &tampered, &public_input)
+        .unwrap_or(false));
 }

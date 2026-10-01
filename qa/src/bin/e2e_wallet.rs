@@ -101,8 +101,8 @@ fn read_state_xprv(path: &Path) -> Result<Option<String>, String> {
     if !path.is_file() {
         return Ok(None);
     }
-    let text = fs::read_to_string(path)
-        .map_err(|error| format!("read {}: {error}", path.display()))?;
+    let text =
+        fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?;
     let xprv = text.lines().find_map(|line| {
         line.strip_prefix("KASPA_PORTAL_E2E_XPRV=")
             .map(str::trim)
@@ -184,7 +184,9 @@ fn print_wallet(address: &str, args: &Args, state: Option<&Path>) {
     if let Some(path) = state {
         println!("Local test-only XPRV state: {}", path.display());
     } else {
-        println!("Using {FUNDED_XPRV_ENV} from the environment; no secret was written by this helper.");
+        println!(
+            "Using {FUNDED_XPRV_ENV} from the environment; no secret was written by this helper."
+        );
     }
 }
 
@@ -289,7 +291,7 @@ async fn run() -> Result<i32, String> {
     } else if args.state_path.ends_with(DEFAULT_STATE_FILE) {
         if let Some(xprv) = read_state_xprv(Path::new(LEGACY_STATE_FILE))? {
             write_state(&args.state_path, &xprv)?;
-                println!(
+            println!(
                 "Migrated the legacy Testnet-12 E2E XPRV into the shared network wallet state."
             );
             (xprv, Some(args.state_path.as_path()))

@@ -13,14 +13,16 @@ use crate::support::{
 
 fn genesis_hash() -> BlockHash {
     let bytes = hex::decode(live_genesis_hash()).expect("selected-network genesis hex");
-    let array: [u8; 32] = bytes.try_into().expect("32-byte selected-network genesis hash");
+    let array: [u8; 32] = bytes
+        .try_into()
+        .expect("32-byte selected-network genesis hash");
     BlockHash::new(array)
 }
 
 #[tokio::test]
 #[ignore = "Pass 2 live E2E: requires the configured public standard network"]
 async fn rust_live_standard_network_chain() {
-    let endpoint = live_endpoint();
+    let endpoint = live_endpoint().await;
 
     let connected = KaspaPortal::builder()
         .network(live_network())
@@ -40,7 +42,10 @@ async fn rust_live_standard_network_chain() {
         .endpoint(endpoint.clone())
         .build()
         .expect("build selected-network portal");
-    let health = portal.connect().await.expect("portal connect to public selected network");
+    let health = portal
+        .connect()
+        .await
+        .expect("portal connect to public selected network");
     assert_eq!(health.status, ConnectionStatus::Connected);
     assert_eq!(health.endpoint, endpoint);
     assert!(health.virtual_daa_score.is_some_and(|score| score > 0));

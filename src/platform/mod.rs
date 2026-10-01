@@ -49,3 +49,27 @@ pub(crate) fn curby_client() -> crate::randomness::source::curby::CurbyClient {
         Arc::new(native::curby::NativeCurbyIo);
     crate::randomness::source::curby::CurbyClient::new(io)
 }
+
+/// Fetch a small text resource (resolver answers) over HTTPS.
+pub(crate) async fn fetch_text(url: &str) -> Result<String, String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        browser::fetch::fetch_text(url).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        native::http::fetch_text(url).await
+    }
+}
+
+/// Ask every public resolver concurrently; healthy `wss://` endpoints in
+/// first-answer order.
+pub(crate) async fn resolve_public_endpoints(network: crate::primitives::NetworkId) -> Vec<String> {
+    use crate::network::resolver;
+    let queries = resolver::PUBLIC_RESOLVERS.iter().map(|base| async move {
+        let body = fetch_text(&resolver::query_url(base, network)).await.ok()?;
+        resolver::parse_endpoint(&body).ok()
+    });
+    let answers = futures_util::future::join_all(queries).await;
+    resolver::unique_endpoints(answers.into_iter().flatten())
+}

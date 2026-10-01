@@ -45,8 +45,8 @@ pub fn run(iteration: usize) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
 
     let mut encoded = [0u8; KPUB_MAX_LEN];
-    let len = derive_and_serialize_kpub(&[0x31; 64], &mut encoded)
-        .map_err(|error| error.to_string())?;
+    let len =
+        derive_and_serialize_kpub(&[0x31; 64], &mut encoded).map_err(|error| error.to_string())?;
     let kpub = std::str::from_utf8(&encoded[..len]).map_err(|error| error.to_string())?;
     let stealth = portal.privacy().stealth();
     let metadata = stealth

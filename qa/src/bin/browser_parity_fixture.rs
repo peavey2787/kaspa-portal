@@ -6,9 +6,7 @@ use kaspa_portal::{
     indexer::{IndexedBlock, IndexedTransaction, IndexerApi, IndexerConfig},
     primitives::{address::address_to_script_pubkey, NetworkId},
     randomness::{
-        beacon::BeaconRequest,
-        extractor::ExtractorConfig,
-        source::kaspa::KaspaEntropyEvidence,
+        beacon::BeaconRequest, extractor::ExtractorConfig, source::kaspa::KaspaEntropyEvidence,
         vrf::VrfSecretKey,
     },
     transaction::{
@@ -23,9 +21,8 @@ use kaspa_portal::{
     },
     wallet::key::xpub::{
         derive_account_raw_kpub_payload, derive_and_serialize_kpub,
-        derive_and_serialize_multisig_kpub, derive_and_serialize_xprv,
-        import_xprv_with_metadata, ImportedAccountXprv, KPUB_MAX_LEN, XPRV_MAX_LEN,
-        XPUB_PAYLOAD_LEN,
+        derive_and_serialize_multisig_kpub, derive_and_serialize_xprv, import_xprv_with_metadata,
+        ImportedAccountXprv, KPUB_MAX_LEN, XPRV_MAX_LEN, XPUB_PAYLOAD_LEN,
     },
     KaspaPortal,
 };
@@ -37,14 +34,19 @@ fn deterministic_kpub(seed_byte: u8) -> String {
     let seed = [seed_byte; 64];
     let mut encoded = [0u8; KPUB_MAX_LEN];
     let len = derive_and_serialize_kpub(&seed, &mut encoded).expect("derive deterministic kpub");
-    std::str::from_utf8(&encoded[..len]).expect("kpub UTF-8").to_owned()
+    std::str::from_utf8(&encoded[..len])
+        .expect("kpub UTF-8")
+        .to_owned()
 }
 
 fn deterministic_multisig_kpub(seed_byte: u8) -> String {
     let seed = [seed_byte; 64];
     let mut encoded = [0u8; KPUB_MAX_LEN];
-    let len = derive_and_serialize_multisig_kpub(&seed, &mut encoded).expect("derive deterministic multisig kpub");
-    std::str::from_utf8(&encoded[..len]).expect("multisig kpub UTF-8").to_owned()
+    let len = derive_and_serialize_multisig_kpub(&seed, &mut encoded)
+        .expect("derive deterministic multisig kpub");
+    std::str::from_utf8(&encoded[..len])
+        .expect("multisig kpub UTF-8")
+        .to_owned()
 }
 
 fn deterministic_raw_kpub(seed_byte: u8) -> [u8; XPUB_PAYLOAD_LEN] {
@@ -59,7 +61,8 @@ fn dummy_utxo(wallet: &kaspa_portal::wallet::account::derivation::WalletData) ->
         tx_id: "11".repeat(32),
         index: 0,
         amount: 500_000_000,
-        script_public_key: address_to_script_pubkey(&wallet.receive_addresses[0]).expect("source script"),
+        script_public_key: address_to_script_pubkey(&wallet.receive_addresses[0])
+            .expect("source script"),
         block_daa_score: 1,
         covenant_id: None,
     }
@@ -147,26 +150,37 @@ fn main() {
     let raw_kpub = deterministic_raw_kpub(7);
     let wallet = wallet_api.import_kpub(&kpub).expect("import kpub");
     let imported = deterministic_account_xprv(7);
-    let raw_wallet = wallet_api.import_kpub_raw(&raw_kpub).expect("import raw kpub");
-    let extended = wallet_api.extend_addresses(&wallet, 3, 2).expect("extend wallet");
+    let raw_wallet = wallet_api
+        .import_kpub_raw(&raw_kpub)
+        .expect("import raw kpub");
+    let extended = wallet_api
+        .extend_addresses(&wallet, 3, 2)
+        .expect("extend wallet");
     let mnemonic12 = wallet_api.mnemonic_12_from_entropy(&[0x11; 16]);
     let mnemonic24 = wallet_api.mnemonic_24_from_entropy(&[0x22; 32]);
 
     let tx = portal.transaction();
     let destination = wallet.receive_addresses[1].clone();
-    let source_script = address_to_script_pubkey(&wallet.receive_addresses[0]).expect("source script");
+    let source_script =
+        address_to_script_pubkey(&wallet.receive_addresses[0]).expect("source script");
     let destination_script = address_to_script_pubkey(&destination).expect("destination script");
     let utxo = dummy_utxo(&wallet);
     let planned = tx
-        .plan_from_utxos(&wallet, &destination, 100_000_000, 300_000, vec![utxo.clone()])
+        .plan_from_utxos(
+            &wallet,
+            &destination,
+            100_000_000,
+            300_000,
+            vec![utxo.clone()],
+        )
         .expect("plan transaction");
     let covenant_wallet = covenant_portal
         .wallet()
         .import_kpub(&kpub)
         .expect("import covenant-network kpub");
     let covenant_destination = covenant_wallet.receive_addresses[1].clone();
-    let covenant_source_script =
-        address_to_script_pubkey(&covenant_wallet.receive_addresses[0]).expect("covenant source script");
+    let covenant_source_script = address_to_script_pubkey(&covenant_wallet.receive_addresses[0])
+        .expect("covenant source script");
     let covenant_destination_script =
         address_to_script_pubkey(&covenant_destination).expect("covenant destination script");
     let covenant_utxo = dummy_utxo(&covenant_wallet);
@@ -188,7 +202,8 @@ fn main() {
     let review = tx
         .review(&planned, standard_network.address_prefix())
         .expect("review transaction");
-    let signed_payload_wire = sign_pskb_for_account(&with_payload, &imported, 0x74, &standard_network_name);
+    let signed_payload_wire =
+        sign_pskb_for_account(&with_payload, &imported, 0x74, &standard_network_name);
     let encode_document_input = json!({
         "global": {"txVersion": 0, "fallbackLockTime": "0"},
         "inputs": [],
@@ -230,8 +245,12 @@ fn main() {
         .covenant()
         .private_swap(&owner, &second, &[0x00, 0x00, 0x51], 5_000, &[0x55; 16])
         .expect("private swap");
-    let piggy = contract.covenant().piggy_bank(&owner, 25_000_000, 8_000, &[0x66; 8]);
-    let savings = contract.covenant().timelocked_savings(&owner, &second, 12_345);
+    let piggy = contract
+        .covenant()
+        .piggy_bank(&owner, 25_000_000, 8_000, &[0x66; 8]);
+    let savings = contract
+        .covenant()
+        .timelocked_savings(&owner, &second, 12_345);
     let payjoin = contract.covenant().payjoin(&owner, &second, 9_999, 2, 2);
     let commit = contract.commit_reveal().build(&owner, &[0x77; 32], 7_777);
     let organizer_spk = {
@@ -241,9 +260,10 @@ fn main() {
         value
     };
     let vk_hash = [0x72; 32];
-    let campaign_id = contract
-        .crowdfund()
-        .campaign_id(100_000_000, 654_321, &vk_hash, &organizer_spk);
+    let campaign_id =
+        contract
+            .crowdfund()
+            .campaign_id(100_000_000, 654_321, &vk_hash, &organizer_spk);
     let crowdfund_script = contract
         .crowdfund()
         .redeem_script(CrowdfundScript {
@@ -281,12 +301,17 @@ fn main() {
     let covenant_id = contract.vault().covenant_id(
         &[0x88; 32],
         3,
-        &[(0, 123_000_000, 0, tagged.as_slice()), (1, 45_000_000, 0, split.as_slice())],
+        &[
+            (0, 123_000_000, 0, tagged.as_slice()),
+            (1, 45_000_000, 0, split.as_slice()),
+        ],
     );
 
     let stealth = portal.privacy().stealth();
     let privacy_kpub = deterministic_kpub(0x31);
-    let metadata = stealth.derive_metadata(&privacy_kpub).expect("derive metadata");
+    let metadata = stealth
+        .derive_metadata(&privacy_kpub)
+        .expect("derive metadata");
     let metadata_encoded = stealth.encode_metadata(&metadata);
     let public_metadata = stealth
         .decode_metadata(&metadata_encoded)
@@ -297,10 +322,12 @@ fn main() {
     let transaction_id = [0x61; 32];
     let raw_scanner = raw_scanner_fixture(&transaction_id, b"portal-e2e-preimage");
 
-    let indexer = IndexerApi::with_clock(IndexerConfig::default(), || Ok(100))
-        .expect("construct indexer");
+    let indexer =
+        IndexerApi::with_clock(IndexerConfig::default(), || Ok(100)).expect("construct indexer");
     indexer.start().expect("start indexer");
-    indexer.watch_address("kaspatest:e2e-address").expect("matcher");
+    indexer
+        .watch_address("kaspatest:e2e-address")
+        .expect("matcher");
     indexer
         .watch_payload_exact(b"portal-e2e-payload".to_vec())
         .expect("payload matcher");
@@ -449,7 +476,9 @@ fn main() {
         }
     });
 
-    fs::write(&output, serde_json::to_vec_pretty(&fixture).expect("fixture JSON"))
-        .expect("write fixture");
+    fs::write(
+        &output,
+        serde_json::to_vec_pretty(&fixture).expect("fixture JSON"),
+    )
+    .expect("write fixture");
 }
-

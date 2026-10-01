@@ -24,10 +24,10 @@ pub fn covenant_network() -> NetworkId {
     NetworkId::parse(&covenant_network_name()).expect("valid covenant E2E network")
 }
 
+/// Set by qa/scripts/run-e2e-rust (resolved public node or explicit override).
 pub fn standard_endpoint() -> String {
     std::env::var("KASPA_PORTAL_E2E_STANDARD_ENDPOINT")
-        .or_else(|_| std::env::var("KASPA_PORTAL_E2E_ENDPOINT"))
-        .unwrap_or_else(|_| "wss://photon-10.kaspa.red/kaspa/testnet-10/wrpc/borsh".to_owned())
+        .expect("KASPA_PORTAL_E2E_STANDARD_ENDPOINT is set by qa/scripts/run-e2e-rust")
 }
 
 pub fn covenant_endpoint() -> String {

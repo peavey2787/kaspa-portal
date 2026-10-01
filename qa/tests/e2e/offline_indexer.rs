@@ -30,8 +30,8 @@ fn transaction(txid: &str, block_hash: Option<&str>, payload: &[u8]) -> IndexedT
 #[test]
 #[ignore = "Pass 2 E2E: run through qa/scripts/run-e2e-rust"]
 fn rust_offline_indexer() {
-    let indexer = IndexerApi::with_clock(IndexerConfig::default(), || Ok(100))
-        .expect("construct indexer");
+    let indexer =
+        IndexerApi::with_clock(IndexerConfig::default(), || Ok(100)).expect("construct indexer");
     indexer.start().expect("start indexer");
     assert!(indexer.health().expect("health").running);
 
@@ -50,20 +50,29 @@ fn rust_offline_indexer() {
     let suffix_id = indexer
         .watch_payload_suffix(b"payload".to_vec())
         .expect("suffix matcher");
-    assert!(address_id < prefix_id && prefix_id < contains_id && contains_id < exact_id && exact_id < suffix_id);
+    assert!(
+        address_id < prefix_id
+            && prefix_id < contains_id
+            && contains_id < exact_id
+            && exact_id < suffix_id
+    );
 
     let generic_id = indexer
         .add_matcher(MatchRule::PayloadContains(b"remove-me".to_vec()))
         .expect("generic matcher");
     assert!(indexer.remove_matcher(generic_id).expect("remove matcher"));
-    assert!(!indexer.remove_matcher(generic_id).expect("remove absent matcher"));
+    assert!(!indexer
+        .remove_matcher(generic_id)
+        .expect("remove absent matcher"));
 
     let payload = b"portal-e2e-payload";
     let matches = indexer
         .ingest_transaction(transaction("tx-a", Some("block-a"), payload))
         .expect("ingest transaction");
     assert_eq!(matches.len(), 5);
-    indexer.ingest_block(block("block-a", 10)).expect("ingest block");
+    indexer
+        .ingest_block(block("block-a", 10))
+        .expect("ingest block");
 
     let report = indexer
         .ingest_block_batch(BlockBatch {
@@ -88,14 +97,29 @@ fn rust_offline_indexer() {
         .transactions(TransactionQuery {
             address: Some("kaspatest:e2e-address".into()),
             after_daa_score: Some(9),
-            page: PageRequest { offset: 0, limit: 10 },
+            page: PageRequest {
+                offset: 0,
+                limit: 10,
+            },
         })
         .expect("transaction query");
     assert_eq!(tx_page.total, 2);
-    assert_eq!(indexer.blocks(PageRequest { offset: 0, limit: 10 }).expect("block page").total, 2);
     assert_eq!(
         indexer
-            .matches(PageRequest { offset: 0, limit: 20 })
+            .blocks(PageRequest {
+                offset: 0,
+                limit: 10
+            })
+            .expect("block page")
+            .total,
+        2
+    );
+    assert_eq!(
+        indexer
+            .matches(PageRequest {
+                offset: 0,
+                limit: 20
+            })
             .expect("match page")
             .total,
         6
@@ -113,22 +137,40 @@ fn rust_offline_indexer() {
     let snapshot = indexer.snapshot().expect("snapshot");
     assert_eq!(snapshot.transactions.len(), 2);
     indexer.clear().expect("clear before snapshot restore");
-    assert!(indexer.transaction("tx-a").expect("post-clear lookup").is_none());
-    indexer.restore_snapshot(snapshot).expect("restore snapshot");
-    assert!(indexer.transaction("tx-a").expect("restored lookup").is_some());
+    assert!(indexer
+        .transaction("tx-a")
+        .expect("post-clear lookup")
+        .is_none());
+    indexer
+        .restore_snapshot(snapshot)
+        .expect("restore snapshot");
+    assert!(indexer
+        .transaction("tx-a")
+        .expect("restored lookup")
+        .is_some());
 
     let checkpoint = SyncCheckpoint {
         virtual_daa_score: Some(11),
         block_hash: Some("block-b".into()),
     };
-    indexer.set_checkpoint(checkpoint.clone()).expect("set checkpoint");
+    indexer
+        .set_checkpoint(checkpoint.clone())
+        .expect("set checkpoint");
     assert_eq!(indexer.checkpoint().expect("checkpoint"), checkpoint);
 
     let state = indexer.persisted_state().expect("persisted state");
     indexer.clear().expect("clear before state restore");
-    indexer.restore_state(state).expect("restore persisted state");
-    assert_eq!(indexer.checkpoint().expect("restored checkpoint"), checkpoint);
-    assert!(indexer.transaction("tx-a").expect("restored state lookup").is_some());
+    indexer
+        .restore_state(state)
+        .expect("restore persisted state");
+    assert_eq!(
+        indexer.checkpoint().expect("restored checkpoint"),
+        checkpoint
+    );
+    assert!(indexer
+        .transaction("tx-a")
+        .expect("restored state lookup")
+        .is_some());
 
     let sync_checkpoint = SyncCheckpoint {
         virtual_daa_score: Some(12),
@@ -164,8 +206,14 @@ fn rust_offline_indexer() {
     assert_eq!(reconciliation.removed_transactions, 1);
     assert_eq!(reconciliation.added_blocks, 1);
     assert_eq!(reconciliation.added_transactions, 1);
-    assert!(indexer.transaction("tx-c").expect("removed tx lookup").is_none());
-    assert!(indexer.transaction("tx-d").expect("accepted tx lookup").is_some());
+    assert!(indexer
+        .transaction("tx-c")
+        .expect("removed tx lookup")
+        .is_none());
+    assert!(indexer
+        .transaction("tx-d")
+        .expect("accepted tx lookup")
+        .is_some());
 
     let events = indexer.drain_events().expect("drain events");
     assert!(!events.is_empty());

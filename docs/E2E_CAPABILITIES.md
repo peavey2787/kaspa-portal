@@ -67,7 +67,7 @@ scripts\run-e2e-rust-windows.cmd
 
 If no XPRV is supplied, the runner creates one dedicated local wallet and stores its secret only in the Git-ignored `.kaspa-portal-e2e/wallet.env`. The same XPRV is reused across network roles, while each role derives/checks its address and balance on its own network. Standard and covenant funding each get an independent `Y/N` loop: `Y` checks the selected network immediately and repeats if the balance is below 10 KAS; `N` skips only that role's funded scenarios. Mainnet spending is disabled unless `KASPA_PORTAL_E2E_ALLOW_MAINNET_SPEND=1` is explicitly set. Secrets are never written to fixtures or the capability registry.
 
-Known resolver/fallback wRPC endpoints, REST endpoints, faucets, genesis hashes, and defaults are centralized in `qa/e2e/networks.toml`. Known public profiles resolve a current wRPC node at run start and retain a direct fallback; funded-wallet balance verification uses REST first and falls back to wRPC. Automation can set `KASPA_PORTAL_E2E_NO_NETWORK_PROMPT=1`; role-specific overrides use `KASPA_PORTAL_E2E_STANDARD_*` and `KASPA_PORTAL_E2E_COVENANT_*`. `KASPA_PORTAL_E2E_ENDPOINT` remains a compatibility alias for the standard endpoint.
+Known resolver/fallback wRPC endpoints, REST endpoints, faucets, genesis hashes, and defaults are centralized in `qa/e2e/networks.toml`. Known public profiles resolve a current wRPC node at run start; funded-wallet balance verification uses REST first and falls back to wRPC. Automation can set `KASPA_PORTAL_E2E_NO_NETWORK_PROMPT=1`; role-specific overrides use `KASPA_PORTAL_E2E_STANDARD_*` and `KASPA_PORTAL_E2E_COVENANT_*`.
 
 Pass 2 establishes the Rust execution half of the capability contract.
 
@@ -140,6 +140,6 @@ or on Windows:
 scripts\run-e2e-soak-windows.cmd
 ```
 
-Set `KASPA_PORTAL_E2E_STANDARD_ENDPOINT` (or legacy `KASPA_PORTAL_E2E_ENDPOINT`) to override the dynamically resolved public standard-network wRPC endpoint. The Pass 4 network resource scenario is intentionally live and has no mock fallback. The local fault server is used only for malformed/delayed/duplicate/mismatched conditions that cannot be requested from the public endpoint.
+Set `KASPA_PORTAL_E2E_STANDARD_ENDPOINT` to override the dynamically resolved public standard-network wRPC endpoint. The Pass 4 network resource scenario is intentionally live and has no mock fallback. The local fault server is used only for malformed/delayed/duplicate/mismatched conditions that cannot be requested from the public endpoint.
 
 A Pass 4 success therefore means the resource-profile registry is complete, native and WASM lifecycle probes stayed inside their configured memory/CPU/resource budgets, the selected public standard-network connection lifecycle remained healthy under repetition, and both WebSocket implementations survived the fault matrix and recovered afterward. It does not substitute for external sanitizer tooling; AddressSanitizer/LeakSanitizer and Miri remain useful additional release/nightly layers when available.

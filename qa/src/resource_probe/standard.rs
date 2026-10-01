@@ -25,8 +25,7 @@ use kaspa_portal::chain::utxo::UtxoEntry;
 fn sign_pskb_for_seed(wire: &str, seed: &[u8; 64]) -> Result<String, String> {
     let mut encoded = [0u8; XPRV_MAX_LEN];
     let len = derive_and_serialize_xprv(seed, &mut encoded).map_err(|error| error.to_string())?;
-    let imported =
-        import_xprv_with_metadata(&encoded[..len]).map_err(|error| error.to_string())?;
+    let imported = import_xprv_with_metadata(&encoded[..len]).map_err(|error| error.to_string())?;
     let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, &super::standard_network_name())?;
     let relay = hex::decode(relay_hex).map_err(|error| error.to_string())?;
     let mut transaction = Transaction::new();
@@ -57,7 +56,9 @@ pub fn run(iteration: usize) -> Result<(), String> {
     let seed = [u8::try_from(iteration & 0xff).unwrap_or(0x41); 64];
     let len = derive_and_serialize_kpub(&seed, &mut encoded).map_err(|error| error.to_string())?;
     let kpub = std::str::from_utf8(&encoded[..len]).map_err(|error| error.to_string())?;
-    let wallet = wallet_api.import_kpub(kpub).map_err(|error| error.to_string())?;
+    let wallet = wallet_api
+        .import_kpub(kpub)
+        .map_err(|error| error.to_string())?;
     let source = wallet.receive_addresses[0].clone();
     let destination = wallet.receive_addresses[1].clone();
     let source_script = address_to_script_pubkey(&source)?;
@@ -95,13 +96,18 @@ pub fn run(iteration: usize) -> Result<(), String> {
     let dms = contract.covenant().dms(&owner, &second, 144);
     let _ = contract
         .script()
-        .p2sh_address(&dms, super::covenant_network().address_prefix()).map_err(|error| error.to_string())?;
+        .p2sh_address(&dms, super::covenant_network().address_prefix())
+        .map_err(|error| error.to_string())?;
     let _ = contract
         .covenant()
         .private_swap(&owner, &second, &[0, 0, 0x51], 5_000, &[0x55; 16])
         .map_err(|error| error.to_string())?;
-    let _ = contract.covenant().piggy_bank(&owner, 25_000_000, 8_000, &[0x66; 8]);
-    let _ = contract.covenant().timelocked_savings(&owner, &second, 12_345);
+    let _ = contract
+        .covenant()
+        .piggy_bank(&owner, 25_000_000, 8_000, &[0x66; 8]);
+    let _ = contract
+        .covenant()
+        .timelocked_savings(&owner, &second, 12_345);
     let _ = contract.covenant().payjoin(&owner, &second, 9_999, 2, 2);
     let _ = contract.commit_reveal().build(&owner, &[0x77; 32], 7_777);
     let organizer_spk = {
@@ -128,23 +134,29 @@ pub fn run(iteration: usize) -> Result<(), String> {
     let _ = contract.oracle().heartbeat_sig_script(&heartbeat);
     let _ = contract.oracle().consumer_sig_script(&heartbeat);
     let _ = contract.sequence_commit().stealth_proof(&owner, 0x5a);
-    let _ = contract.shipping_escrow().build(ShippingEscrowScriptRequest {
-        seller_pubkey: &owner,
-        deliverer_pubkey: &second,
-        buyer_pubkey: &third,
-        arbiter_pubkey: &fourth,
-        product_sompi: 200_000_000,
-        fee_sompi: 1_000_000,
-        cltv1_deadline: 50_000,
-        cltv2_deadline: 60_000,
-        salt: &[0x35; 8],
-    }).map_err(|error| error.to_string())?;
+    let _ = contract
+        .shipping_escrow()
+        .build(ShippingEscrowScriptRequest {
+            seller_pubkey: &owner,
+            deliverer_pubkey: &second,
+            buyer_pubkey: &third,
+            arbiter_pubkey: &fourth,
+            product_sompi: 200_000_000,
+            fee_sompi: 1_000_000,
+            cltv1_deadline: 50_000,
+            cltv2_deadline: 60_000,
+            salt: &[0x35; 8],
+        })
+        .map_err(|error| error.to_string())?;
     let tagged = contract.vault().tagged(&owner);
     let split = contract.vault().split(&owner);
     let _ = contract.vault().covenant_id(
         &[0x88; 32],
         3,
-        &[(0, 123_000_000, 0, tagged.as_slice()), (1, 45_000_000, 0, split.as_slice())],
+        &[
+            (0, 123_000_000, 0, tagged.as_slice()),
+            (1, 45_000_000, 0, split.as_slice()),
+        ],
     );
     black_box((payload, analysis.normalized_mass, tagged, split));
     Ok(())

@@ -41,9 +41,30 @@ impl KaspaPortalBuilder {
         KaspaPortal::from_config(self.config)
     }
 
+    /// Connect to the configured endpoint, or, when none is set, to the first
+    /// healthy public node offered by the community resolvers.
     pub async fn connect(self) -> Result<KaspaPortal> {
+        if self.config.endpoint.is_some() {
+            return self.connect_configured().await;
+        }
+        self.connect_resolved().await
+    }
+
+    async fn connect_configured(self) -> Result<KaspaPortal> {
         let portal = self.build()?;
         portal.connect().await?;
         Ok(portal)
+    }
+
+    async fn connect_resolved(self) -> Result<KaspaPortal> {
+        let candidates = crate::platform::resolve_public_endpoints(self.config.network).await;
+        let mut last_error = Error::Network("no public Kaspa resolver answered".into());
+        for endpoint in candidates {
+            match self.clone().endpoint(endpoint).connect_configured().await {
+                Ok(portal) => return Ok(portal),
+                Err(error) => last_error = error,
+            }
+        }
+        Err(last_error)
     }
 }

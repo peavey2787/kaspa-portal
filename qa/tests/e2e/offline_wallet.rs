@@ -34,7 +34,10 @@ fn rust_offline_wallet() {
         .expect("extend address ranges");
     assert_eq!(extended.receive_addresses.len(), 23);
     assert_eq!(extended.change_addresses.len(), 22);
-    assert_eq!(&extended.receive_addresses[..20], wallet.receive_addresses.as_slice());
+    assert_eq!(
+        &extended.receive_addresses[..20],
+        wallet.receive_addresses.as_slice()
+    );
 
     let words12 = wallet_api.mnemonic_12_from_entropy(&[0x11; 16]);
     let words24 = wallet_api.mnemonic_24_from_entropy(&[0x22; 32]);

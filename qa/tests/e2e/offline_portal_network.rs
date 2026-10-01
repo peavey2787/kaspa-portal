@@ -1,4 +1,6 @@
-use kaspa_portal::{indexer::IndexerConfig, network::health::ConnectionStatus, KaspaPortal, PortalConfig};
+use kaspa_portal::{
+    indexer::IndexerConfig, network::health::ConnectionStatus, KaspaPortal, PortalConfig,
+};
 
 use crate::support::standard_network;
 
@@ -17,7 +19,12 @@ fn rust_offline_portal_network() {
         indexer: custom_indexer.clone(),
     };
     config.validate().expect("valid portal config");
-    assert!(PortalConfig { timeout_ms: 999, ..config.clone() }.validate().is_err());
+    assert!(PortalConfig {
+        timeout_ms: 999,
+        ..config.clone()
+    }
+    .validate()
+    .is_err());
 
     let portal = KaspaPortal::builder()
         .network(standard_network())
@@ -31,10 +38,19 @@ fn rust_offline_portal_network() {
     assert_eq!(portal.config().network, standard_network());
     assert_eq!(portal.config().timeout_ms, 5_000);
     assert_eq!(portal.config().max_retries, 2);
-    assert_eq!(portal.network().expect("network facade").network_id(), standard_network());
-    assert_eq!(portal.network().expect("network facade").endpoint(), "ws://127.0.0.1:17210");
+    assert_eq!(
+        portal.network().expect("network facade").network_id(),
+        standard_network()
+    );
+    assert_eq!(
+        portal.network().expect("network facade").endpoint(),
+        "ws://127.0.0.1:17210"
+    );
     let _client = portal.network().expect("network facade").client();
-    assert_eq!(portal.network().expect("network facade").status(), ConnectionStatus::Disconnected);
+    assert_eq!(
+        portal.network().expect("network facade").status(),
+        ConnectionStatus::Disconnected
+    );
     let _ = portal.chain().expect("chain facade");
     let _ = portal.wallet();
     let _ = portal.transaction();
@@ -45,7 +61,10 @@ fn rust_offline_portal_network() {
 
     portal.network().expect("network facade").disconnect();
     portal.disconnect().expect("portal disconnect");
-    assert_eq!(portal.network().expect("network facade").status(), ConnectionStatus::Disconnected);
+    assert_eq!(
+        portal.network().expect("network facade").status(),
+        ConnectionStatus::Disconnected
+    );
 
     let no_endpoint = KaspaPortal::builder()
         .network(standard_network())

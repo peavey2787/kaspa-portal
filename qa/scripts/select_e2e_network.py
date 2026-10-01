@@ -159,9 +159,8 @@ def resolve_public_wrpc(network):
 
 def resolve_profile(role, network, profiles, interactive):
     profile = dict(profiles.get(network, {}))
-    legacy_endpoint = os.environ.get("KASPA_PORTAL_E2E_ENDPOINT") if role == "standard" else None
     overrides = {
-        "wrpc_endpoint": os.environ.get(env_name(role, "endpoint")) or legacy_endpoint,
+        "wrpc_endpoint": os.environ.get(env_name(role, "endpoint")),
         "rest_endpoint": os.environ.get(env_name(role, "rest_endpoint")),
         "faucet": os.environ.get(env_name(role, "faucet")),
         "genesis_hash": os.environ.get(env_name(role, "genesis_hash")),

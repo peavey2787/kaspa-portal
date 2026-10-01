@@ -9,7 +9,6 @@ covenant_network = "testnet-12"
 
 [network.testnet-10]
 wrpc_endpoint = "resolver"
-wrpc_fallback = "wss://photon-10.kaspa.red/kaspa/testnet-10/wrpc/borsh"
 rest_endpoint = "https://api-tn10.kaspa.org"
 faucet = "https://faucet-tn10.kaspanet.io/"
 genesis_hash = "f896a3034873be1739fc4359236899fd3d65d2bc94f9780df0d0da3eb1cc4370"

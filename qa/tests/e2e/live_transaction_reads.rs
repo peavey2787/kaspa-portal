@@ -8,7 +8,7 @@ async fn rust_live_standard_transaction_reads() {
     let network = live_network();
     let portal = KaspaPortal::builder()
         .network(network)
-        .endpoint(live_endpoint())
+        .endpoint(live_endpoint().await)
         .connect()
         .await
         .expect("connect public selected network");

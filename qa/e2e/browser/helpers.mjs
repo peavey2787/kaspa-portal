@@ -3,7 +3,6 @@ import { expect } from '@playwright/test';
 
 export const DEFAULT_STANDARD_NETWORK = 'testnet-10';
 export const DEFAULT_STANDARD_GENESIS_HASH = 'f896a3034873be1739fc4359236899fd3d65d2bc94f9780df0d0da3eb1cc4370';
-export const DEFAULT_STANDARD_ENDPOINT = 'wss://photon-10.kaspa.red/kaspa/testnet-10/wrpc/borsh';
 export const DEFAULT_COVENANT_NETWORK = 'testnet-12';
 export const INDEXED_FIXTURE_TXID = '5201b38ed218ca4cf392a71ce446d75fd667b954e2efdebec1acf83e48892e2a';
 
@@ -33,10 +32,11 @@ export function standardNetwork() {
   return process.env.KASPA_PORTAL_E2E_STANDARD_NETWORK || DEFAULT_STANDARD_NETWORK;
 }
 
+/** Set by qa/scripts/run-e2e-browser (resolved public node or explicit override). */
 export function standardEndpoint() {
-  return process.env.KASPA_PORTAL_E2E_STANDARD_ENDPOINT
-    || process.env.KASPA_PORTAL_E2E_ENDPOINT
-    || DEFAULT_STANDARD_ENDPOINT;
+  const endpoint = process.env.KASPA_PORTAL_E2E_STANDARD_ENDPOINT;
+  if (!endpoint) throw new Error('KASPA_PORTAL_E2E_STANDARD_ENDPOINT is not set; run qa/scripts/run-e2e-browser');
+  return endpoint;
 }
 
 export function standardGenesisHash() {

@@ -1,6 +1,4 @@
-use kaspa_portal::{
-    indexer::{IndexedTransaction, IndexerConfig},
-};
+use kaspa_portal::indexer::{IndexedTransaction, IndexerConfig};
 
 #[test]
 fn consensus_sized_u64s_serialize_as_decimal_strings() {

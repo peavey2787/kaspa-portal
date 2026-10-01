@@ -55,7 +55,11 @@ impl FaultServer {
 
     pub async fn serve(self) -> Result<(), String> {
         loop {
-            let (stream, _) = self.listener.accept().await.map_err(|error| error.to_string())?;
+            let (stream, _) = self
+                .listener
+                .accept()
+                .await
+                .map_err(|error| error.to_string())?;
             tokio::spawn(async move {
                 let _ = handle_connection(stream).await;
             });
@@ -64,7 +68,9 @@ impl FaultServer {
 }
 
 async fn handle_connection(stream: TcpStream) -> Result<(), String> {
-    let mut websocket = accept_async(stream).await.map_err(|error| error.to_string())?;
+    let mut websocket = accept_async(stream)
+        .await
+        .map_err(|error| error.to_string())?;
     let request = loop {
         match websocket.next().await {
             Some(Ok(Message::Binary(bytes))) => break bytes.to_vec(),
@@ -95,7 +101,11 @@ async fn handle_connection(stream: TcpStream) -> Result<(), String> {
         }
         FaultMode::MismatchedOperation => {
             let wrong = if operation == 131 { 147 } else { 131 };
-            send_binary(&mut websocket, success_response(request_id, wrong, b"bad-op")).await?;
+            send_binary(
+                &mut websocket,
+                success_response(request_id, wrong, b"bad-op"),
+            )
+            .await?;
         }
         FaultMode::RemoteError => {
             send_binary(
@@ -105,7 +115,10 @@ async fn handle_connection(stream: TcpStream) -> Result<(), String> {
             .await?;
         }
         FaultMode::CloseBeforeResponse => {
-            websocket.close(None).await.map_err(|error| error.to_string())?;
+            websocket
+                .close(None)
+                .await
+                .map_err(|error| error.to_string())?;
         }
         FaultMode::TextBeforeBinary => {
             websocket
@@ -135,11 +148,8 @@ fn parse_request(bytes: &[u8]) -> Result<(u64, u8, FaultMode), String> {
     }
     let request_id = u64::from_le_bytes(bytes[1..9].try_into().map_err(|_| "bad request id")?);
     let operation = bytes[9];
-    let payload_len = u32::from_le_bytes(
-        bytes[10..14]
-            .try_into()
-            .map_err(|_| "bad payload length")?,
-    );
+    let payload_len =
+        u32::from_le_bytes(bytes[10..14].try_into().map_err(|_| "bad payload length")?);
     let payload_len = usize::try_from(payload_len).map_err(|_| "payload length exceeds usize")?;
     let payload_end = 14usize
         .checked_add(payload_len)

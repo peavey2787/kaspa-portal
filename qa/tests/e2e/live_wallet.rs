@@ -7,14 +7,22 @@ use crate::support::{deterministic_wallet, live_endpoint, live_network};
 async fn rust_live_standard_wallet() {
     let portal = KaspaPortal::builder()
         .network(live_network())
-        .endpoint(live_endpoint())
+        .endpoint(live_endpoint().await)
         .connect()
         .await
         .expect("connect public selected network");
     let wallet = deterministic_wallet(&portal, 0x52);
 
-    let utxos = portal.wallet().utxos(&wallet).await.expect("wallet UTXO scan");
-    let balance = portal.wallet().balance(&wallet).await.expect("wallet balance");
+    let utxos = portal
+        .wallet()
+        .utxos(&wallet)
+        .await
+        .expect("wallet UTXO scan");
+    let balance = portal
+        .wallet()
+        .balance(&wallet)
+        .await
+        .expect("wallet balance");
     let total = utxos.iter().map(|entry| entry.amount).sum::<u64>();
     assert_eq!(balance.total_sompi, total);
 }

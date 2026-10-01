@@ -29,20 +29,27 @@ const MIN_FUNDED_BALANCE_SOMPI: u64 = 1_000_000_000;
 const PRIORITY_FEE_SOMPI: u64 = 300_000;
 
 fn role_network(role: &str, default: &str) -> (String, NetworkId) {
-    let name = env::var(format!("KASPA_PORTAL_E2E_{}_NETWORK", role.to_ascii_uppercase()))
-        .unwrap_or_else(|_| default.to_owned());
+    let name = env::var(format!(
+        "KASPA_PORTAL_E2E_{}_NETWORK",
+        role.to_ascii_uppercase()
+    ))
+    .unwrap_or_else(|_| default.to_owned());
     let network = NetworkId::parse(&name).expect("valid configured E2E network");
     (name, network)
 }
 
-fn role_endpoint(role: &str, default: &str) -> String {
-    env::var(format!("KASPA_PORTAL_E2E_{}_ENDPOINT", role.to_ascii_uppercase()))
-        .unwrap_or_else(|_| default.to_owned())
+/// Set by the QA runner (resolved public node or explicit override).
+fn role_endpoint(role: &str) -> String {
+    let name = format!("KASPA_PORTAL_E2E_{}_ENDPOINT", role.to_ascii_uppercase());
+    env::var(&name).unwrap_or_else(|_| panic!("{name} is set by the QA network loader"))
 }
 
 fn role_skipped(role: &str) -> bool {
-    env::var(format!("KASPA_PORTAL_E2E_SKIP_{}_FUNDED", role.to_ascii_uppercase()))
-        .is_ok_and(|value| value == "1")
+    env::var(format!(
+        "KASPA_PORTAL_E2E_SKIP_{}_FUNDED",
+        role.to_ascii_uppercase()
+    ))
+    .is_ok_and(|value| value == "1")
 }
 
 fn funded_wallet(
@@ -51,15 +58,17 @@ fn funded_wallet(
     ImportedAccountXprv,
     kaspa_portal::wallet::account::derivation::WalletData,
 ) {
-    let xprv = env::var(FUNDED_XPRV_ENV).unwrap_or_else(|_| {
-        panic!("{FUNDED_XPRV_ENV} is required for funded browser E2E")
-    });
+    let xprv = env::var(FUNDED_XPRV_ENV)
+        .unwrap_or_else(|_| panic!("{FUNDED_XPRV_ENV} is required for funded browser E2E"));
     let imported = import_xprv_with_metadata(xprv.as_bytes()).expect("import funded account XPRV");
     let mut encoded = [0u8; KPUB_MAX_LEN];
     let len = serialize_account_kpub(&imported.key, imported.parent_fingerprint, &mut encoded)
         .expect("serialize funded account kpub");
     let kpub = std::str::from_utf8(&encoded[..len]).expect("funded kpub UTF-8");
-    let wallet = portal.wallet().import_kpub(kpub).expect("import funded wallet");
+    let wallet = portal
+        .wallet()
+        .import_kpub(kpub)
+        .expect("import funded wallet");
     (imported, wallet)
 }
 
@@ -69,8 +78,8 @@ fn sign_pskb(
     entropy: u8,
     network_name: &str,
 ) -> String {
-    let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, network_name)
-        .expect("relay PSKB as compact KSPT");
+    let relay_hex =
+        relay_pskb_as_kspt_hex_for_network(wire, network_name).expect("relay PSKB as compact KSPT");
     let relay = hex::decode(relay_hex).expect("decode relayed KSPT");
     let mut transaction = Transaction::new();
     parse_compact_kspt(&relay, &mut transaction).expect("parse relayed KSPT");
@@ -81,7 +90,10 @@ fn sign_pskb(
         &[entropy; 32],
     )
     .expect("sign funded wallet inputs");
-    assert!(signed > 0, "funded transaction had no signable wallet inputs");
+    assert!(
+        signed > 0,
+        "funded transaction had no signable wallet inputs"
+    );
     assert!(
         is_fully_signed(&transaction),
         "funded transaction is not fully signed"
@@ -101,15 +113,20 @@ fn next_adaptive_fee(current_fee: u64, recommended_fee_sompi: u64) -> u64 {
     fee_with_headroom(recommended_fee_sompi).max(current_fee.saturating_add(10_000))
 }
 
+/// Key material and signing context for one funded send.
+struct FixtureSigner<'a> {
+    imported: &'a ImportedAccountXprv,
+    entropy: u8,
+    network_name: &'a str,
+}
+
 async fn plan_signed_send_with_adaptive_fee(
     portal: &KaspaPortal,
     wallet: &kaspa_portal::wallet::account::derivation::WalletData,
-    imported: &ImportedAccountXprv,
+    signer: &FixtureSigner<'_>,
     destination: &str,
     amount: u64,
     payload: Option<&[u8]>,
-    entropy: u8,
-    network_name: &str,
 ) -> (String, u64) {
     let tx = portal.transaction();
     let mut fee = PRIORITY_FEE_SOMPI;
@@ -124,12 +141,15 @@ async fn plan_signed_send_with_adaptive_fee(
                 .await
                 .expect("plan funded browser send"),
         };
-        let signed_wire = sign_pskb(&wire, imported, entropy, network_name);
+        let signed_wire = sign_pskb(&wire, signer.imported, signer.entropy, signer.network_name);
         let analysis = tx
             .analyze(&signed_wire)
             .await
             .expect("analyze signed funded browser transaction");
-        assert!(analysis.mass_valid, "signed funded browser transaction exceeds mass limits");
+        assert!(
+            analysis.mass_valid,
+            "signed funded browser transaction exceeds mass limits"
+        );
         if analysis.fee_sufficient {
             return (signed_wire, fee);
         }
@@ -154,11 +174,7 @@ async fn wait_for_output(portal: &KaspaPortal, address: &str, txid: &str) {
     panic!("broadcast transaction {txid} did not appear at {address} within 90 seconds");
 }
 
-async fn broadcast_bootstrap(
-    portal: &KaspaPortal,
-    signed_wire: &str,
-    destination: &str,
-) -> String {
+async fn broadcast_bootstrap(portal: &KaspaPortal, signed_wire: &str, destination: &str) -> String {
     let transaction = portal
         .transaction()
         .finalize(signed_wire)
@@ -190,7 +206,8 @@ fn multisig_fixture(network: NetworkId) -> (String, String) {
     let keys = descriptor
         .public_keys_at(0, 0, 0)
         .expect("multisig receive keys");
-    let redeem = build_redeem_script(descriptor.threshold(), &keys).expect("multisig redeem script");
+    let redeem =
+        build_redeem_script(descriptor.threshold(), &keys).expect("multisig redeem script");
     let address = script_to_address(&redeem, network.address_prefix()).expect("multisig address");
     (descriptor_text, address)
 }
@@ -199,7 +216,11 @@ async fn require_balance(
     portal: &KaspaPortal,
     wallet: &kaspa_portal::wallet::account::derivation::WalletData,
 ) {
-    let balance = portal.wallet().balance(wallet).await.expect("funded balance");
+    let balance = portal
+        .wallet()
+        .balance(wallet)
+        .await
+        .expect("funded balance");
     assert!(
         balance.total_sompi >= MIN_FUNDED_BALANCE_SOMPI,
         "funded browser E2E wallet has {} sompi; at least {} is required",
@@ -210,10 +231,7 @@ async fn require_balance(
 
 async fn build_standard_fixture() -> Value {
     let (network_name, network) = role_network("standard", "testnet-10");
-    let endpoint = role_endpoint(
-        "standard",
-        "wss://photon-10.kaspa.red/kaspa/testnet-10/wrpc/borsh",
-    );
+    let endpoint = role_endpoint("standard");
     let portal = KaspaPortal::builder()
         .network(network)
         .endpoint(endpoint.clone())
@@ -238,12 +256,14 @@ async fn build_standard_fixture() -> Value {
         let (signed_fund_wire, fund_fee) = plan_signed_send_with_adaptive_fee(
             &portal,
             &wallet,
-            &imported,
+            &FixtureSigner {
+                imported: &imported,
+                entropy: 0x81,
+                network_name: &network_name,
+            },
             &multisig_address,
             100_000_000,
             None,
-            0x81,
-            &network_name,
         )
         .await;
         eprintln!("browser funded {network_name} multisig-funding fee: {fund_fee} sompi");
@@ -268,12 +288,14 @@ async fn build_standard_fixture() -> Value {
     let (signed_broadcast, adaptive_fee) = plan_signed_send_with_adaptive_fee(
         &portal,
         &fresh_wallet,
-        &imported,
+        &FixtureSigner {
+            imported: &imported,
+            entropy: 0x82,
+            network_name: &network_name,
+        },
         &destination,
         100_000_000,
         Some(payload.as_bytes()),
-        0x82,
-        &network_name,
     )
     .await;
     eprintln!("browser funded {network_name} broadcast fee: {adaptive_fee} sompi");
@@ -310,7 +332,7 @@ async fn build_standard_fixture() -> Value {
 
 async fn build_covenant_fixture() -> Value {
     let (network_name, network) = role_network("covenant", "testnet-12");
-    let endpoint = role_endpoint("covenant", "ws://tn12-node.kaspa.com:17210");
+    let endpoint = role_endpoint("covenant");
     let portal = KaspaPortal::builder()
         .network(network)
         .endpoint(endpoint.clone())
