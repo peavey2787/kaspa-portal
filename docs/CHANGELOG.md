@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0
 
 Hardened signer core merged from KasKold, so the hardware signer can depend on
 Portal instead of carrying its own copy.
@@ -37,6 +37,8 @@ Portal instead of carrying its own copy.
 - Totality tests feed every externally reachable parser truncated input and
   noise of every length up to 600 bytes, including the anti-klepto,
   covenant-sign and Private Swap wire protocols.
+- `wallet::derivation::hmac` and `wallet::mnemonic::wordlist` are public so
+  embedded signers reuse them instead of keeping copies.
 - Ported the hardware signer's test suites for bytes, covenant branch
   resolution, QR frames and sessions, anti-klepto wire, PSKT state, account
   keys and BIP32 xpub import.

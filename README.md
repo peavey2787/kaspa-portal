@@ -31,7 +31,7 @@ For the developer-facing method reference, including parameters and return value
 
 ```toml
 [dependencies]
-kaspa-portal = "1.1.1"
+kaspa-portal = "1.4.0"
 ```
 
 Build an offline portal when no node connection is needed:
@@ -176,7 +176,7 @@ IndexedDB persistence stores dehydrated/versioned plain data only, never Rust/WA
 ## Features
 
 - `std` (default): the full native SDK (networking, chain, indexer, contracts, randomness, platform adapters and the `KaspaPortal` facade), without secret-export helpers.
-- No default features (`default-features = false`): a `no_std` + `alloc` signing core for embedded and air-gapped signers. It contains keys, BIP32/BIP39/BIP85 derivation, addresses, the transaction model, sighash, Schnorr signing, PSKT/KSPT interchange and parsing, script push helpers and crypto. Network, builders, finalization and the facades need `std`. CI keeps it building on a bare-metal target (`thumbv7em-none-eabihf`) with warnings denied.
+- No default features (`default-features = false`): a `no_std` + `alloc` signing core for embedded and air-gapped signers. It contains keys, BIP32/BIP39/BIP85 derivation, addresses, the transaction model, sighash, Schnorr signing, PSKT/KSPT interchange and parsing, script push helpers and crypto. Network, builders, finalization and the facades need `std`. CI keeps it building on a bare-metal target (`thumbv7em-none-eabihf`) with warnings denied. Embedded signers bound every parsed transaction with `TransactionLimits` (`Transaction::try_new_with`), so a hostile KSPT or PSKT cannot make the device allocate past its own input and payload caps, and can feed a watchdog during long key searches through the `*_with_checkpoint` signing and address-lookup variants.
 - `wasm`: browser/WASM bindings and IndexedDB/WebSocket/fetch adapters.
 - `secret-export`: explicitly enables raw VRF secret export helpers. Do not enable it unless an application genuinely needs them.
 

@@ -1,3 +1,3 @@
 pub mod bip39;
-pub(crate) mod wordlist;
+pub mod wordlist;
 pub use bip39::*;
