@@ -90,7 +90,9 @@ jobs:
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: Browser build
-        run: cargo check --target wasm32-unknown-unknown --features wasm
+        run: |
+          cargo check --target wasm32-unknown-unknown --features wasm
+          cargo build --manifest-path qa/e2e/wasm/Cargo.toml --target wasm32-unknown-unknown
 
   live-network:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

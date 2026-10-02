@@ -11,7 +11,7 @@ keywords = ["kaspa", "sdk", "wasm", "wallet", "indexer"]
 categories = ["cryptography::cryptocurrencies", "api-bindings", "wasm"]
 
 [lib]
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [features]
 # `std` (default) is the full SDK: networking, chain, indexer, contracts,

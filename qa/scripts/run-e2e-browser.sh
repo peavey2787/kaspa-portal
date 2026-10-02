@@ -45,7 +45,7 @@ export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 rustup target add wasm32-unknown-unknown
 
 echo "==> Browser E2E: building the real WASM package"
-wasm-pack build "$ROOT" --target web --release --out-dir "$SITE/pkg" --out-name kaspa_portal --features wasm,secret-export
+wasm-pack build "$ROOT/qa/e2e/wasm" --target web --release --out-dir "$SITE/pkg" --out-name kaspa_portal
 
 echo "==> Browser E2E: generating canonical Rust parity fixture"
 cargo run --manifest-path qa/Cargo.toml --bin browser_parity_fixture -- "$PARITY"

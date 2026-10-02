@@ -13,7 +13,7 @@ def fail(message: str) -> None:
     errors.append(message)
 
 
-for path in [ROOT / "Cargo.toml", ROOT / "qa/Cargo.toml", ROOT / "qa/benches/Cargo.toml", ROOT / "qa/tests/fuzz/Cargo.toml"]:
+for path in [ROOT / "Cargo.toml", ROOT / "qa/Cargo.toml", ROOT / "qa/benches/Cargo.toml", ROOT / "qa/tests/fuzz/Cargo.toml", ROOT / "qa/e2e/wasm/Cargo.toml"]:
     package = read_package(path)
     if package.get("version") != "1.4.0":
         fail(f"package must be 1.4.0: {path.relative_to(ROOT)}")

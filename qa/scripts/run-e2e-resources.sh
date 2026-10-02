@@ -51,12 +51,11 @@ echo "==> Native WebSocket fault-injection E2E"
 cargo test --manifest-path qa/Cargo.toml --test e2e-network-fault-injection -- --nocapture
 
 echo "==> Browser resource E2E: building the real WASM package"
-wasm-pack build "$ROOT" \
+wasm-pack build "$ROOT/qa/e2e/wasm" \
   --target web \
   --release \
   --out-dir "$SITE/pkg" \
-  --out-name kaspa_portal \
-  --features wasm,secret-export
+  --out-name kaspa_portal
 
 echo "==> Browser resource E2E: generating canonical fixture"
 cargo run --manifest-path qa/Cargo.toml --bin browser_parity_fixture -- "$PARITY"

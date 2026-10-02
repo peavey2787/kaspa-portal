@@ -10,7 +10,7 @@ def fail(msg): errors.append(msg)
 manifest={'package': read_package(ROOT/'Cargo.toml')}
 if manifest.get('package',{}).get('name')!='kaspa-portal': fail('root package must be kaspa-portal')
 if manifest.get('package',{}).get('version')!='1.4.0': fail('root package must be version 1.4.0')
-for manifest_path in [ROOT/'qa/Cargo.toml', ROOT/'qa/benches/Cargo.toml', ROOT/'qa/tests/fuzz/Cargo.toml']:
+for manifest_path in [ROOT/'qa/Cargo.toml', ROOT/'qa/benches/Cargo.toml', ROOT/'qa/tests/fuzz/Cargo.toml', ROOT/'qa/e2e/wasm/Cargo.toml']:
     if not manifest_path.is_file():
         fail(f'missing QA manifest: {manifest_path.relative_to(ROOT)}')
         continue

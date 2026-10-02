@@ -1,0 +1,15 @@
+[package]
+name = "kaspa-portal-wasm"
+version = "1.4.0"
+publish = false
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Browser bundle of Kaspa Portal for the browser E2E and resource suites"
+
+# The library itself is an rlib so embedded and host consumers never build a
+# cdylib; this wrapper is the one cdylib wasm-pack packages.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kaspa-portal = { path = "../../..", features = ["wasm", "secret-export"] }

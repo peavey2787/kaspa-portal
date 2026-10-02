@@ -63,7 +63,7 @@ call :run rustup target add wasm32-unknown-unknown
 if errorlevel 1 goto :fail
 
 echo ==^> Browser E2E: building the real WASM package
-call :run wasm-pack build "%ROOT%" --target web --release --out-dir "%SITE%\pkg" --out-name kaspa_portal --features wasm,secret-export
+call :run wasm-pack build "%ROOT%\qa\e2e\wasm" --target web --release --out-dir "%SITE%\pkg" --out-name kaspa_portal
 if errorlevel 1 goto :fail
 
 echo ==^> Browser E2E: generating canonical Rust parity fixture

@@ -44,6 +44,10 @@ Portal instead of carrying its own copy.
   that hardware signers run at boot. They return `(passed, total)`, never
   panic (allocation failure counts as a failed check), and the unit tests
   assert each one passes. CI builds the feature on the bare-metal target.
+- The library is an `rlib` only. Listing `cdylib` made every dependent,
+  including `no_std` firmware, build a C dynamic library that needs an
+  allocator and panic handler. The browser QA bundle now comes from the
+  `qa/e2e/wasm` wrapper crate, which exports the same JavaScript API.
 - Ported the hardware signer's test suites for bytes, covenant branch
   resolution, QR frames and sessions, anti-klepto wire, PSKT state, account
   keys and BIP32 xpub import.
