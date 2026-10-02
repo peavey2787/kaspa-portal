@@ -1,0 +1,26 @@
+//! Power-on known-answer self-test, shared with the unit tests.
+
+use crate::wallet::derivation::bip85::derive_mnemonic_12;
+
+/// BIP85 specification vector, from a precomputed BIP39 seed so the check
+/// skips PBKDF2. Master: "install scatter logic circle pencil average fall
+/// shoe quantum disease suspect usage". Child 0: "girl mad pet galaxy egg
+/// matter matrix prison refuse sense ordinary nose".
+fn test_bip85_12word_index0() -> bool {
+    const SEED: [u8; 64] = [
+        0x37, 0x48, 0x34, 0x72, 0xa6, 0xaf, 0x7f, 0xd1, 0x07, 0xfb, 0x5f, 0x5a, 0xaa, 0xa7, 0xbd,
+        0xdc, 0x89, 0x69, 0x03, 0x53, 0x36, 0x92, 0x29, 0x77, 0x1c, 0x32, 0x81, 0x2f, 0x71, 0x12,
+        0x07, 0xc8, 0x73, 0x98, 0xa8, 0xd4, 0x4c, 0xfc, 0x76, 0x3a, 0x81, 0x85, 0xff, 0x34, 0x62,
+        0x72, 0xe8, 0xf1, 0x45, 0x51, 0x70, 0xde, 0xca, 0xe7, 0x12, 0x59, 0x8f, 0x59, 0x90, 0xc1,
+        0x20, 0x7d, 0x2f, 0x88,
+    ];
+    const CHILD_0: [u16; 12] = [
+        786, 1069, 1307, 759, 566, 1098, 1097, 1368, 1443, 1566, 1250, 1203,
+    ];
+    matches!(derive_mnemonic_12(&SEED, 0), Ok(child) if child.indices == CHILD_0)
+}
+
+/// Run the BIP85 child-mnemonic test suite.
+pub fn run_bip85_tests() -> (u32, u32) {
+    (u32::from(test_bip85_12word_index0()), 1)
+}

@@ -1,12 +1,15 @@
 //! Session-binding checks for multi-frame QR transfers.
 
+/// Why a multi-frame QR frame was refused.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SessionError {
+pub enum SessionError {
     MixedSession,
     FrameCountChanged,
 }
 
-pub(crate) fn authorize_frame_session(
+/// Accept a frame only if it continues the active session with the same
+/// frame count; a new session may start when none is active.
+pub fn authorize_frame_session(
     session_active: bool,
     current_session_id: &[u8],
     current_total_frames: u8,

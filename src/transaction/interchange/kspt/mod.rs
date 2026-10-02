@@ -10,6 +10,8 @@ mod validation;
 
 pub use codec::{parse_compact_kspt, serialize_compact_kspt, serialize_compact_kspt_vec};
 pub use error::PsktError;
+/// Version byte of the compact KSPT envelope and its KSSN signature response.
+pub use format::{KSPT_VERSION_CURRENT as KSPT_VERSION, KSSN_VERSION_CURRENT as KSSN_VERSION};
 pub use kssn::{InputSignature, SignedResponse};
 pub use script::analyze_input_script;
 pub use signing::{

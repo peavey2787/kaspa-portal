@@ -1,8 +1,7 @@
 #[cfg(feature = "std")]
 pub mod codec;
 pub mod frame;
-#[cfg(feature = "std")]
-pub(crate) mod security;
+pub mod security;
 pub use crate::primitives::qr_payload as payload;
 #[cfg(feature = "std")]
 pub use codec::*;

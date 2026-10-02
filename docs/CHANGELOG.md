@@ -40,7 +40,8 @@ Portal instead of carrying its own copy.
 - `wallet::derivation::hmac` and `wallet::mnemonic::wordlist` are public so
   embedded signers reuse them instead of keeping copies.
 - New `self-test` feature: `kaspa_portal::self_test` exposes the power-on
-  known-answer runners (BIP39, BIP32, xpub, address, Schnorr, sighash, KSPT)
+  known-answer runners (BIP39, BIP32, BIP85, xpub, address, Schnorr, sighash,
+  KSPT)
   that hardware signers run at boot. They return `(passed, total)`, never
   panic (allocation failure counts as a failed check), and the unit tests
   assert each one passes. CI builds the feature on the bare-metal target.
@@ -48,6 +49,9 @@ Portal instead of carrying its own copy.
   including `no_std` firmware, build a C dynamic library that needs an
   allocator and panic handler. The browser QA bundle now comes from the
   `qa/e2e/wasm` wrapper crate, which exports the same JavaScript API.
+- `transaction::interchange::qr::security` (multi-frame session binding) is
+  part of the `no_std` core, and `kspt::KSPT_VERSION` / `kspt::KSSN_VERSION`
+  are exported so signers and hosts share one version byte.
 - Ported the hardware signer's test suites for bytes, covenant branch
   resolution, QR frames and sessions, anti-klepto wire, PSKT state, account
   keys and BIP32 xpub import.

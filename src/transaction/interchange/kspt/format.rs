@@ -3,8 +3,8 @@ pub(crate) const KSPT_MAGIC: [u8; 4] = *b"KSPT";
 /// Magic bytes for KSSN signature responses.
 pub(crate) const KSSN_MAGIC: [u8; 4] = *b"KSSN";
 
-pub(crate) const KSPT_VERSION_CURRENT: u8 = 0x01;
-pub(crate) const KSSN_VERSION_CURRENT: u8 = 0x01;
+pub const KSPT_VERSION_CURRENT: u8 = 0x01;
+pub const KSSN_VERSION_CURRENT: u8 = 0x01;
 
 pub(crate) const FLAG_SIGNED_OR_COMPLETE: u8 = 0x01;
 pub(crate) const PARTIAL_SIGNED_ALLOWED_FLAGS: u8 = FLAG_SIGNED_OR_COMPLETE;
