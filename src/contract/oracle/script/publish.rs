@@ -3,6 +3,8 @@ use super::{
     push_data, push_int, OP_WITHIN, ORACLE_MB_BODY_LEN, ORACLE_MB_MAX_FEE_SOMPI,
     ORACLE_MB_REDEEM_LEN, RISC0_TAG,
 };
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// The 20-byte oracle-state prefix: pushes price and T (Pyth publish_time, each
 /// OP_DATA_8 + LE8 + OP_DROP) so both are baked into the redeem bytes (and thus the
 /// SPK) while leaving the stack clean before the body runs. T replaces the old daa

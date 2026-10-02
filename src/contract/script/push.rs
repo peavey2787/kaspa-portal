@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 pub fn push_data(script: &mut Vec<u8>, data: &[u8]) {
     let length = data.len();
     if length <= 75 {

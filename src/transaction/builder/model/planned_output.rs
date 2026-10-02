@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use serde_json::Value;
 /// A transaction output after address/script resolution.
 #[derive(Clone, Debug, PartialEq, Eq)]

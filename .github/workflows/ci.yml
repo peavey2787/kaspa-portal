@@ -62,6 +62,8 @@ jobs:
         run: |
           cargo clippy --all-targets --all-features -- -D warnings
           cargo clippy --manifest-path qa/Cargo.toml --all-targets -- -D warnings
+      - name: no_std signing core (bare-metal target, warnings denied)
+        run: cargo clippy --no-default-features --target thumbv7em-none-eabihf -- -D warnings
       - name: Unit, integration and doc tests
         run: |
           cargo test --all-targets

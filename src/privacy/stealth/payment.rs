@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use k256::elliptic_curve::ops::Add;
 use k256::{ProjectivePoint, PublicKey};
 

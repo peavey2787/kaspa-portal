@@ -1,4 +1,6 @@
 //! Funded-state pickup and refund branches.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use crate::contract::script::{opcode as ops, push_data, push_int, push_pubkey};
 

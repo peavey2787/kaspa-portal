@@ -2,6 +2,7 @@ mod encoder;
 mod json;
 mod model;
 
+#[cfg(feature = "std")]
 pub(crate) use encoder::encode_pskt_value;
 pub use encoder::{encode_covenant, encode_covenant_with_payload, encode_plan};
 pub use model::PskbOutput;

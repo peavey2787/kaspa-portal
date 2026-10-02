@@ -6,6 +6,8 @@
 //! amounts: the script independently requires every input to carry the same
 //! campaign fingerprint, sums the real transaction inputs, requires the campaign
 //! goal, pins the sole output script, and caps the transaction fee.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use crate::contract::script::{opcode::*, push_data, push_int, push_pubkey};
 

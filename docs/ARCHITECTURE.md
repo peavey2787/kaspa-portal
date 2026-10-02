@@ -44,6 +44,17 @@ Core domains do not import `platform`. Network transports, time and CURBy I/O ar
 
 `qa/scripts/check_architecture.py` enforces these edges and rejects obsolete namespaces.
 
+## `no_std` signing core
+
+The default `std` feature carries everything that needs an operating system:
+`network` transports and wRPC, `chain`, `indexer`, `randomness`, `platform`,
+the `KaspaPortal` facade, the domain facades, transaction builders, PSKT
+finalization and mass/fee analysis. Without it the crate is `no_std` +
+`alloc`: an embedded signer gets the same audited keys, derivation, sighash,
+signing and PSKT/KSPT parsing as hosts do, with no second implementation to
+drift. Gating is per item (`#[cfg(feature = "std")]`), never by suppressing
+warnings; CI builds the core for `thumbv7em-none-eabihf` with `-D warnings`.
+
 ## Native wRPC lifecycle
 
 Native networking is connection-oriented. `NativeWebSocketTransport` owns a driver task and a single persistent WebSocket shared by cloned `NetworkClient`/`NetworkApi` handles for that Portal. The driver:

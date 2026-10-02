@@ -2,6 +2,8 @@
 // License: GPL-3.0.
 
 //! Commit-reveal covenant script and the CDP owner/borrower sig-script builders.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use crate::contract::script::{opcode as covenant_ops, push_data, push_int, push_pubkey};
 

@@ -1,4 +1,6 @@
 //! Lossless JSON representation for optional consensus `u64` values.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use serde::{Deserialize, Deserializer, Serializer};
 

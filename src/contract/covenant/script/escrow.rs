@@ -1,4 +1,6 @@
 use super::{push_data, push_int, push_pubkey};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// Build a 2-of-3 escrow covenant redeem script with arbiter.
 ///
 /// Three parties: Alice (buyer), Bob (seller), Arbiter.

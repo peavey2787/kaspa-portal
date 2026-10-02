@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 // Kaspa Portal — PSKT review models
 // License: GPL-3.0
 

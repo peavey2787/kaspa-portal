@@ -480,7 +480,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
  "generic-array",
- "rand_core 0.6.4",
  "typenum",
 ]
 
@@ -1181,7 +1180,7 @@ dependencies = [
 
 [[package]]
 name = "kaspa-portal"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -1217,7 +1216,7 @@ dependencies = [
 
 [[package]]
 name = "kaspa-portal-fuzz"
-version = "1.2.1"
+version = "1.3.0"
 dependencies = [
  "hex",
  "kaspa-portal",

@@ -42,6 +42,7 @@ impl<'a> WireReader<'a> {
         ))
     }
 
+    #[cfg(feature = "std")]
     pub fn read_f64(&mut self) -> Result<f64, NetworkError> {
         let bytes = self.read_exact(8)?;
         Ok(f64::from_le_bytes(
@@ -51,6 +52,7 @@ impl<'a> WireReader<'a> {
         ))
     }
 
+    #[cfg(feature = "std")]
     pub fn read_bool(&mut self) -> Result<bool, NetworkError> {
         match self.read_u8()? {
             0 => Ok(false),
@@ -74,6 +76,7 @@ impl<'a> WireReader<'a> {
         Ok(result)
     }
 
+    #[cfg(feature = "std")]
     pub fn read_bytes(&mut self, maximum: usize) -> Result<&'a [u8], NetworkError> {
         let length = usize::try_from(self.read_u32()?).map_err(|_| NetworkError::InvalidLength)?;
         if length > maximum {

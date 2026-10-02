@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use crate::transaction::builder::model::PlannedOutput;
 use serde_json::Value;
 

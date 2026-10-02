@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::elliptic_curve::ScalarPrimitive;
 use k256::{AffinePoint, PublicKey, Scalar, Secp256k1};

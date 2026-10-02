@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use serde_json::{json, Value};
 
 use crate::transaction::builder::model::{PlannedInput, UnsignedTransactionPlan};
@@ -15,7 +17,7 @@ pub fn encode_plan(plan: &UnsignedTransactionPlan) -> Result<String, String> {
 }
 
 pub fn encode_covenant(
-    inputs: &[crate::chain::utxo::UtxoEntry],
+    inputs: &[crate::primitives::utxo::UtxoEntry],
     outputs: &[PskbOutput],
 ) -> Result<String, String> {
     let planned_inputs = inputs
@@ -27,7 +29,7 @@ pub fn encode_covenant(
 }
 
 pub fn encode_covenant_with_payload(
-    inputs: &[crate::chain::utxo::UtxoEntry],
+    inputs: &[crate::primitives::utxo::UtxoEntry],
     outputs: &[PskbOutput],
     payload: &[u8],
 ) -> Result<String, String> {

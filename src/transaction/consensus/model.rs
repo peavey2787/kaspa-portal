@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use serde::Serialize;
 
 #[derive(Clone, Debug, Serialize)]

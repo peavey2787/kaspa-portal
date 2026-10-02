@@ -1,8 +1,12 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 // Kaspa Portal — organized PSKT subsystem
 // License: GPL-3.0
 
+#[cfg(feature = "std")]
 use serde_json::{Map, Value};
 
+#[cfg(feature = "std")]
 pub(crate) fn strip_optional_covenant_salt(redeem: &[u8]) -> &[u8] {
     if redeem.first() == Some(&0x08)
         && redeem.get(9) == Some(&0x75)
@@ -17,6 +21,7 @@ pub(crate) fn strip_optional_covenant_salt(redeem: &[u8]) -> &[u8] {
     }
 }
 
+#[cfg(feature = "std")]
 pub(crate) fn first_schnorr_signature<'a>(
     partial_signatures: &'a Map<String, Value>,
     missing_signature: String,
@@ -62,6 +67,7 @@ pub(crate) fn push_data_item(ss: &mut Vec<u8>, data: &[u8]) -> Result<(), String
     Ok(())
 }
 
+#[cfg(feature = "std")]
 pub(crate) fn push_data_sigscript(buf: &mut Vec<u8>, data: &[u8]) {
     if data.len() <= 75 {
         buf.push(data.len() as u8);
@@ -78,6 +84,7 @@ pub(crate) fn push_data_sigscript(buf: &mut Vec<u8>, data: &[u8]) {
     buf.extend_from_slice(data);
 }
 
+#[cfg(feature = "std")]
 pub(crate) fn push_int_sigscript(buf: &mut Vec<u8>, value: u64) {
     if value == 0 {
         buf.push(0x00);

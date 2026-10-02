@@ -1,4 +1,6 @@
 //! Shipment-escrow covenant script assembly.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use crate::contract::script::opcode as ops;
 

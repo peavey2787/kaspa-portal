@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use crate::{
     contract::script::walk::item_end, transaction::interchange::pskt::model::KsptSigRecord,
 };

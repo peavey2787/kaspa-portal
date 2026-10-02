@@ -8,6 +8,7 @@
 pub mod shared;
 pub mod standard;
 
+#[cfg(feature = "std")]
 mod consensus;
 mod error;
 pub(crate) mod exact_json;
@@ -18,8 +19,11 @@ mod review;
 pub(crate) mod scripts;
 pub(crate) mod wire;
 
+#[cfg(feature = "std")]
 pub(crate) use consensus::finalize_to_consensus;
-pub use kspt_bridge::{merge_signed_kspt_into_pskb, relay_pskb_as_kspt_hex_for_network};
+pub use kspt_bridge::merge_signed_kspt_into_pskb;
+#[cfg(feature = "std")]
+pub use kspt_bridge::relay_pskb_as_kspt_hex_for_network;
 pub use model::{InputSummary, OutputSummary, PartialSigInfo, PsktFormat, PsktSummary};
 pub use review::parse_summary;
 pub use scripts::push_redeem_script;

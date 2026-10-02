@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CompactKsptSignature {
     pub(crate) pubkey_pos: u8,

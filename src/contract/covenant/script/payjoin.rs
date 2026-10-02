@@ -1,4 +1,6 @@
 use super::{push_int, push_pubkey};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// Build a PayJoin covenant redeem script.
 ///
 /// Enforces that the spending TX has mixed inputs — the spender MUST

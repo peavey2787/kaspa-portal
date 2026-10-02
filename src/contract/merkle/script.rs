@@ -2,6 +2,8 @@
 // License: GPL-3.0.
 
 //! Merkle-whitelist vault script builder plus the merkle root and proof helpers.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use crate::contract::script::{
     opcode as covenant_ops, p2sh::blake2b_hash, push_data, push_int, push_pubkey,

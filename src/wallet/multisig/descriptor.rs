@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

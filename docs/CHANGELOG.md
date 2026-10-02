@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0
+
+- New default `std` feature. With `default-features = false` Kaspa Portal is a
+  `no_std` + `alloc` signing core (keys, BIP32/BIP39/BIP85 derivation,
+  addresses, transaction model, sighash, Schnorr signing, PSKT/KSPT
+  interchange, crypto) for embedded and air-gapped signers, so hardware
+  wallets share the audited host implementation instead of carrying a copy.
+- Every dependency is declared `default-features = false`; operating-system
+  dependencies (network, randomness, arkworks, VRF, QR rendering, tokio) are
+  optional and enabled by `std`. `wasm` implies `std`. Default builds are
+  unchanged.
+- CI builds the core for `thumbv7em-none-eabihf` with warnings denied.
+
 ## 1.2.1
 
 - Payload sends (`create_send_with_payload`) no longer fail with "payload-aware

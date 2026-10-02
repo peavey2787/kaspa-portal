@@ -1,4 +1,6 @@
 use super::{push_int, push_pubkey};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// Build a Piggy Bank covenant redeem script.
 ///
 /// Two optional break conditions for the owner: savings goal and/or deadline.

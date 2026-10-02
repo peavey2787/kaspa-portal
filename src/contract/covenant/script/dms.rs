@@ -1,4 +1,6 @@
 use super::{push_int, push_pubkey};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// Build a true dead man's switch script using CSV (relative timelock).
 ///
 /// Owner can spend anytime (heartbeat: send back to same address to reset timer).

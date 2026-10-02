@@ -8,6 +8,7 @@ pub(crate) fn item_end(script: &[u8], offset: usize) -> Option<usize> {
     })
 }
 
+#[cfg(feature = "std")]
 pub(crate) fn contains_opcode_pair(script: &[u8], first: u8, second: u8) -> bool {
     let mut offset = 0usize;
     for _ in 0..script.len() {

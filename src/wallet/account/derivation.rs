@@ -6,6 +6,8 @@
 // Hardened account-level BIP32 derivation and watch-only wallet model.
 
 //! BIP-32 hierarchical key derivation and the watch-only wallet descriptor model.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use hmac::{Hmac, Mac};
 use k256::elliptic_curve::sec1::ToEncodedPoint;

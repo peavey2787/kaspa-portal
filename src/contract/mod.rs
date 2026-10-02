@@ -1,4 +1,6 @@
+#[cfg(feature = "std")]
 pub mod facade;
+#[cfg(feature = "std")]
 pub use facade::ContractApi;
 pub mod commit_reveal;
 pub mod covenant;

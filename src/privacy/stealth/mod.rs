@@ -13,6 +13,7 @@ pub use metadata::{
 };
 pub use payment::{generate_stealth_payment, StealthPayment};
 
+#[cfg(feature = "std")]
 pub(crate) mod scanner;
 
 #[cfg(test)]

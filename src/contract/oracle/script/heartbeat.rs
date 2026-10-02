@@ -1,5 +1,7 @@
 //! Fixed-address heartbeat covenant.
 use super::{push_data, push_int};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// Oracle (Model B) keyless strict-singleton heartbeat: the discovery signpost.
 ///
 /// Fixed-address self-perpetuating singleton. The oracle ROLL branch requires

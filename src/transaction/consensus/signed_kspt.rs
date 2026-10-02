@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use crate::{
     network::codec::primitives::WireReader,
     transaction::consensus::{

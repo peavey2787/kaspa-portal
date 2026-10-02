@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Spendable transaction output returned by a Kaspa node.

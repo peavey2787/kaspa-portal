@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use sha2::{Digest, Sha256};
 
 const ANNOUNCEMENT_SEED: &[u8] = b"KaspaPortal-Stealth-Announce-v1";

@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 // Kaspa Portal — PSKT / PSKB envelope encoding
 // License: GPL-3.0
 
@@ -138,6 +140,7 @@ fn validated_pskt(
     }
 }
 
+#[cfg(feature = "std")]
 pub(crate) fn pskt_from_root(root: &Value, format: PsktFormat) -> Result<&Value, String> {
     validated_pskt(root, format, PskbShapeStyle::Standard)
 }

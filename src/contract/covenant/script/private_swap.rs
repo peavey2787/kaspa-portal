@@ -4,6 +4,8 @@
 //! sighash. The adaptor construction exists only off-chain, so no preimage or
 //! shared hash appears on-chain. The claim transaction is constrained to one
 //! input, one fixed destination output, and a bounded fee as defense in depth.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use super::covenant_ops::*;
 use super::{push_data, push_int, push_pubkey};

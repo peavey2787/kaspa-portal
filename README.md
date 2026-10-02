@@ -175,7 +175,8 @@ IndexedDB persistence stores dehydrated/versioned plain data only, never Rust/WA
 
 ## Features
 
-- Default: native/core SDK without secret-export helpers.
+- `std` (default): the full native SDK (networking, chain, indexer, contracts, randomness, platform adapters and the `KaspaPortal` facade), without secret-export helpers.
+- No default features (`default-features = false`): a `no_std` + `alloc` signing core for embedded and air-gapped signers. It contains keys, BIP32/BIP39/BIP85 derivation, addresses, the transaction model, sighash, Schnorr signing, PSKT/KSPT interchange and parsing, script push helpers and crypto. Network, builders, finalization and the facades need `std`. CI keeps it building on a bare-metal target (`thumbv7em-none-eabihf`) with warnings denied.
 - `wasm`: browser/WASM bindings and IndexedDB/WebSocket/fetch adapters.
 - `secret-export`: explicitly enables raw VRF secret export helpers. Do not enable it unless an application genuinely needs them.
 

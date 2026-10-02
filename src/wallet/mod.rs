@@ -1,9 +1,11 @@
 pub mod account;
 pub mod address;
 pub mod derivation;
+#[cfg(feature = "std")]
 pub mod facade;
 pub mod key;
 pub mod mnemonic;
 pub mod multisig;
 pub mod storage;
+#[cfg(feature = "std")]
 pub use facade::WalletApi;

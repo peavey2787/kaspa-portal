@@ -1,5 +1,7 @@
 //! Shared covenant-ID single-thread enforcement script fragment.
 use super::push_int;
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// Append the common continuation-or-close enforcement used by global-thread
 /// spending-limit and allowance covenants.
 pub(super) fn append_global_thread_enforcement(script: &mut Vec<u8>, max_withdraw_sompi: u64) {

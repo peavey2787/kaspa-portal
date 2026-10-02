@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 // Kaspa Portal — PSKT / PSKB wire errors
 // License: GPL-3.0
 

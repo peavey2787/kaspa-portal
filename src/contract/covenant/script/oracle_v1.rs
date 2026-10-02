@@ -3,6 +3,8 @@
 //! Each covenant embeds one unique exact 32-byte statement commitment at
 //! creation time. The oracle signs that commitment through the isolated covenant-key hierarchy. The claim branch verifies only that
 //! attestation from another covenant or another statement cannot be substituted.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use super::{push_data, push_int, push_pubkey};
 

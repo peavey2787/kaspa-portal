@@ -1,4 +1,6 @@
 //! Oracle consumer signature scripts.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use super::push_data;
 

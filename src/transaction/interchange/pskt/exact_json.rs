@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use serde_json::{Map, Value};
 
 pub(crate) fn parse_exact_u64(value: &Value, field: &str) -> Result<u64, String> {

@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 pub fn build_redeem_script(threshold: u8, public_keys: &[[u8; 32]]) -> Result<Vec<u8>, String> {
     let count =
         u8::try_from(public_keys.len()).map_err(|_| "Too many multisig public keys".to_string())?;

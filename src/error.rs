@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use thiserror::Error;
 
 pub type Result<T> = core::result::Result<T, Error>;

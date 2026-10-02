@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 // Kaspa Portal — signed KSPT merge into PSKT / PSKB
 // License: GPL-3.0
 

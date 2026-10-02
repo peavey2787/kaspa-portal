@@ -2,6 +2,8 @@
 // License: GPL-3.0.
 
 //! KIP-20 tagged- and split-vault script builders and covenant-id computation.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use crate::contract::script::{opcode as covenant_ops, push_pubkey};
 

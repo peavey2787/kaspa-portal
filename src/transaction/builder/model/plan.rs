@@ -1,4 +1,6 @@
-use crate::chain::utxo::UtxoEntry;
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
+use crate::primitives::utxo::UtxoEntry;
 
 use super::{PlannedInput, PlannedOutput};
 

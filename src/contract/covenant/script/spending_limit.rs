@@ -1,4 +1,6 @@
 use super::{push_int, push_pubkey};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// GLOBAL spending limit (covenant_id single-thread).
 ///
 /// Unlike the per-UTXO `build_spending_limit_script`, the whole balance is held

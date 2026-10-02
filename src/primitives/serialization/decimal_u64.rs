@@ -3,6 +3,8 @@
 //! Every value is encoded as a canonical decimal string. JSON numeric literals
 //! are deliberately rejected: JavaScript cannot represent every `u64`, and a
 //! single canonical wire representation prevents platform-dependent rounding.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 use serde::{Deserialize, Deserializer, Serializer};
 

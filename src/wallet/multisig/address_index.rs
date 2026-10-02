@@ -1,4 +1,6 @@
 use super::{build_redeem_script, MultisigDescriptor};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 const MAX_DISCOVERY_INDEX: u32 = 100;
 

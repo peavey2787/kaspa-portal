@@ -1,4 +1,6 @@
 use super::{push_int, push_pubkey};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 /// Build a GLOBAL single-thread ALLOWANCE covenant redeem script.
 ///
 /// Like the global spending-limit, this binds a `covenant_id` so the per-spend

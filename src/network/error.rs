@@ -1,4 +1,6 @@
-use std::fmt;
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
+use core::fmt;
 
 #[derive(Debug, Clone)]
 pub enum NetworkError {

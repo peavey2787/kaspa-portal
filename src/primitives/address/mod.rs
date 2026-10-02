@@ -1,5 +1,7 @@
 //! Canonical Kaspa address encoding, decoding, validation, and script conversion.
 //! This low-level module is shared by network, wallet, transaction, and contract code.
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 const CHARSET: &[u8; 32] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const CHECKSUM_LEN: usize = 8;

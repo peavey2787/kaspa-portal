@@ -1,4 +1,6 @@
 use super::opcode;
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 
 pub fn push_int(script: &mut Vec<u8>, value: u64) {
     if value == 0 {

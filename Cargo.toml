@@ -1,7 +1,7 @@
 
 [package]
 name = "kaspa-portal"
-version = "1.2.1"
+version = "1.3.0"
 edition = "2021"
 rust-version = "1.95"
 license = "GPL-3.0-only"
@@ -14,8 +14,46 @@ categories = ["cryptography::cryptocurrencies", "api-bindings", "wasm"]
 crate-type = ["rlib", "cdylib"]
 
 [features]
-default = []
+# `std` (default) is the full SDK: networking, chain, indexer, contracts,
+# randomness, browser/native platforms and the `KaspaPortal` facade. Without it
+# the crate is a `no_std` + `alloc` signing core (keys, derivation, mnemonics,
+# addresses, transaction model, sighash, signing, PSKT/KSPT interchange,
+# crypto) for embedded signers such as KasKold's hardware wallet firmware.
+default = ["std"]
+std = [
+    "sha2/std",
+    "k256/std",
+    "k256/precomputed-tables",
+    "aes-gcm/std",
+    "blake2/std",
+    "blake2b_simd/std",
+    "blake3/std",
+    "zeroize/std",
+    "argon2/std",
+    "hmac/std",
+    "hex/std",
+    "serde/std",
+    "serde_json/std",
+    "base64/std",
+    "subtle/std",
+    "thiserror/std",
+    "dep:getrandom",
+    "dep:qrcode",
+    "dep:ed25519-dalek",
+    "dep:vrf-rfc9381",
+    "dep:ark-bn254",
+    "dep:ark-groth16",
+    "dep:ark-relations",
+    "dep:ark-serialize",
+    "dep:ark-std",
+    "dep:ark-snark",
+    "dep:tokio",
+    "dep:tokio-tungstenite",
+    "dep:futures-util",
+    "dep:reqwest",
+]
 wasm = [
+    "std",
     "dep:wasm-bindgen",
     "dep:wasm-bindgen-futures",
     "dep:js-sys",
@@ -24,41 +62,41 @@ wasm = [
 secret-export = []
 
 [dependencies]
-sha2 = "0.10"
-ripemd = "0.1.3"
-k256 = { version = "0.13.4", features = ["arithmetic", "ecdsa", "schnorr"] }
-aes-gcm = { version = "0.10.3", features = ["aes"] }
-blake2 = "0.10.6"
-blake2b_simd = "1"
-blake3 = "1"
-zeroize = { version = "1.8.2", features = ["derive"] }
-argon2 = { version = "=0.5.3", features = ["zeroize"] }
-hmac = "0.12"
-hex = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-getrandom = { version = "0.2", features = ["js"] }
-base64 = "0.22"
-qrcode = { version = "0.14.1", default-features = false }
-ed25519-dalek = "2.2"
-thiserror = "2"
-subtle = "2"
-vrf-rfc9381 = { version = "=0.0.7", features = ["edwards25519"] }
-ark-bn254 = { version = "0.5", default-features = false, features = ["curve"] }
-ark-groth16 = { version = "0.5", default-features = false, features = ["std"] }
-ark-relations = { version = "0.5", default-features = false, features = ["std"] }
-ark-serialize = { version = "0.5", default-features = false, features = ["std"] }
-ark-std = { version = "0.5", default-features = false, features = ["std"] }
-ark-snark = { version = "0.5", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+ripemd = { version = "0.1.3", default-features = false }
+k256 = { version = "0.13.4", default-features = false, features = ["arithmetic", "ecdsa", "schnorr", "sha256", "alloc"] }
+aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc"] }
+blake2 = { version = "0.10.6", default-features = false }
+blake2b_simd = { version = "1", default-features = false }
+blake3 = { version = "1", default-features = false }
+zeroize = { version = "1.8.2", default-features = false, features = ["derive", "alloc"] }
+argon2 = { version = "=0.5.3", default-features = false, features = ["zeroize", "alloc"] }
+hmac = { version = "0.12", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+subtle = { version = "2", default-features = false }
+thiserror = { version = "2", default-features = false }
+getrandom = { version = "0.2", features = ["js"], optional = true }
+qrcode = { version = "0.14.1", default-features = false, optional = true }
+ed25519-dalek = { version = "2.2", optional = true }
+vrf-rfc9381 = { version = "=0.0.7", features = ["edwards25519"], optional = true }
+ark-bn254 = { version = "0.5", default-features = false, features = ["curve"], optional = true }
+ark-groth16 = { version = "0.5", default-features = false, features = ["std"], optional = true }
+ark-relations = { version = "0.5", default-features = false, features = ["std"], optional = true }
+ark-serialize = { version = "0.5", default-features = false, features = ["std"], optional = true }
+ark-std = { version = "0.5", default-features = false, features = ["std"], optional = true }
+ark-snark = { version = "0.5", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1", features = ["net", "time", "rt", "sync", "macros"] }
-tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
-futures-util = { version = "0.3", features = ["sink"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["net", "time", "rt", "sync", "macros"], optional = true }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"], optional = true }
+futures-util = { version = "0.3", features = ["sink"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc"], optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
 js-sys = { version = "0.3", optional = true }

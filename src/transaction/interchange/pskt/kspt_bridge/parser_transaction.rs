@@ -1,4 +1,6 @@
 use super::KsptReader;
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use crate::transaction::interchange::pskt::model::{
     CompactKsptInput, CompactKsptOutput, CompactKsptSignature, CompactKsptTransaction,
 };

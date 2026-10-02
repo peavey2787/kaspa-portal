@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 const STORAGE_MASS_C: u64 = 1_000_000_000_000;
 const MAX_STANDARD_MASS: u64 = 100_000;
 const DUST_THRESHOLD: u64 = 20_000_000;

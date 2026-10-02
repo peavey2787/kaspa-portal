@@ -1,3 +1,5 @@
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use k256::PublicKey;
 
 use super::keys::{pubkey_from_xonly, x_only_bytes};
