@@ -163,10 +163,62 @@ fn test_account_xprv_recovery_roundtrip() -> bool {
         && original_change.private_key_bytes() == imported_change.private_key_bytes()
 }
 
+/// Fixed account-export vectors from the original hardware-signer release:
+/// the account kpub payload and the Base58Check XPrv for a deterministic seed,
+/// plus the receive/change keys recovered from that XPrv.
+fn test_account_export_vectors() -> bool {
+    const ORIGINAL_XPRV: &[u8] = b"kprv65jKp8LrvxnSYE5fHUFquqHqeu6nTXWbfJ6VpTsZitMHgS6TG18otyx3g79CTSqTRR6VRZjm7hw9TxcNUJhaxKmLaAzjXz7b5k3cA5MjDbb";
+    const ORIGINAL_PAYLOAD: [u8; XPUB_PAYLOAD_LEN] = [
+        0x03, 0x8f, 0x33, 0x2e, 0x03, 0x8f, 0x43, 0x5e, 0x7f, 0x80, 0x00, 0x00, 0x00, 0x7e, 0x95,
+        0xe6, 0x10, 0x9b, 0x69, 0xe2, 0xe5, 0xb5, 0xe5, 0x02, 0x03, 0x16, 0x9f, 0x29, 0x84, 0x29,
+        0xc7, 0x74, 0x81, 0xcf, 0xcb, 0x17, 0xb5, 0x53, 0xa4, 0x90, 0xdd, 0xb6, 0x5b, 0x89, 0xe7,
+        0x03, 0xf6, 0x2a, 0x46, 0x03, 0xcd, 0x37, 0xd4, 0x06, 0x86, 0xe1, 0xff, 0xb2, 0x54, 0x66,
+        0xf5, 0x33, 0x0e, 0x4f, 0xec, 0xc5, 0xea, 0xb5, 0x5f, 0xed, 0x43, 0xda, 0xbc, 0x4c, 0xc7,
+        0x28, 0x71, 0x8b,
+    ];
+    const RECEIVE_7: [u8; 32] = [
+        0x8e, 0x80, 0x99, 0xd2, 0xe9, 0xa0, 0x9d, 0xad, 0x28, 0xb2, 0x02, 0x16, 0xb3, 0xca, 0x98,
+        0x6b, 0x1d, 0x75, 0x6e, 0xbd, 0xc8, 0x61, 0xc9, 0xcb, 0xdd, 0x59, 0x25, 0x17, 0x57, 0xbe,
+        0x71, 0xbc,
+    ];
+    const CHANGE_4: [u8; 32] = [
+        0x82, 0xca, 0xeb, 0x62, 0x6e, 0x45, 0xea, 0xae, 0x86, 0xbd, 0x05, 0x05, 0x03, 0xfd, 0x30,
+        0x77, 0xbe, 0x76, 0x72, 0x3f, 0x11, 0xd6, 0xee, 0x31, 0x4d, 0xf0, 0xe9, 0x2a, 0x5c, 0x35,
+        0xab, 0x09,
+    ];
+
+    let mut seed = [0u8; 64];
+    for (index, byte) in seed.iter_mut().enumerate() {
+        *byte = (index as u8).wrapping_mul(3).wrapping_add(17);
+    }
+    let mut payload = [0u8; XPUB_PAYLOAD_LEN];
+    if derive_account_raw_kpub_payload(&seed, &mut payload).is_err() || payload != ORIGINAL_PAYLOAD
+    {
+        return false;
+    }
+    let mut xprv = [0u8; XPRV_MAX_LEN];
+    let Ok(xprv_length) = derive_and_serialize_xprv(&seed, &mut xprv) else {
+        return false;
+    };
+    if &xprv[..xprv_length] != ORIGINAL_XPRV {
+        return false;
+    }
+    let Ok(imported) = import_xprv_with_metadata(ORIGINAL_XPRV) else {
+        return false;
+    };
+    let (Ok(receive), Ok(change)) = (
+        crate::wallet::derivation::bip32::derive_address_key(&imported.key, 7),
+        crate::wallet::derivation::bip32::derive_change_key(&imported.key, 4),
+    ) else {
+        return false;
+    };
+    receive.private_key_bytes() == &RECEIVE_7 && change.private_key_bytes() == &CHANGE_4
+}
+
 /// Run extended public key test suite.
 pub fn run_xpub_tests() -> (u32, u32) {
     let mut passed = 0u32;
-    let total = 6u32;
+    let total = 7u32;
 
     if test_base58_encoding() {
         passed += 1;
@@ -184,6 +236,9 @@ pub fn run_xpub_tests() -> (u32, u32) {
         passed += 1;
     }
     if test_account_xprv_recovery_roundtrip() {
+        passed += 1;
+    }
+    if test_account_export_vectors() {
         passed += 1;
     }
 

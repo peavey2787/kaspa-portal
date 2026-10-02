@@ -57,3 +57,21 @@ fn schnorr_accessors_errors_and_known_answer_are_covered() {
         &BIP340_VECTOR0_EXPECTED,
     ));
 }
+
+#[test]
+fn bip340_known_answer_constant_is_the_published_vector_zero() {
+    // bips/bip-0340/test-vectors.csv, index 0: secret key 3, zero message and
+    // auxiliary randomness. Pinned as text so a wrong constant cannot also be
+    // the thing the known-answer test compares against.
+    const PUBLIC_KEY: &str = "F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9";
+    const SIGNATURE: &str = "E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA8215\
+                             25F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0";
+    assert_eq!(
+        hex::encode_upper(BIP340_VECTOR0_EXPECTED.public_key_x),
+        PUBLIC_KEY
+    );
+    assert_eq!(
+        hex::encode_upper(BIP340_VECTOR0_EXPECTED.signature),
+        SIGNATURE
+    );
+}

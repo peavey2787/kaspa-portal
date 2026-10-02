@@ -56,6 +56,9 @@ Portal instead of carrying its own copy.
   are exported so signers and hosts share one version byte.
 - `crypto::adaptor::extract_adaptor_secret` recovers the Private Swap secret
   from a completed signature, so hosts share the signer's adaptor math.
+- The xpub power-on self-test also checks the original hardware-signer
+  account-export vectors (kpub payload, XPrv text and recovered keys), and a
+  unit test pins the BIP340 known-answer constant to the published vector 0.
 - Ported the hardware signer's test suites for bytes, covenant branch
   resolution, QR frames and sessions, anti-klepto wire, PSKT state, account
   keys and BIP32 xpub import.
