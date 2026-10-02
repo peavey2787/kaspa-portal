@@ -22,6 +22,17 @@ fn transaction_bound_adaptor_presign_completes_and_extracts() {
     );
     let sig = SchnorrSignature { bytes: final_bytes };
     schnorr_verify(&px, &msg, &sig).expect("completed BIP340");
+    assert_eq!(extract_adaptor_secret(&final_bytes, &pre), Ok(t));
+    let mut other_nonce = final_bytes;
+    other_nonce[0] ^= 1;
+    assert_eq!(
+        extract_adaptor_secret(&other_nonce, &pre),
+        Err(AdaptorError::InvalidCompletedSignature)
+    );
+    assert_eq!(
+        extract_adaptor_secret(&pre.bytes, &pre),
+        Err(AdaptorError::InvalidCompletedSignature)
+    );
     assert!(
         schnorr_verify(&px, &[8u8; 32], &sig).is_err(),
         "claim signature must be transaction-sighash bound"
@@ -56,6 +67,11 @@ fn negated_adaptor_nonce_branch_verifies_and_completes_exactly() {
             complete_adaptor_presignature(&presig, &adaptor_secret).expect("negated completion");
         schnorr_verify(&public_x, &message, &SchnorrSignature { bytes: completed })
             .expect("negated completion is BIP340-valid");
+        assert_eq!(
+            extract_adaptor_secret(&completed, &presig),
+            Ok(adaptor_secret),
+            "negated branch extracts the original secret"
+        );
         return;
     }
     panic!("deterministic fixture did not produce a negated adaptor nonce");

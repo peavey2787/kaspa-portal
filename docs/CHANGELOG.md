@@ -54,6 +54,8 @@ Portal instead of carrying its own copy.
 - `transaction::interchange::qr::security` (multi-frame session binding) is
   part of the `no_std` core, and `kspt::KSPT_VERSION` / `kspt::KSSN_VERSION`
   are exported so signers and hosts share one version byte.
+- `crypto::adaptor::extract_adaptor_secret` recovers the Private Swap secret
+  from a completed signature, so hosts share the signer's adaptor math.
 - Ported the hardware signer's test suites for bytes, covenant branch
   resolution, QR frames and sessions, anti-klepto wire, PSKT state, account
   keys and BIP32 xpub import.

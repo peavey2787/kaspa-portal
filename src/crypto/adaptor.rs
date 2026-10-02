@@ -144,6 +144,30 @@ pub fn complete_adaptor_presignature(
     Ok(signature)
 }
 
+/// Recover the adaptor secret from a completed signature and the
+/// pre-signature it completed. Fails unless both share the nonce and the
+/// recovered secret is nonzero.
+pub fn extract_adaptor_secret(
+    completed: &[u8; 64],
+    presig: &AdaptorPreSignature,
+) -> Result<[u8; 32], AdaptorError> {
+    if completed[..32] != presig.bytes[..32] {
+        return Err(AdaptorError::InvalidCompletedSignature);
+    }
+    let mut s_bytes = [0u8; 32];
+    s_bytes.copy_from_slice(&completed[32..]);
+    let s = scalar_from_canonical(&s_bytes).ok_or(AdaptorError::InvalidCompletedSignature)?;
+    let mut prime_bytes = [0u8; 32];
+    prime_bytes.copy_from_slice(&presig.bytes[32..]);
+    let s_prime = scalar_from_canonical(&prime_bytes).ok_or(AdaptorError::InvalidPreSignature)?;
+    let delta = s - s_prime;
+    if bool::from(delta.is_zero()) {
+        return Err(AdaptorError::InvalidCompletedSignature);
+    }
+    let secret = if presig.negated { delta.neg() } else { delta };
+    Ok(secret.to_bytes().into())
+}
+
 pub fn verify_adaptor_presignature(
     public_x: &[u8; 32],
     message: &[u8; 32],
