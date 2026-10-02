@@ -136,3 +136,11 @@ pub fn verify_session(payload: &[u8], expected: &[u8; SESSION_ID_LEN]) -> bool {
 pub fn is_session_frame(data: &[u8]) -> bool {
     data.len() >= FRAME_HEADER_LEN && data[..2] == FRAME_MAGIC && data[2] == FRAME_VERSION
 }
+
+#[cfg(test)]
+#[path = "unit-tests/frame.rs"]
+mod unit_tests;
+
+#[cfg(test)]
+#[path = "unit-tests/frame_boundaries.rs"]
+mod boundary_tests;

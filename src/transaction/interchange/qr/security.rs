@@ -28,3 +28,7 @@ pub(crate) fn authorize_frame_session(
 #[cfg(test)]
 #[path = "unit-tests/security.rs"]
 mod unit_tests;
+
+#[cfg(test)]
+#[path = "unit-tests/security_sessions.rs"]
+mod session_tests;

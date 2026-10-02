@@ -49,23 +49,27 @@ pub enum PrivateSwapError {
     FeeTooHigh,
 }
 
+struct PrivateSwapClaim {
+    salt: [u8; 16],
+    claimer_pubkey: [u8; 32],
+    destination_spk: Vec<u8>,
+}
+
 pub fn parse_private_swap_script(script: &[u8]) -> Result<PrivateSwapScript, PrivateSwapError> {
     let mut pos = 0usize;
-    let (salt, claimer_pubkey, destination_spk) = parse_private_swap_claim(script, &mut pos)?;
+    let claim = parse_private_swap_claim(script, &mut pos)?;
     let (owner_pubkey, refund_locktime_daa) = parse_private_swap_refund(script, &mut pos)?;
-    if owner_pubkey == claimer_pubkey || pos != script.len() {
+    if owner_pubkey == claim.claimer_pubkey || pos != script.len() {
         return Err(PrivateSwapError::InvalidScript);
     }
     Ok(PrivateSwapScript {
-        salt,
-        claimer_pubkey,
+        salt: claim.salt,
+        claimer_pubkey: claim.claimer_pubkey,
         owner_pubkey,
-        destination_spk,
+        destination_spk: claim.destination_spk,
         refund_locktime_daa,
     })
 }
-
-type PrivateSwapClaim = ([u8; 16], [u8; 32], Vec<u8>);
 
 fn parse_private_swap_claim(
     script: &[u8],
@@ -76,7 +80,11 @@ fn parse_private_swap_claim(
     let claimer_pubkey = parse_claim_pubkey(script, pos)?;
     let destination_spk = parse_claim_destination(script, pos)?;
     parse_claim_fee_policy(script, pos)?;
-    Ok((salt, claimer_pubkey, destination_spk))
+    Ok(PrivateSwapClaim {
+        salt,
+        claimer_pubkey,
+        destination_spk,
+    })
 }
 
 fn parse_claim_salt(script: &[u8], pos: &mut usize) -> Result<[u8; 16], PrivateSwapError> {
@@ -174,8 +182,16 @@ fn validate_claim_transaction_shape(tx: &Transaction) -> Result<SigHashType, Pri
     if input.sig_count != 0 || input.incoming_partial_sigs_count != 0 {
         return Err(PrivateSwapError::InvalidTransaction);
     }
-    let sighash_type =
-        SigHashType::from_byte(input.sighash_type).ok_or(PrivateSwapError::InvalidSighash)?;
+    // Compact KSPT carries sighash metadata with signature records, not as
+    // a standalone field on an unsigned input. Private Swap claims must be
+    // unsigned here, so a zero model byte is the canonical wire-round-trip
+    // representation of the protocol default: SIGHASH_ALL. This mirrors the
+    // watcher bridge's `expected_added_sighash` rule.
+    let sighash_type = if input.sighash_type == 0 {
+        SigHashType::All
+    } else {
+        SigHashType::from_byte(input.sighash_type).ok_or(PrivateSwapError::InvalidSighash)?
+    };
     if sighash_type != SigHashType::All {
         Err(PrivateSwapError::InvalidSighash)
     } else {
@@ -205,7 +221,13 @@ fn validate_claim_output(
 ) -> Result<(), PrivateSwapError> {
     let input = &tx.inputs[0];
     let output = &tx.outputs[0];
-    let mut actual_spk = Vec::with_capacity(2 + output.script_public_key.script_len);
+    let capacity = 2usize
+        .checked_add(output.script_public_key.script_len)
+        .ok_or(PrivateSwapError::InvalidScript)?;
+    let mut actual_spk = Vec::new();
+    actual_spk
+        .try_reserve_exact(capacity)
+        .map_err(|_| PrivateSwapError::InvalidScript)?;
     actual_spk.extend_from_slice(&output.script_public_key.version.to_le_bytes());
     actual_spk.extend_from_slice(output.script_public_key.script_bytes());
     if actual_spk != policy.destination_spk {

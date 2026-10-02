@@ -308,9 +308,47 @@ pub fn recompute_known_commitment(scheme: KnownScheme, context: &[u8]) -> Option
     }
 }
 
+/// `KeyPresent` is deliberately weaker than a registered covenant grammar, but
+/// the key must still be an actual pushed script value: a coincidental 32-byte
+/// occurrence inside a larger payload is not a binding.
 #[must_use]
 pub fn script_contains_xonly_key(script: &[u8], pubkey_x: &[u8; 32]) -> bool {
-    script.windows(32).any(|window| window == pubkey_x)
+    let mut cursor = 0usize;
+    while cursor < script.len() {
+        let Some((payload, next)) = next_push(script, cursor) else {
+            return false;
+        };
+        if payload == Some(pubkey_x.as_slice()) {
+            return true;
+        }
+        cursor = next;
+    }
+    false
+}
+
+/// Decode the opcode at `cursor`. Returns the pushed payload (`None` for a
+/// non-push opcode) and the following cursor, or `None` when truncated.
+fn next_push(script: &[u8], cursor: usize) -> Option<(Option<&[u8]>, usize)> {
+    let opcode = *script.get(cursor)?;
+    let (payload_len, start) = match opcode {
+        0x01..=0x4b => (usize::from(opcode), cursor + 1),
+        0x4c => (usize::from(*script.get(cursor + 1)?), cursor + 2),
+        0x4d => {
+            let length = script.get(cursor + 1..cursor + 3)?;
+            (
+                usize::from(u16::from_le_bytes([length[0], length[1]])),
+                cursor + 3,
+            )
+        }
+        0x4e => {
+            let length = script.get(cursor + 1..cursor + 5)?;
+            let length = u32::from_le_bytes([length[0], length[1], length[2], length[3]]);
+            (usize::try_from(length).ok()?, cursor + 5)
+        }
+        _ => return Some((None, cursor + 1)),
+    };
+    let end = start.checked_add(payload_len)?;
+    Some((Some(script.get(start..end)?), end))
 }
 
 #[must_use]
@@ -319,10 +357,8 @@ pub fn script_binds_fixed_commitment(
     commitment: &[u8; 32],
     pubkey_x: &[u8; 32],
 ) -> bool {
-    let pattern = fixed_checksigfromstack_pattern(commitment, pubkey_x);
-    script
-        .windows(pattern.len())
-        .any(|window| window == pattern)
+    // The fixed grammar is the whole script, not a pattern found inside one.
+    script == fixed_checksigfromstack_pattern(commitment, pubkey_x).as_slice()
 }
 
 /// Validate the complete registered script grammar for a known covenant.

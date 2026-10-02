@@ -28,8 +28,18 @@ Portal instead of carrying its own copy.
 - ECIES allocates fallibly and never panics on malformed points; Schnorr
   verification is split into out-of-line stages to bound embedded stack use.
 - BIP39 seed stretching has a precomputed loop bound and zeroizes on drop.
+- Covenant `KeyPresent` binding requires the key as an actual pushed script
+  value, and `FixedCheckSigFromStack` requires the whole script to equal the
+  fixed grammar; previously a matching byte window anywhere in the script
+  was accepted.
+- Private Swap claim validation allocates fallibly and treats an unsigned
+  input's zero sighash byte as the SIGHASH_ALL protocol default.
 - Totality tests feed every externally reachable parser truncated input and
-  noise of every length up to 600 bytes.
+  noise of every length up to 600 bytes, including the anti-klepto,
+  covenant-sign and Private Swap wire protocols.
+- Ported the hardware signer's test suites for bytes, covenant branch
+  resolution, QR frames and sessions, anti-klepto wire, PSKT state, account
+  keys and BIP32 xpub import.
 - Standard PSKT parser/serializer replaced by the hardened implementation with
   a split schema module, u32 offsets, and fallible storage.
 

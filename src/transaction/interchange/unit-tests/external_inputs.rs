@@ -36,6 +36,22 @@ fn parse_everything(data: &[u8]) {
     let mut out = [0u8; 78];
     let _ = xpub::decode_kpub_or_xpub(data, &mut out);
     let _ = xpub::parse_kpub_parts(data);
+    parse_signing_protocols(data);
+}
+
+fn parse_signing_protocols(data: &[u8]) {
+    use crate::transaction::signing::{anti_klepto::protocol as anti_klepto, covenant::protocol};
+
+    let _ = anti_klepto::parse_request(data);
+    let _ = anti_klepto::parse_commitment(data);
+    let _ = anti_klepto::parse_reveal(data);
+    let _ = anti_klepto::parse_signed(data);
+    let _ = protocol::parse_request(data);
+    let _ = protocol::parse_reveal(data);
+    let _ = protocol::parse_response(data);
+    let _ = protocol::private_swap::parse_request(data);
+    let _ = protocol::private_swap::parse_reveal(data);
+    let _ = protocol::private_swap::parse_response(data);
 }
 
 #[test]

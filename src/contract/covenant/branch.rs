@@ -328,3 +328,7 @@ fn advance_push(
     }
     Ok(next)
 }
+
+#[cfg(test)]
+#[path = "unit-tests/branch.rs"]
+mod unit_tests;

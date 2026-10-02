@@ -43,3 +43,11 @@ pub fn decode_account_key_text(
     decode_lower_hex(&text[ACCOUNT_KEY_TEXT_PREFIX.len()..], output)?;
     validate_account_key_payload(output).then_some(ACCOUNT_KEY_PAYLOAD_LEN)
 }
+
+#[cfg(test)]
+#[path = "unit-tests/account.rs"]
+mod unit_tests;
+
+#[cfg(test)]
+#[path = "unit-tests/property.rs"]
+mod property_tests;

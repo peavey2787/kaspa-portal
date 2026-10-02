@@ -112,3 +112,7 @@ pub fn zeroize_bytes(values: &mut [u8]) {
 pub fn zeroize_u16(values: &mut [u16]) {
     volatile_clear(values, 0u16);
 }
+
+#[cfg(test)]
+#[path = "unit-tests/bytes.rs"]
+mod unit_tests;

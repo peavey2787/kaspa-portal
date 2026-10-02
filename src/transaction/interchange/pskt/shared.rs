@@ -137,3 +137,7 @@ impl Default for PsktParsed {
         Self::empty()
     }
 }
+
+#[cfg(test)]
+#[path = "unit-tests/shared.rs"]
+mod unit_tests;

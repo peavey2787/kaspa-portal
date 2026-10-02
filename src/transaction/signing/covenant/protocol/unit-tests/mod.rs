@@ -217,6 +217,18 @@ fn fixed_binding_requires_exact_commitment_and_key_sequence() {
     let mut other = commitment;
     other[0] ^= 1;
     assert!(!script_binds_fixed_commitment(&script, &other, &key));
+
+    // The fixed grammar must be the whole script: an embedded copy that
+    // carries extra spending paths is not a binding.
+    let mut embedded = vec![0x51, 0x63];
+    embedded.extend_from_slice(&script);
+    embedded.push(0x68);
+    assert!(!script_binds_fixed_commitment(&embedded, &commitment, &key));
+    assert!(!script_binds_fixed_commitment(
+        &script[..66],
+        &commitment,
+        &key
+    ));
 }
 
 #[test]
@@ -750,15 +762,42 @@ fn review_context_and_wire_prefix_boundaries_fail_closed() {
 }
 
 #[test]
-fn script_xonly_key_search_requires_full_contiguous_key() {
+fn script_xonly_key_search_requires_canonical_key_push() {
     let key = [0x5au8; 32];
-    let mut script = vec![0x01, 0x02, 0x03];
+    let mut incidental = vec![0x21];
+    incidental.push(0x99);
+    incidental.extend_from_slice(&key);
+    assert!(!script_contains_xonly_key(&incidental, &key));
+
+    let mut script = vec![0x20];
     script.extend_from_slice(&key);
-    script.push(0x04);
+    script.push(0xac);
     assert!(script_contains_xonly_key(&script, &key));
-    assert!(!script_contains_xonly_key(&script[..34], &key));
+    assert!(!script_contains_xonly_key(&script[..32], &key));
     let other = [0x5bu8; 32];
     assert!(!script_contains_xonly_key(&script, &other));
+
+    let mut pushdata1 = vec![0x4c, 32];
+    pushdata1.extend_from_slice(&key);
+    assert!(script_contains_xonly_key(&pushdata1, &key));
+
+    let mut pushdata2 = vec![0x4d, 32, 0];
+    pushdata2.extend_from_slice(&key);
+    assert!(script_contains_xonly_key(&pushdata2, &key));
+
+    let mut pushdata4 = vec![0x4e, 32, 0, 0, 0];
+    pushdata4.extend_from_slice(&key);
+    assert!(script_contains_xonly_key(&pushdata4, &key));
+
+    for malformed in [
+        vec![0x4c],
+        vec![0x4d, 32],
+        vec![0x4e, 32, 0, 0],
+        vec![0x4c, 33, 0x01],
+    ] {
+        assert!(!script_contains_xonly_key(&malformed, &key));
+    }
+    assert!(!script_contains_xonly_key(&[0x76, 0x75, 0x51], &key));
 }
 
 #[test]
@@ -881,7 +920,11 @@ fn message_and_known_binding_helpers_cover_registered_and_unregistered_shapes() 
     );
 
     let key = [0x44u8; 32];
-    assert!(script_contains_xonly_key(&key, &key));
+    let mut pushed_key = [0u8; 33];
+    pushed_key[0] = 0x20;
+    pushed_key[1..].copy_from_slice(&key);
+    assert!(script_contains_xonly_key(&pushed_key, &key));
+    assert!(!script_contains_xonly_key(&key, &key));
     assert!(!script_contains_xonly_key(&key[..31], &key));
     assert_eq!(array16(&[1u8; 16]), [1u8; 16]);
     assert_eq!(array32(&[2u8; 32]), [2u8; 32]);
