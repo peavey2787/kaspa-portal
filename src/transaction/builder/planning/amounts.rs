@@ -33,6 +33,17 @@ pub fn checked_sum(values: impl IntoIterator<Item = u64>) -> Result<u64, String>
 ///
 /// Arithmetic overflow is a planner error. Negative mass contributions are
 /// explicitly floored at zero, matching the non-negative storage-mass rule.
+/// Return the KIP-9 storage plurality for a UTXO with the supplied script shape.
+/// The fixed UTXO fields consume 63 bytes and each storage unit is 100 bytes.
+#[must_use]
+pub fn utxo_plurality(script_len: usize, has_covenant_id: bool) -> u64 {
+    const FIXED_UTXO_BYTES: usize = 63;
+    const UTXO_UNIT_BYTES: usize = 100;
+    let covenant_bytes = if has_covenant_id { 32 } else { 0 };
+    let bytes = FIXED_UTXO_BYTES + script_len + covenant_bytes;
+    bytes.div_ceil(UTXO_UNIT_BYTES) as u64
+}
+
 pub fn storage_mass_estimate(ins: &[(u64, u64)], outs: &[(u64, u64)]) -> Result<u64, String> {
     let outputs_plurality = plurality_total(outs, "Output")?;
     let inputs_plurality = plurality_total(ins, "Input")?;

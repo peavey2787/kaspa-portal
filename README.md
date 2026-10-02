@@ -152,6 +152,8 @@ cargo build --release --target wasm32-unknown-unknown --features wasm
 wasm-bindgen --target web --out-dir pkg --out-name kaspa_portal target/wasm32-unknown-unknown/release/kaspa_portal.wasm
 ```
 
+A wasm application that exports its own JavaScript API can depend on Portal with `features = ["browser"]` instead. It gets the browser platform (WebSocket transport, fetch, IndexedDB, time) without Portal's `#[wasm_bindgen]` exports.
+
 Browser construction accepts a JSON string so exact integer configuration stays under caller control:
 
 ```javascript

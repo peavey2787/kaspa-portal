@@ -55,13 +55,17 @@ std = [
     "dep:futures-util",
     "dep:reqwest",
 ]
-wasm = [
+# Browser platform adapters (WebSocket transport, fetch, IndexedDB, time)
+# without Portal's own JavaScript exports, for wasm apps that export their own API.
+browser = [
     "std",
     "dep:wasm-bindgen",
     "dep:wasm-bindgen-futures",
     "dep:js-sys",
     "dep:web-sys",
 ]
+# `browser` plus Portal's wasm-bindgen JavaScript API.
+wasm = ["browser"]
 secret-export = []
 
 [dependencies]

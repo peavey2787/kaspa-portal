@@ -43,6 +43,28 @@ pub(crate) fn build_consensus_input(
     })
 }
 
+/// `(amount, script length, has covenant id)` of the UTXO an input spends,
+/// for the KIP-9 storage-mass commitment.
+pub(crate) fn input_storage_cell(
+    inp: &Value,
+) -> Result<crate::transaction::consensus::SpentUtxo, String> {
+    let obj = inp
+        .as_object()
+        .ok_or_else(|| "input not object".to_string())?;
+    let utxo = obj
+        .get("utxoEntry")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "missing utxoEntry".to_string())?;
+    let amount = parse_exact_u64(
+        utxo.get("amount")
+            .ok_or_else(|| "missing utxoEntry amount required for storage mass".to_string())?,
+        "utxoEntry.amount",
+    )?;
+    let script = input_script_public_key(obj)?;
+    let has_covenant_id = utxo.get("covenantId").is_some_and(|value| !value.is_null());
+    Ok((amount, script.len(), has_covenant_id))
+}
+
 fn input_script_public_key(obj: &Map<String, Value>) -> Result<Vec<u8>, String> {
     let utxo = obj
         .get("utxoEntry")

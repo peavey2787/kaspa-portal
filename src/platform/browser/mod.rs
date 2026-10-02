@@ -1,4 +1,5 @@
 pub mod bigint;
+#[cfg(feature = "wasm")]
 pub mod bindings;
 pub mod curby;
 pub mod fetch;

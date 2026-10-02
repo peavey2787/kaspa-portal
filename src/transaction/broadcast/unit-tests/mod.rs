@@ -28,6 +28,7 @@ fn consensus_submission_encoding_is_stable() {
         subnetwork_id: [0; 20],
         gas: 0,
         payload: Vec::new(),
+        storage_mass: 0,
     };
 
     let encoded =
@@ -44,6 +45,16 @@ fn consensus_submission_encoding_is_stable() {
             "0500000000000000000000000000000000000000000000000000000000000000",
             "00000000000000000000000000000000010000000000"
         )
+    );
+
+    let mut committed = transaction.clone();
+    committed.storage_mass = 10_111;
+    let committed = encoder::encode_submit_request(&committed, false)
+        .expect("storage-mass transaction should encode");
+    let mass_start = committed.len() - 14;
+    assert_eq!(
+        u64::from_le_bytes(committed[mass_start..mass_start + 8].try_into().unwrap()),
+        10_111,
     );
 }
 
@@ -74,6 +85,7 @@ fn submission_encoder_covers_compact_version_zero_budget_and_covenant_paths() {
             subnetwork_id: [0; 20],
             gas: 0,
             payload: vec![0xaa],
+            storage_mass: 0,
         }
     }
 
@@ -165,4 +177,16 @@ fn submission_decoder_covers_empty_text_errors_and_all_unwrap_shapes() {
     let mut untagged = 2u32.to_le_bytes().to_vec();
     untagged.extend_from_slice(&[0xcc, 0xdd]);
     assert_eq!(submission::decode(&untagged).unwrap(), "ccdd");
+}
+
+#[test]
+fn submission_error_decoder_strips_borsh_prefix_and_keeps_full_node_reason() {
+    let reason = "Rejected transaction deadbeef: transaction has 400000 fees which is under the required amount of 421800 for compute mass 4218";
+    let mut response = vec![1, 0xff, 0x00, 0x81, 0x00];
+    response.extend_from_slice(reason.as_bytes());
+    let error = submission::decode(&response)
+        .expect_err("node rejection")
+        .to_string();
+    assert!(error.contains(reason));
+    assert!(!error.contains('\u{fffd}'));
 }

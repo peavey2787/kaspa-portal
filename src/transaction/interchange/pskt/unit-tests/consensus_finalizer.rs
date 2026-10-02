@@ -12,6 +12,7 @@ fn signature_map() -> serde_json::Value {
 fn p2pk_input() -> serde_json::Value {
     json!({
         "utxoEntry": {
+            "amount": "100000000",
             "scriptPublicKey": format!("000020{}ac", "33".repeat(32))
         },
         "previousOutpoint": {
@@ -194,6 +195,7 @@ fn p2sh_covenant_input(redeem: &[u8], signer_byte: u8) -> serde_json::Value {
     );
     json!({
         "utxoEntry": {
+            "amount": "100000000",
             "scriptPublicKey": format!("0000aa20{}87", "99".repeat(32))
         },
         "previousOutpoint": {
@@ -311,7 +313,7 @@ fn consensus_finalizer_emits_byte_exact_submission_wire() {
             "22222222222222222222222222010900000000000000000100000000140049000000010000004100",
             "00000229000000000000000000010000005101000000002800000001230000000100006caadbe5f2",
             "937e1d8f3578d6cd2f08f98cdfbbda03acc2e968d2d15c39e8fb432a000000000000000000000000",
-            "000000000000000000000000000000070000000000000002000000aabb0000000000000000010000",
+            "000000000000000000000000000000070000000000000002000000aabb2e6fc5ad05000000010000",
             "000000",
         )
     );

@@ -5,11 +5,11 @@ use crate::network::{client::NetworkClient, error::NetworkError};
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
 
-#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
 pub mod browser;
 
-#[cfg(all(target_arch = "wasm32", not(feature = "wasm")))]
-compile_error!("kaspa-portal browser builds require `--features wasm`");
+#[cfg(all(target_arch = "wasm32", feature = "std", not(feature = "browser")))]
+compile_error!("kaspa-portal browser builds require `--features browser` or `--features wasm`");
 
 pub(crate) fn network_client(
     endpoint: &str,

@@ -27,7 +27,7 @@ fn encode_transaction(transaction: &ConsensusTransaction) -> Result<Vec<u8>, Net
     writer.write_raw(&transaction.subnetwork_id);
     writer.write_u64(transaction.gas);
     writer.write_bytes(&transaction.payload)?;
-    writer.write_u64(0);
+    writer.write_u64(transaction.storage_mass);
     writer.write_bytes(&[0])?;
     Ok(writer.into_vec())
 }

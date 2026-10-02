@@ -6,20 +6,13 @@ pub fn decode(data: &[u8]) -> Result<String, NetworkError> {
             "empty transaction response".into(),
         ));
     }
-    let text = String::from_utf8_lossy(data);
-    if contains_error(&text) {
-        return Err(NetworkError::RemoteError(text.chars().take(200).collect()));
-    }
     if data[0] == 0 {
         return Err(NetworkError::RemoteError(decode_tagged_error(data)));
     }
 
     let inner = unwrap_success(data);
-    let inner_text = String::from_utf8_lossy(inner);
-    if contains_error(&inner_text) {
-        return Err(NetworkError::RemoteError(
-            inner_text.chars().take(200).collect(),
-        ));
+    if let Some(message) = extract_error_message(inner).or_else(|| extract_error_message(data)) {
+        return Err(NetworkError::RemoteError(message));
     }
     if inner.len() >= 34 {
         Ok(hex::encode(&inner[2..34]))
@@ -30,10 +23,28 @@ pub fn decode(data: &[u8]) -> Result<String, NetworkError> {
     }
 }
 
-fn contains_error(text: &str) -> bool {
-    ["Reject", "reject", "error", "Error"]
-        .iter()
-        .any(|needle| text.contains(needle))
+fn extract_error_message(data: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(data);
+    let start = [
+        "Rejected transaction",
+        "RPC error",
+        "Error:",
+        "error:",
+        "error",
+    ]
+    .iter()
+    .filter_map(|needle| text.find(needle))
+    .min()?;
+    let message = text[start..]
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\r' | '\t'))
+        .take(2_048)
+        .collect::<String>();
+    Some(
+        message
+            .trim_matches(|character: char| matches!(character, '\0' | ' ' | '\r' | '\n' | '\t'))
+            .to_string(),
+    )
 }
 
 pub(crate) fn decode_tagged_error(data: &[u8]) -> String {

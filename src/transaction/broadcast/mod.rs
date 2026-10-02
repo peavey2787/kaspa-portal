@@ -1,5 +1,5 @@
 //! Final transaction submission to a Kaspa node.
-pub(crate) mod encoder;
+pub mod encoder;
 mod submit;
 pub use submit::submit;
 

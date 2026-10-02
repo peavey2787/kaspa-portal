@@ -57,6 +57,7 @@ if [[ "$resume_stage" == "full" || "$resume_stage" == "wasm" ]]; then
   echo '==> WASM compile QA'
   rustup target add wasm32-unknown-unknown
   cargo check --target wasm32-unknown-unknown --features wasm
+  cargo check --target wasm32-unknown-unknown --features browser
 fi
 
 if [[ "$resume_stage" != "rust-e2e" && "$resume_stage" != "live-e2e" && "$resume_stage" != "funded-e2e" && "$resume_stage" != "browser-e2e" && "$resume_stage" != "resources-e2e" ]]; then

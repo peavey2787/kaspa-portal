@@ -3,7 +3,7 @@ use crate::alloc_prelude::*;
 use crate::{
     network::codec::primitives::WireReader,
     transaction::consensus::{
-        ConsensusInput, ConsensusOutput, ConsensusTransaction, InputEncoding,
+        ConsensusInput, ConsensusOutput, ConsensusTransaction, InputEncoding, SpentUtxo,
     },
 };
 
@@ -24,9 +24,10 @@ pub fn decode_signed_kspt(signed_hex: &str) -> Result<ConsensusTransaction, Stri
     let bytes = decode_signed_envelope(signed_hex)?;
     let mut reader = WireReader::new(&bytes[6..]);
     let global = decode_signed_global(&mut reader)?;
-    let inputs = decode_signed_inputs(&mut reader, global.input_count)?;
+    let (inputs, spent) = decode_signed_inputs(&mut reader, global.input_count)?;
     let mut outputs = decode_signed_outputs(&mut reader, global.output_count)?;
     decode_trailers(&mut reader, global.input_count, &mut outputs)?;
+    let storage_mass = ConsensusTransaction::storage_mass_for(&spent, &outputs)?;
     Ok(ConsensusTransaction {
         tx_version: global.tx_version,
         input_encoding: InputEncoding::Compact,
@@ -36,6 +37,7 @@ pub fn decode_signed_kspt(signed_hex: &str) -> Result<ConsensusTransaction, Stri
         subnetwork_id: global.subnetwork_id,
         gas: global.gas,
         payload: global.payload,
+        storage_mass,
     })
 }
 
@@ -99,15 +101,19 @@ fn decode_signed_payload(reader: &mut WireReader<'_>) -> Result<Vec<u8>, String>
 fn decode_signed_inputs(
     reader: &mut WireReader<'_>,
     input_count: usize,
-) -> Result<Vec<ConsensusInput>, String> {
+) -> Result<(Vec<ConsensusInput>, Vec<SpentUtxo>), String> {
     let mut inputs = Vec::new();
+    let mut spent = Vec::new();
     inputs
         .try_reserve(input_count)
+        .and_then(|()| spent.try_reserve(input_count))
         .map_err(|_| "KSPT input count exceeds available memory".to_string())?;
     for _ in 0..input_count {
-        inputs.push(decode_input(reader)?);
+        let (input, amount, script_len) = decode_input(reader)?;
+        inputs.push(input);
+        spent.push((amount, script_len, false));
     }
-    Ok(inputs)
+    Ok((inputs, spent))
 }
 
 fn decode_signed_outputs(
@@ -121,21 +127,22 @@ fn decode_signed_outputs(
     Ok(outputs)
 }
 
-fn decode_input(reader: &mut WireReader<'_>) -> Result<ConsensusInput, String> {
+fn decode_input(reader: &mut WireReader<'_>) -> Result<(ConsensusInput, u64, usize), String> {
     let (prev_tx_id, prev_index) = decode_outpoint(reader)?;
-    reader.read_u64().map_err(wire_error)?;
+    let amount = reader.read_u64().map_err(wire_error)?;
     let sequence = reader.read_u64().map_err(wire_error)?;
     let sig_op_count = reader.read_u8().map_err(wire_error)?;
     reader.read_u16().map_err(wire_error)?;
     let script_public_key = decode_input_script_public_key(reader)?;
     let sig_script = decode_compact_signature_script(reader, &script_public_key)?;
-    Ok(ConsensusInput {
+    let input = ConsensusInput {
         prev_tx_id,
         prev_index,
         sig_script,
         sequence,
         sig_op_count,
-    })
+    };
+    Ok((input, amount, script_public_key.len()))
 }
 
 fn decode_outpoint(reader: &mut WireReader<'_>) -> Result<([u8; 32], u32), String> {

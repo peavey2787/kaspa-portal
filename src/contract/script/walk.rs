@@ -1,6 +1,6 @@
 use super::number::next_script_item;
 
-pub(crate) fn item_end(script: &[u8], offset: usize) -> Option<usize> {
+pub fn item_end(script: &[u8], offset: usize) -> Option<usize> {
     script.get(offset).and_then(|opcode| {
         next_script_item(script, offset, *opcode)
             .ok()
@@ -9,7 +9,7 @@ pub(crate) fn item_end(script: &[u8], offset: usize) -> Option<usize> {
 }
 
 #[cfg(feature = "std")]
-pub(crate) fn contains_opcode_pair(script: &[u8], first: u8, second: u8) -> bool {
+pub fn contains_opcode_pair(script: &[u8], first: u8, second: u8) -> bool {
     let mut offset = 0usize;
     for _ in 0..script.len() {
         let Some(&opcode) = script.get(offset) else {

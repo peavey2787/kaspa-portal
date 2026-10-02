@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 
 use crate::transaction::interchange::pskt::exact_json::parse_exact_u64;
 
-use super::{build_consensus_input, build_consensus_output};
+use super::{build_consensus_input, build_consensus_output, input_storage_cell};
 use crate::transaction::interchange::pskt::scripts::compute_genesis_covenant_id;
 use crate::transaction::interchange::pskt::wire::{decode_root, pskt_from_root};
 
@@ -17,6 +17,7 @@ pub(crate) struct FinalizedConsensusTransaction {
     pub(crate) subnetwork_id: [u8; 20],
     pub(crate) gas: u64,
     pub(crate) payload: Vec<u8>,
+    pub(crate) storage_mass: u64,
 }
 
 impl FinalizedConsensusTransaction {
@@ -32,6 +33,7 @@ impl FinalizedConsensusTransaction {
             subnetwork_id: self.subnetwork_id,
             gas: self.gas,
             payload: self.payload,
+            storage_mass: self.storage_mass,
         }
     }
 }
@@ -61,6 +63,12 @@ pub(crate) fn finalize_to_consensus(
     let inputs = build_inputs(input_values, &settings)?;
     let mut outputs = build_outputs(output_values)?;
     apply_persistent_vault_binding(input_values, &inputs, &mut outputs);
+    let spent = input_values
+        .iter()
+        .map(input_storage_cell)
+        .collect::<Result<Vec<_>, _>>()?;
+    let storage_mass =
+        crate::transaction::consensus::ConsensusTransaction::storage_mass_for(&spent, &outputs)?;
 
     Ok(FinalizedConsensusTransaction {
         tx_version: settings.tx_version,
@@ -70,6 +78,7 @@ pub(crate) fn finalize_to_consensus(
         subnetwork_id: settings.subnetwork_id,
         gas: settings.gas,
         payload: settings.payload,
+        storage_mass,
     })
 }
 

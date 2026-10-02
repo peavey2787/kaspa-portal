@@ -43,4 +43,36 @@ pub struct ConsensusTransaction {
     #[serde(with = "crate::primitives::serialization::decimal_u64")]
     pub gas: u64,
     pub payload: Vec<u8>,
+    /// KIP-9 storage-mass commitment submitted to kaspad.
+    #[serde(with = "crate::primitives::serialization::decimal_u64")]
+    pub storage_mass: u64,
+}
+
+/// `(amount, script public key length, has covenant id)` of a spent UTXO.
+pub type SpentUtxo = (u64, usize, bool);
+
+impl ConsensusTransaction {
+    /// KIP-9 storage mass for spending `inputs` into `outputs`.
+    pub fn storage_mass_for(
+        inputs: &[SpentUtxo],
+        outputs: &[ConsensusOutput],
+    ) -> Result<u64, String> {
+        use crate::transaction::builder::planning::amounts::{
+            storage_mass_estimate, utxo_plurality,
+        };
+        let input_cells = inputs
+            .iter()
+            .map(|&(amount, script_len, covenant)| (amount, utxo_plurality(script_len, covenant)))
+            .collect::<Vec<_>>();
+        let output_cells = outputs
+            .iter()
+            .map(|output| {
+                (
+                    output.value,
+                    utxo_plurality(output.spk_script.len(), output.covenant.is_some()),
+                )
+            })
+            .collect::<Vec<_>>();
+        storage_mass_estimate(&input_cells, &output_cells)
+    }
 }

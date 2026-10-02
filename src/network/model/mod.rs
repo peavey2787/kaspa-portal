@@ -1,1 +1,1 @@
-pub(crate) mod fee_estimate;
+pub mod fee_estimate;
