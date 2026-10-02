@@ -45,6 +45,8 @@ Portal instead of carrying its own copy.
   that hardware signers run at boot. They return `(passed, total)`, never
   panic (allocation failure counts as a failed check), and the unit tests
   assert each one passes. CI builds the feature on the bare-metal target.
+- The `no_std` core no longer enables `k256/alloc`, which pulled `spki` and
+  `pkcs8` into embedded dependency graphs that never use them.
 - The library is an `rlib` only. Listing `cdylib` made every dependent,
   including `no_std` firmware, build a C dynamic library that needs an
   allocator and panic handler. The browser QA bundle now comes from the

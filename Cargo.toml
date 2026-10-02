@@ -67,7 +67,7 @@ secret-export = []
 [dependencies]
 sha2 = { version = "0.10", default-features = false }
 ripemd = { version = "0.1.3", default-features = false }
-k256 = { version = "0.13.4", default-features = false, features = ["arithmetic", "ecdsa", "schnorr", "sha256", "alloc"] }
+k256 = { version = "0.13.4", default-features = false, features = ["arithmetic", "ecdsa", "schnorr", "sha256"] }
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc"] }
 blake2 = { version = "0.10.6", default-features = false }
 blake2b_simd = { version = "1", default-features = false }
