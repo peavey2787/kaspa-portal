@@ -155,7 +155,8 @@ pub fn decode_kpub_text(
     decode_account_key_text(text, out).ok_or(Bip32Error::InvalidKey)
 }
 
-/// Decode canonical `kpub1:` text or a standard account-level BIP32 xpub.
+/// Decode canonical `kpub1:` text, a rusty-kaspa Base58Check `kpub`, or an
+/// account-level BIP32 xpub.
 pub fn decode_kpub_or_xpub(
     text: &[u8],
     out: &mut [u8; XPUB_PAYLOAD_LEN],
@@ -163,7 +164,8 @@ pub fn decode_kpub_or_xpub(
     if let Some(length) = decode_account_key_text(text, out) {
         return Ok(length);
     }
-    if crate::wallet::key::bip32_xpub::decode_bip32_xpub(text, out).is_ok() {
+    use crate::wallet::key::bip32_xpub::{decode_base58_kpub, decode_bip32_xpub};
+    if decode_base58_kpub(text, out).is_ok() || decode_bip32_xpub(text, out).is_ok() {
         return Ok(XPUB_PAYLOAD_LEN);
     }
     Err(Bip32Error::InvalidKey)

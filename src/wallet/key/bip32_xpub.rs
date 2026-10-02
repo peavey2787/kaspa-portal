@@ -1,16 +1,17 @@
-//! Import standard account-level BIP32 `xpub` values into Kaspa Portal's
-//! canonical account-key representation.
+//! Import account keys exported by other wallets into Kaspa Portal's canonical
+//! account-key representation.
 //!
-//! This path exists solely for standards-compatible BIP32 interoperability.
+//! Two Base58Check forms are accepted for interoperability: the `kpub…`
+//! account key that rusty-kaspa wallets export, and a standard account-level
+//! BIP32 `xpub`. Both are decode-only: Portal exports canonical `kpub1:` text.
 
-use sha2::{Digest, Sha256};
-
-use crate::wallet::key::account::{
-    ACCOUNT_KEY_CHILD_INDEX, ACCOUNT_KEY_DEPTH, ACCOUNT_KEY_PAYLOAD_LEN, ACCOUNT_KEY_VERSION,
+use crate::wallet::key::{
+    account::{
+        ACCOUNT_KEY_CHILD_INDEX, ACCOUNT_KEY_DEPTH, ACCOUNT_KEY_PAYLOAD_LEN, ACCOUNT_KEY_VERSION,
+    },
+    xpub::base58::{base58check_decode, Base58Error, MAX_BASE58_BYTES},
 };
 
-const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const MAX_BASE58_BYTES: usize = 128;
 const BIP32_XPUB_VERSION: [u8; 4] = [0x04, 0x88, 0xb2, 0x1e];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,98 +23,62 @@ pub enum Bip32XpubImportError {
     InvalidPayload,
 }
 
+impl From<Base58Error> for Bip32XpubImportError {
+    fn from(error: Base58Error) -> Self {
+        match error {
+            Base58Error::Empty => Self::Empty,
+            Base58Error::InvalidCharacter => Self::InvalidCharacter,
+            Base58Error::Overflow => Self::Overflow,
+            Base58Error::InvalidChecksum => Self::InvalidChecksum,
+        }
+    }
+}
+
+/// Decode an account-level BIP32 `xpub` (version `0488b21e`).
 pub fn decode_bip32_xpub(
     encoded: &[u8],
     output: &mut [u8; ACCOUNT_KEY_PAYLOAD_LEN],
 ) -> Result<usize, Bip32XpubImportError> {
-    decode_base58check(encoded, output)?;
-    if !valid_account_xpub(output) {
-        output.fill(0);
-        return Err(Bip32XpubImportError::InvalidPayload);
-    }
-    output[..4].copy_from_slice(&ACCOUNT_KEY_VERSION);
-    Ok(ACCOUNT_KEY_PAYLOAD_LEN)
+    decode_account_key(encoded, BIP32_XPUB_VERSION, output)
 }
 
-fn valid_account_xpub(payload: &[u8; ACCOUNT_KEY_PAYLOAD_LEN]) -> bool {
-    payload[..4] == BIP32_XPUB_VERSION
+/// Decode a rusty-kaspa Base58Check `kpub…` account key (version `038f332e`).
+pub fn decode_base58_kpub(
+    encoded: &[u8],
+    output: &mut [u8; ACCOUNT_KEY_PAYLOAD_LEN],
+) -> Result<usize, Bip32XpubImportError> {
+    decode_account_key(encoded, ACCOUNT_KEY_VERSION, output)
+}
+
+/// Decode a Base58Check account key carrying `version` and normalize it to
+/// the canonical payload. The output is zeroed on every failure.
+fn decode_account_key(
+    encoded: &[u8],
+    version: [u8; 4],
+    output: &mut [u8; ACCOUNT_KEY_PAYLOAD_LEN],
+) -> Result<usize, Bip32XpubImportError> {
+    output.fill(0);
+    let mut decoded = [0u8; MAX_BASE58_BYTES];
+    let length = base58check_decode(encoded, &mut decoded)?;
+    let result = match decoded.get(..length) {
+        Some(payload)
+            if payload.len() == ACCOUNT_KEY_PAYLOAD_LEN && is_account_key(payload, version) =>
+        {
+            output.copy_from_slice(payload);
+            output[..4].copy_from_slice(&ACCOUNT_KEY_VERSION);
+            Ok(ACCOUNT_KEY_PAYLOAD_LEN)
+        }
+        _ => Err(Bip32XpubImportError::InvalidPayload),
+    };
+    decoded.fill(0);
+    result
+}
+
+fn is_account_key(payload: &[u8], version: [u8; 4]) -> bool {
+    payload[..4] == version
         && payload[4] == ACCOUNT_KEY_DEPTH
         && payload[9..13] == ACCOUNT_KEY_CHILD_INDEX.to_be_bytes()
         && matches!(payload[45], 0x02 | 0x03)
-}
-
-fn decode_base58check(
-    encoded: &[u8],
-    output: &mut [u8; ACCOUNT_KEY_PAYLOAD_LEN],
-) -> Result<(), Bip32XpubImportError> {
-    let mut decoded = [0u8; MAX_BASE58_BYTES];
-    let decoded_len = decode_base58(encoded, &mut decoded)?;
-    let expected_len = ACCOUNT_KEY_PAYLOAD_LEN + 4;
-    if decoded_len != expected_len {
-        return Err(Bip32XpubImportError::InvalidPayload);
-    }
-    let checksum: [u8; 32] =
-        Sha256::digest(Sha256::digest(&decoded[..ACCOUNT_KEY_PAYLOAD_LEN])).into();
-    if decoded[ACCOUNT_KEY_PAYLOAD_LEN..expected_len] != checksum[..4] {
-        return Err(Bip32XpubImportError::InvalidChecksum);
-    }
-    output.copy_from_slice(&decoded[..ACCOUNT_KEY_PAYLOAD_LEN]);
-    Ok(())
-}
-
-fn decode_base58(
-    input: &[u8],
-    output: &mut [u8; MAX_BASE58_BYTES],
-) -> Result<usize, Bip32XpubImportError> {
-    if input.is_empty() {
-        return Err(Bip32XpubImportError::Empty);
-    }
-    let leading_zeroes = input.iter().take_while(|byte| **byte == b'1').count();
-    let mut number = [0u8; MAX_BASE58_BYTES];
-    let mut number_len = 0usize;
-    for byte in input {
-        let digit = alphabet_value(*byte).ok_or(Bip32XpubImportError::InvalidCharacter)?;
-        number_len = mul_add_base58(&mut number, number_len, digit)?;
-    }
-    let total = leading_zeroes
-        .checked_add(number_len)
-        .ok_or(Bip32XpubImportError::Overflow)?;
-    let target = output
-        .get_mut(..total)
-        .ok_or(Bip32XpubImportError::Overflow)?;
-    target[..leading_zeroes].fill(0);
-    target[leading_zeroes..].copy_from_slice(&number[..number_len]);
-    Ok(total)
-}
-
-fn mul_add_base58(
-    number: &mut [u8; MAX_BASE58_BYTES],
-    mut number_len: usize,
-    digit: u8,
-) -> Result<usize, Bip32XpubImportError> {
-    let mut carry = u32::from(digit);
-    for index in (0..number_len).rev() {
-        carry += u32::from(number[index]) * 58;
-        number[index] = (carry & 0xff) as u8;
-        carry >>= 8;
-    }
-    while carry != 0 {
-        if number_len == MAX_BASE58_BYTES {
-            return Err(Bip32XpubImportError::Overflow);
-        }
-        number.copy_within(0..number_len, 1);
-        number[0] = (carry & 0xff) as u8;
-        carry >>= 8;
-        number_len += 1;
-    }
-    Ok(number_len)
-}
-
-fn alphabet_value(byte: u8) -> Option<u8> {
-    BASE58_ALPHABET
-        .iter()
-        .position(|candidate| *candidate == byte)
-        .map(|index| index as u8)
 }
 
 #[cfg(test)]

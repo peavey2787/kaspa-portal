@@ -59,6 +59,10 @@ Portal instead of carrying its own copy.
 - The xpub power-on self-test also checks the original hardware-signer
   account-export vectors (kpub payload, XPrv text and recovered keys), and a
   unit test pins the BIP340 known-answer constant to the published vector 0.
+- Account-key import accepts the Base58Check `kpub…` that rusty-kaspa wallets
+  export (decode-only, alongside `kpub1:` text and account-level `xpub`).
+  Portal now has a single strict Base58 decoder; the old one silently
+  truncated oversized input.
 - Ported the hardware signer's test suites for bytes, covenant branch
   resolution, QR frames and sessions, anti-klepto wire, PSKT state, account
   keys and BIP32 xpub import.

@@ -79,15 +79,15 @@ fn base58check_roundtrips_boundary_payloads_and_rejects_corruption() {
         assert!(encoded_len > 0);
 
         let mut decoded = [0u8; 128];
-        let decoded_len = base58check_decode(&encoded[..encoded_len], &mut decoded);
+        let decoded_len = base58check_decode(&encoded[..encoded_len], &mut decoded).unwrap_or(0);
         assert_eq!(decoded_len, payload.len());
         assert_eq!(&decoded[..decoded_len], payload);
     }
 
     let mut decoded = [0x55u8; 128];
-    assert_eq!(base58check_decode(b"", &mut decoded), 0);
-    assert_eq!(base58check_decode(b"1", &mut decoded), 0);
-    assert_eq!(base58check_decode(b"0OIl", &mut decoded), 0);
+    assert_eq!(base58check_decode(b"", &mut decoded).unwrap_or(0), 0);
+    assert_eq!(base58check_decode(b"1", &mut decoded).unwrap_or(0), 0);
+    assert_eq!(base58check_decode(b"0OIl", &mut decoded).unwrap_or(0), 0);
 
     let mut encoded = [0u8; 192];
     let encoded_len = base58check_encode(b"checksum", &mut encoded);
@@ -96,7 +96,10 @@ fn base58check_roundtrips_boundary_payloads_and_rejects_corruption() {
     } else {
         b'1'
     };
-    assert_eq!(base58check_decode(&encoded[..encoded_len], &mut decoded), 0);
+    assert_eq!(
+        base58check_decode(&encoded[..encoded_len], &mut decoded).unwrap_or(0),
+        0
+    );
 }
 
 #[test]
@@ -119,7 +122,7 @@ fn account_xprv_import_rejects_each_metadata_boundary_with_valid_checksum() {
     let mut text = [0u8; XPRV_MAX_LEN];
     let length = derive_and_serialize_xprv(&seed, &mut text).expect("account xprv");
     let mut decoded = [0u8; 128];
-    let decoded_len = base58check_decode(&text[..length], &mut decoded);
+    let decoded_len = base58check_decode(&text[..length], &mut decoded).unwrap_or(0);
     assert_eq!(decoded_len, XPUB_PAYLOAD_LEN);
 
     for (offset, replacement) in [
@@ -178,7 +181,10 @@ fn base58_extreme_lengths_and_each_checksum_byte_are_rejected() {
     // 128-character encoder scratch space and must fail closed.
     assert_eq!(base58_encode(&[0xff; 128], &mut encoded), 0);
     // Excessively long Base58 input must not overrun the fixed decode integer.
-    assert_eq!(base58check_decode(&[b'z'; 300], &mut decoded), 0);
+    assert_eq!(
+        base58check_decode(&[b'z'; 300], &mut decoded),
+        Err(base58::Base58Error::Overflow)
+    );
 
     let payload = b"checksum-stage";
     let checksum = sha256d(payload);
@@ -189,7 +195,10 @@ fn base58_extreme_lengths_and_each_checksum_byte_are_rejected() {
         raw[payload.len() + checksum_index] ^= 1;
         let encoded_len = base58_encode(&raw[..payload.len() + 4], &mut encoded);
         assert!(encoded_len > 0);
-        assert_eq!(base58check_decode(&encoded[..encoded_len], &mut decoded), 0);
+        assert_eq!(
+            base58check_decode(&encoded[..encoded_len], &mut decoded).unwrap_or(0),
+            0
+        );
     }
 }
 

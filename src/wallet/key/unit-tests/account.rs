@@ -178,9 +178,10 @@ fn bip32_xpub_decoder_classifies_empty_character_length_and_checksum_failures() 
         decode_bip32_xpub(b"0", &mut output),
         Err(Bip32XpubImportError::InvalidCharacter)
     );
+    // One byte cannot carry the four-byte Base58Check checksum.
     assert_eq!(
         decode_bip32_xpub(b"1", &mut output),
-        Err(Bip32XpubImportError::InvalidPayload)
+        Err(Bip32XpubImportError::InvalidChecksum)
     );
 
     let mut corrupted = KASPA_CLI_ACCOUNT_XPUB.to_vec();

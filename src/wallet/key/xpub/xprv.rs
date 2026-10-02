@@ -78,7 +78,7 @@ pub fn derive_and_serialize_xprv(
 /// Import an account-level Kaspa xprv and preserve its BIP32 metadata.
 pub fn import_xprv_with_metadata(xprv_text: &[u8]) -> Result<ImportedAccountXprv, Bip32Error> {
     let mut payload = [0u8; 128];
-    let payload_length = base58check_decode(xprv_text, &mut payload);
+    let payload_length = base58check_decode(xprv_text, &mut payload).unwrap_or(0);
 
     let result = (|| {
         if payload_length != XPUB_PAYLOAD_LEN

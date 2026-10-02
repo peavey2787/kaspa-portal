@@ -167,6 +167,7 @@ fn test_account_xprv_recovery_roundtrip() -> bool {
 /// the account kpub payload and the Base58Check XPrv for a deterministic seed,
 /// plus the receive/change keys recovered from that XPrv.
 fn test_account_export_vectors() -> bool {
+    const ORIGINAL_KPUB: &[u8] = b"kpub2JigDdskmLLjkiA8PVnrGyEaCvwGrzET2X26crHBHDtGZERboYT4SnGXXRc7vyyNgvfuJF2XaFxqQ9uBVpU9FosVzcDhe5nfHyi2CLLzpPm";
     const ORIGINAL_XPRV: &[u8] = b"kprv65jKp8LrvxnSYE5fHUFquqHqeu6nTXWbfJ6VpTsZitMHgS6TG18otyx3g79CTSqTRR6VRZjm7hw9TxcNUJhaxKmLaAzjXz7b5k3cA5MjDbb";
     const ORIGINAL_PAYLOAD: [u8; XPUB_PAYLOAD_LEN] = [
         0x03, 0x8f, 0x33, 0x2e, 0x03, 0x8f, 0x43, 0x5e, 0x7f, 0x80, 0x00, 0x00, 0x00, 0x7e, 0x95,
@@ -194,6 +195,10 @@ fn test_account_export_vectors() -> bool {
     let mut payload = [0u8; XPUB_PAYLOAD_LEN];
     if derive_account_raw_kpub_payload(&seed, &mut payload).is_err() || payload != ORIGINAL_PAYLOAD
     {
+        return false;
+    }
+    let mut decoded = [0u8; XPUB_PAYLOAD_LEN];
+    if decode_kpub_or_xpub(ORIGINAL_KPUB, &mut decoded).is_err() || decoded != ORIGINAL_PAYLOAD {
         return false;
     }
     let mut xprv = [0u8; XPRV_MAX_LEN];
