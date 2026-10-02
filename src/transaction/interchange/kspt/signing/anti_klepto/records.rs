@@ -7,27 +7,48 @@ use crate::{
 
 use crate::transaction::interchange::kspt::PsktError;
 
+fn reserved_records<T>(tx: &Transaction) -> Result<alloc::vec::Vec<T>, PsktError> {
+    let capacity = tx
+        .num_inputs
+        .checked_mul(crate::transaction::model::MAX_SIGS_PER_INPUT)
+        .ok_or(PsktError::TooManyInputs)?;
+    let mut records = alloc::vec::Vec::new();
+    records
+        .try_reserve_exact(capacity)
+        .map_err(|_| PsktError::TooManySignatures)?;
+    Ok(records)
+}
+
+fn added_signatures<'a>(
+    tx: &'a Transaction,
+    initial_counts: &[u8],
+    input_index: usize,
+) -> Result<(usize, &'a [crate::transaction::model::InputSig]), PsktError> {
+    let input = tx
+        .inputs
+        .get(input_index)
+        .ok_or(PsktError::InvalidSignatureState)?;
+    let start = usize::from(
+        *initial_counts
+            .get(input_index)
+            .ok_or(PsktError::InvalidSignatureState)?,
+    );
+    let end = usize::from(input.sig_count);
+    let signatures = input
+        .sigs
+        .get(start..end)
+        .ok_or(PsktError::InvalidSignatureState)?;
+    Ok((start, signatures))
+}
+
 pub fn nonce_commitment_records(
     tx: &Transaction,
     initial_counts: &[u8],
 ) -> Result<alloc::vec::Vec<NonceCommitment>, PsktError> {
-    let mut records = alloc::vec::Vec::new();
+    let mut records = reserved_records(tx)?;
     for input_index in 0..tx.num_inputs {
-        let input = tx
-            .inputs
-            .get(input_index)
-            .ok_or(PsktError::InvalidSignatureState)?;
-        let start = usize::from(
-            *initial_counts
-                .get(input_index)
-                .ok_or(PsktError::InvalidSignatureState)?,
-        );
-        let end = usize::from(input.sig_count);
-        let signatures = input
-            .sigs
-            .get(start..end)
-            .ok_or(PsktError::InvalidSignatureState)?;
-        for (slot, sig) in (start..end).zip(signatures.iter()) {
+        let (start, signatures) = added_signatures(tx, initial_counts, input_index)?;
+        for (slot, sig) in (start..).zip(signatures.iter()) {
             if !sig.present || sig.pubkey_compressed[0] == 0 {
                 return Err(PsktError::InvalidSignatureState);
             }
@@ -56,23 +77,10 @@ pub fn proof_records(
     tx: &Transaction,
     initial_counts: &[u8],
 ) -> Result<alloc::vec::Vec<SignatureProof>, PsktError> {
-    let mut proofs = alloc::vec::Vec::new();
+    let mut proofs = reserved_records(tx)?;
     for input_index in 0..tx.num_inputs {
-        let input = tx
-            .inputs
-            .get(input_index)
-            .ok_or(PsktError::InvalidSignatureState)?;
-        let start = usize::from(
-            *initial_counts
-                .get(input_index)
-                .ok_or(PsktError::InvalidSignatureState)?,
-        );
-        let end = usize::from(input.sig_count);
-        let signatures = input
-            .sigs
-            .get(start..end)
-            .ok_or(PsktError::InvalidSignatureState)?;
-        for (slot, sig) in (start..end).zip(signatures.iter()) {
+        let (start, signatures) = added_signatures(tx, initial_counts, input_index)?;
+        for (slot, sig) in (start..).zip(signatures.iter()) {
             if !sig.present {
                 return Err(PsktError::InvalidSignatureState);
             }

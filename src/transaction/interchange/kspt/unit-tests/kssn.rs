@@ -45,9 +45,9 @@ fn kssn_parser_rejects_duplicate_input_indexes() {
 
     let mut wire = [0u8; 256];
     let len = response.serialize(&mut wire).expect("serialize KSSN");
-    const V1_HEADER_LEN: usize = 4 + 1 + 4;
-    const V1_RECORD_LEN: usize = 4 + 1 + 64;
-    let second_input_index = V1_HEADER_LEN + V1_RECORD_LEN;
+    const HEADER_LEN: usize = 4 + 1 + 4;
+    const RECORD_LEN: usize = 4 + 1 + 64;
+    let second_input_index = HEADER_LEN + RECORD_LEN;
     wire[second_input_index..second_input_index + 4].fill(0);
 
     assert!(matches!(
@@ -57,14 +57,47 @@ fn kssn_parser_rejects_duplicate_input_indexes() {
 }
 
 #[test]
-fn kssn_parser_rejects_non_v1_version() {
-    let mut wire = [0u8; 4 + 1 + 4];
+fn kssn_parser_rejects_unknown_version() {
+    let mut wire = [0u8; 4 + 1 + 1 + 1 + 1 + 64];
     wire[..4].copy_from_slice(b"KSSN");
     wire[4] = 2;
-    wire[5..9].copy_from_slice(&0u32.to_le_bytes());
+    wire[5] = 1;
+    wire[6] = 7;
+    wire[7] = SigHashType::All.to_byte();
+    wire[8..].fill(0x5a);
 
     assert_eq!(
         SignedResponse::parse(&wire).unwrap_err(),
         PsktError::UnsupportedVersion
+    );
+}
+
+#[test]
+fn kssn_parser_covers_magic_sighash_and_empty_envelope_boundaries() {
+    let mut empty = [0u8; 9];
+    empty[..4].copy_from_slice(b"KSSN");
+    empty[4] = 1;
+    assert!(SignedResponse::parse(&empty)
+        .expect("empty KSSN")
+        .signatures
+        .is_empty());
+
+    let mut bad_magic = empty;
+    bad_magic[0] ^= 0x01;
+    assert_eq!(
+        SignedResponse::parse(&bad_magic).unwrap_err(),
+        PsktError::InvalidMagic
+    );
+
+    let mut one = SignedResponse::new();
+    one.add_signature(7, SigHashType::All, &[0x42; 64])
+        .expect("signature");
+    let mut wire = [0u8; 128];
+    let len = one.serialize(&mut wire).expect("serialize KSSN");
+    // KSSN header = magic(4) + version(1) + count(4), then input index(4).
+    wire[13] = 0xff;
+    assert_eq!(
+        SignedResponse::parse(&wire[..len]).unwrap_err(),
+        PsktError::InvalidSigHashType
     );
 }

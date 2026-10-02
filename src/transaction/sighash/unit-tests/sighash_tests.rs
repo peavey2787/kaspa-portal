@@ -24,7 +24,7 @@ pub fn test_keyed_differs() -> bool {
 /// Test: basic sighash computation for a single-input transaction.
 pub fn test_sighash_basic() -> bool {
     // Create a simple transaction: 1 input, 1 output
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction storage");
     tx.version = 0;
     tx.num_inputs = 1;
     tx.num_outputs = 1;
@@ -68,7 +68,7 @@ pub fn test_sighash_basic() -> bool {
 /// Test: different inputs produce different sighashes.
 pub fn test_sighash_different_inputs() -> bool {
     // Transaction with 2 inputs — each must have a different sighash
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction storage");
     tx.version = 0;
     tx.num_inputs = 2;
     tx.num_outputs = 1;
@@ -133,7 +133,7 @@ pub fn test_sign_transaction_complete() -> bool {
     };
 
     // 2. Create transaction: 1 input (our UTXO), 1 output
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction storage");
     tx.version = 0;
     tx.num_inputs = 1;
     tx.num_outputs = 1;
@@ -251,7 +251,7 @@ fn component_hashes_cover_all_sighash_and_covenant_payload_branches() {
         outputs_hash, payload_hash, previous_outputs_hash, sequences_hash, sig_op_counts_hash,
     };
 
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction storage");
     tx.version = 1;
     tx.num_inputs = 2;
     tx.num_outputs = 2;
@@ -301,7 +301,10 @@ fn component_hashes_cover_all_sighash_and_covenant_payload_branches() {
     tx.outputs[0].has_covenant = false;
     assert_ne!(outputs_hash(&tx, SigHashType::All, 0), all);
 
-    assert_eq!(payload_hash(&Transaction::new()), [0; 32]);
+    assert_eq!(
+        payload_hash(&Transaction::try_new().expect("transaction storage")),
+        [0; 32]
+    );
     tx.payload = b"KSP".to_vec();
     assert_ne!(payload_hash(&tx), [0; 32]);
     tx.payload.clear();
@@ -421,7 +424,7 @@ fn blake2b_compression_binds_both_counter_halves_and_final_block_flag() {
 #[test]
 fn final_sighash_binds_every_serialized_field_and_version_zero_sigops_only() {
     fn fixture(version: u16) -> Transaction {
-        let mut tx = Transaction::new();
+        let mut tx = Transaction::try_new().expect("transaction storage");
         tx.version = version;
         tx.num_inputs = 1;
         tx.num_outputs = 1;

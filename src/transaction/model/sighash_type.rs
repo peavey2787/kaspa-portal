@@ -15,7 +15,7 @@
 
 // ─── SigHash Types ────────────────────────────────────────────────────
 
-/// Kaspa SigHash values use a bitfield.
+/// Tipos de SigHash (Kaspa usa bitfield, diferente a Bitcoin)
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 /// Kaspa sighash type — determines which parts of the transaction are signed.
@@ -24,6 +24,7 @@ pub enum SigHashType {
     None = 0b0000_0010,
     Single = 0b0000_0100,
     AnyOneCanPay = 0b1000_0000,
+    // Combinaciones
     AllAnyOneCanPay = 0b1000_0001,
     NoneAnyOneCanPay = 0b1000_0010,
     SingleAnyOneCanPay = 0b1000_0100,

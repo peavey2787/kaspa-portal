@@ -2,7 +2,7 @@
 
 use crate::transaction::model::Ms45Hint;
 
-/// Extract the Kaspa Portal v1 45' trailing `cosigner/chain/index` search hint from a
+/// Extract the v1.0.6 45' trailing `cosigner/chain/index` search hint from a
 /// validated PSKT KeySource value. The hint is never authoritative: signing
 /// still derives and matches the redeem script before using a key.
 pub(super) fn extract_ms45_hint(src: &[u8], start: usize, end: usize) -> Option<Ms45Hint> {
@@ -18,7 +18,7 @@ fn find_derivation_path(region: &[u8]) -> Option<&[u8]> {
     // unreachable host-coverage branch.
     let tail = &region[offset + needle.len()..];
     let quote = find_byte(tail, b'"')?;
-    if find_delimiter(tail).is_some_and(|delimiter| delimiter < quote) {
+    if find_delimiter(&tail[..quote]).is_some() {
         return None;
     }
     // `quote` and `end_quote` are positions returned from these exact slices.
@@ -66,5 +66,5 @@ fn parse_soft_decimal(component: &[u8]) -> Option<u32> {
 }
 
 #[cfg(test)]
-#[path = "derivation/unit-tests/mod.rs"]
+#[path = "unit-tests/derivation.rs"]
 mod unit_tests;

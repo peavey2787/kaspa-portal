@@ -125,6 +125,9 @@ fn covenant_account_route_honors_active_account_selection() {
 
     let mut filtered = transaction();
     set_p2sh(&mut filtered, &redeem);
+    filtered.inputs[0].covenant_execution_present = true;
+    filtered.inputs[0].covenant_execution_mask = 0;
+    filtered.inputs[0].covenant_execution_true_mask = 0;
     assert_eq!(
         sign_multisig_accounts_input_with_entropy(
             &mut filtered,
@@ -140,6 +143,9 @@ fn covenant_account_route_honors_active_account_selection() {
 
     let mut selected = transaction();
     set_p2sh(&mut selected, &redeem);
+    selected.inputs[0].covenant_execution_present = true;
+    selected.inputs[0].covenant_execution_mask = 0;
+    selected.inputs[0].covenant_execution_true_mask = 0;
     assert_eq!(
         sign_multisig_accounts_input_with_entropy(
             &mut selected,
@@ -273,4 +279,99 @@ fn hd45_account_set_public_entry_point_signs_the_hint_selected_child() {
         Ok(1),
     );
     assert_eq!(tx.inputs[0].sig_count, 1);
+}
+
+#[test]
+fn hd45_account_set_signs_exact_two_local_members_of_two_of_three() {
+    use crate::{
+        transaction::model::{Ms45Hint, MultisigConfig},
+        wallet::{
+            derivation::bip32::{derive_account_key, derive_multisig_account_key},
+            key::xpub::derive_multisig_account_parts,
+        },
+    };
+
+    let first_seed = [0x81u8; 64];
+    let second_seed = [0x82u8; 64];
+    let external_seed = [0x83u8; 64];
+    let first_parts = derive_multisig_account_parts(&first_seed, 0).expect("first 45' kpub");
+    let second_parts = derive_multisig_account_parts(&second_seed, 0).expect("second 45' kpub");
+    let external_parts =
+        derive_multisig_account_parts(&external_seed, 0).expect("external 45' kpub");
+
+    let mut config = MultisigConfig::new();
+    config.m = 2;
+    config.n = 3;
+    config.v45 = true;
+    assert!(config.set_cosigner(0, &first_parts));
+    assert!(config.set_cosigner(1, &second_parts));
+    assert!(config.set_cosigner(2, &external_parts));
+    config.sort_cosigners();
+    assert!(config.resolve_cosigner_index(&first_parts));
+    config.chain = 0;
+    config.addr_index = 4;
+    let script_len = config.build_script();
+    assert_ne!(script_len, 0);
+
+    let mut tx = transaction();
+    tx.inputs[0].sig_op_count = config.n;
+    tx.inputs[0].ms45_hint = Ms45Hint {
+        present: true,
+        cosigner: u32::from(config.cosigner_index),
+        chain: u32::from(config.chain),
+        index: config.addr_index,
+    };
+    set_p2sh(&mut tx, &config.script[..script_len]);
+
+    let first_account = derive_account_key(&first_seed).expect("first account");
+    let second_account = derive_account_key(&second_seed).expect("second account");
+    let first_ms45 = derive_multisig_account_key(&first_seed, 0).expect("first 45' account");
+    let second_ms45 = derive_multisig_account_key(&second_seed, 0).expect("second 45' account");
+    let accounts = [
+        (first_account.to_raw(), true),
+        (second_account.to_raw(), true),
+    ];
+    let ms45_accounts = [(first_ms45.to_raw(), true), (second_ms45.to_raw(), true)];
+
+    let unsigned_wire = crate::transaction::interchange::kspt::serialize_compact_kspt_vec(&tx)
+        .expect("unsigned compact KSPT");
+    let mut imported =
+        crate::transaction::model::Transaction::try_new().expect("transaction test allocation");
+    crate::transaction::interchange::kspt::parse_compact_kspt(&unsigned_wire, &mut imported)
+        .expect("unsigned compact KSPT import");
+    assert_eq!(imported.inputs[0].sig_count, 0);
+    assert_eq!(imported.inputs[0].sighash_type, SigHashType::All.to_byte());
+
+    assert_eq!(
+        super::super::sign_multisig_account_sets_input_with_entropy(
+            &mut imported,
+            0,
+            &accounts,
+            &ms45_accounts,
+            SigHashType::All,
+            Some(0),
+            &[0x84; 32],
+        ),
+        Ok(2),
+    );
+    assert_eq!(imported.inputs[0].sig_count, 2);
+    assert_eq!(imported.inputs[0].sighash_type, SigHashType::All.to_byte());
+    let mut positions = [
+        imported.inputs[0].sigs[0].pubkey_pos,
+        imported.inputs[0].sigs[1].pubkey_pos,
+    ];
+    positions.sort_unstable();
+    assert_ne!(positions[0], positions[1]);
+
+    let signed_wire = crate::transaction::interchange::kspt::serialize_compact_kspt_vec(&imported)
+        .expect("signed compact KSPT");
+    let mut reparsed =
+        crate::transaction::model::Transaction::try_new().expect("transaction test allocation");
+    crate::transaction::interchange::kspt::parse_compact_kspt(&signed_wire, &mut reparsed)
+        .expect("signed compact KSPT re-import");
+    assert_eq!(reparsed.inputs[0].sig_count, 2);
+    assert_eq!(reparsed.inputs[0].sighash_type, SigHashType::All.to_byte());
+    assert!(crate::transaction::interchange::kspt::is_fully_signed(
+        &reparsed
+    ));
 }

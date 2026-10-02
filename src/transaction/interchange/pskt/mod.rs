@@ -5,6 +5,7 @@
 //! consensus finalization, and signature-script construction are separate
 //! modules behind a single capability-oriented PSKT surface.
 
+pub mod schema;
 pub mod shared;
 pub mod standard;
 

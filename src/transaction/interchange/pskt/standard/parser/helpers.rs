@@ -3,7 +3,7 @@
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
 use crate::transaction::model::{ScriptPublicKey, MAX_SCRIPT_SIZE};
 
-use super::super::preservation::capture_unknown;
+use super::super::preservation::{capture_unknown, capture_unknown_keyed};
 
 use super::super::{hex_decode_strict, parse_u64_num, PskError, Tok, Tokenizer};
 
@@ -38,57 +38,24 @@ pub(super) fn expect_string<'a>(tok: &mut Tokenizer<'a>) -> Result<&'a [u8], Psk
 
 pub(super) fn expect_u64(tok: &mut Tokenizer<'_>) -> Result<u64, PskError> {
     match tok.next_token()? {
-        Tok::Num(value) | Tok::Str(value) => parse_u64_num(value),
+        Tok::Num(value) => parse_json_number_u64(value),
+        Tok::Str(value) => parse_u64_num(value),
         _ => Err(PskError::UnexpectedToken),
     }
 }
 
-pub(super) fn expect_exact_u64(tok: &mut Tokenizer<'_>) -> Result<u64, PskError> {
-    match tok.next_token()? {
-        Tok::Str(value) => parse_u64_num(value),
-        _ => Err(PskError::UnexpectedToken),
+pub(super) fn parse_json_number_u64(value: &[u8]) -> Result<u64, PskError> {
+    let value = parse_u64_num(value)?;
+    if !crate::transaction::interchange::pskt::schema::json_number_is_exact_integer(value) {
+        return Err(PskError::UnexpectedToken);
     }
+    Ok(value)
 }
 
 pub(super) fn expect_bool(tok: &mut Tokenizer<'_>) -> Result<bool, PskError> {
     match tok.next_token()? {
         Tok::True => Ok(true),
         Tok::False => Ok(false),
-        _ => Err(PskError::UnexpectedToken),
-    }
-}
-
-pub(super) fn next_object_member<'a>(
-    tok: &mut Tokenizer<'a>,
-) -> Result<(usize, &'a [u8]), PskError> {
-    let key_start = tok.position();
-    let key = expect_string(tok)?;
-    expect(tok, Tok::Colon)?;
-    Ok((key_start, key))
-}
-
-pub(super) fn skip_and_capture_unknown(
-    tok: &mut Tokenizer<'_>,
-    parsed: &mut PsktParsed,
-    scope: PsktUnknownScope,
-    key_start: usize,
-) -> Result<(), PskError> {
-    skip_value(tok)?;
-    capture_unknown(parsed, scope, key_start, tok.position())
-}
-
-pub(super) fn capture_nullable_hex(
-    tok: &mut Tokenizer<'_>,
-    parsed: &mut PsktParsed,
-    scope: PsktUnknownScope,
-    key_start: usize,
-) -> Result<(), PskError> {
-    match tok.next_token()? {
-        Tok::Null => Ok(()),
-        Tok::Str(hex_str) => {
-            validate_hex_string(hex_str)?;
-            capture_unknown(parsed, scope, key_start, tok.position())
-        }
         _ => Err(PskError::UnexpectedToken),
     }
 }
@@ -152,7 +119,11 @@ pub(super) fn parse_bounded_array<'a>(
 /// Skip exactly one syntactically valid JSON value.
 pub(super) fn skip_value(tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
     match tok.next_token()? {
-        Tok::Str(_) | Tok::Num(_) | Tok::True | Tok::False | Tok::Null => Ok(()),
+        Tok::Num(value) => {
+            parse_u64_num(value)?;
+            Ok(())
+        }
+        Tok::Str(_) | Tok::True | Tok::False | Tok::Null => Ok(()),
         Tok::LBrace => skip_until_matching(tok, Tok::RBrace),
         Tok::LBracket => skip_until_matching(tok, Tok::RBracket),
         _ => Err(PskError::UnexpectedToken),
@@ -320,7 +291,12 @@ fn process_nested_value(
     parent_next: ContainerState,
 ) -> Result<(), PskError> {
     match token {
-        Tok::Str(_) | Tok::Num(_) | Tok::True | Tok::False | Tok::Null => {
+        Tok::Num(value) => {
+            parse_u64_num(value)?;
+            set_current_state(stack, *depth, parent_next);
+            Ok(())
+        }
+        Tok::Str(_) | Tok::True | Tok::False | Tok::Null => {
             set_current_state(stack, *depth, parent_next);
             Ok(())
         }
@@ -357,22 +333,41 @@ fn push_container(
     Ok(())
 }
 
-#[inline]
-pub(super) fn mark_seen_u8(seen: &mut u8, bit: u8) -> Result<(), PskError> {
+/// Mark a standardized/product PSKT field using the canonical shared schema.
+/// Unknown fields deliberately return `false` so the caller can apply the
+/// shared extension-preservation rule.
+pub(super) fn mark_schema_field(
+    tok: &mut Tokenizer<'_>,
+    seen: &mut u64,
+    scope: crate::transaction::interchange::pskt::schema::Scope,
+    key: &[u8],
+) -> Result<bool, PskError> {
+    use crate::transaction::interchange::pskt::schema::{field_bit, field_spec, NullRule};
+
+    let Some(bit) = field_bit(scope, key) else {
+        return Ok(false);
+    };
     if *seen & bit != 0 {
         return Err(PskError::DuplicateField);
     }
+    if matches!(field_spec(scope, key), Some(spec) if spec.null_rule == NullRule::Forbidden)
+        && matches!(tok.peek()?, Tok::Null)
+    {
+        return Err(PskError::UnexpectedToken);
+    }
     *seen |= bit;
-    Ok(())
+    Ok(true)
 }
 
-#[inline]
-pub(super) fn mark_seen_u16(seen: &mut u16, bit: u16) -> Result<(), PskError> {
-    if *seen & bit != 0 {
-        return Err(PskError::DuplicateField);
+pub(super) fn require_schema_fields(
+    scope: crate::transaction::interchange::pskt::schema::Scope,
+    seen: u64,
+) -> Result<(), PskError> {
+    if crate::transaction::interchange::pskt::schema::required_fields_present(scope, seen) {
+        Ok(())
+    } else {
+        Err(PskError::MissingField)
     }
-    *seen |= bit;
-    Ok(())
 }
 
 pub(super) fn parse_hex_field(hex_str: &[u8], dst: &mut [u8]) -> Result<usize, PskError> {
@@ -425,4 +420,35 @@ pub(super) fn capture_nonempty_object(
     }
     skip_until_matching(tok, Tok::RBrace)?;
     capture_unknown(parsed, scope, field_start, tok.position())
+}
+
+/// A schema parser that records preserved and unknown fields under one
+/// scope. Implementers supply the preservation record and their scope; field
+/// capture and unknown-field preservation are shared.
+pub(super) trait ScopedPreservation {
+    fn preservation(&mut self) -> &mut PsktParsed;
+    fn preservation_scope(&self) -> PsktUnknownScope;
+
+    /// Record `field_start..field_end` as a preserved field of this scope.
+    fn capture(&mut self, field_start: usize, field_end: usize) -> Result<(), PskError> {
+        let scope = self.preservation_scope();
+        capture_unknown(self.preservation(), scope, field_start, field_end)
+    }
+
+    /// Skip an unrecognized field's value and preserve the whole member.
+    fn preserve_unknown(
+        &mut self,
+        tok: &mut Tokenizer<'_>,
+        key_start: usize,
+    ) -> Result<(), PskError> {
+        skip_value(tok)?;
+        let scope = self.preservation_scope();
+        capture_unknown_keyed(
+            self.preservation(),
+            scope,
+            tok.source(),
+            key_start,
+            tok.position(),
+        )
+    }
 }

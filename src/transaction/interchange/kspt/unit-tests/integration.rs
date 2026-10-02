@@ -7,7 +7,7 @@ use crate::transaction::{
 
 #[cfg(test)]
 pub fn test_compact_roundtrip() -> bool {
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.version = 0;
     tx.network = crate::primitives::address::KaspaNetwork::Mainnet;
     tx.num_inputs = 1;
@@ -31,7 +31,7 @@ pub fn test_compact_roundtrip() -> bool {
     let Ok(size) = serialize_compact_kspt(&tx, &mut wire) else {
         return false;
     };
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction test allocation");
     parse_compact_kspt(&wire[..size], &mut parsed).is_ok()
         && parsed.num_inputs == 1
         && parsed.num_outputs == 1
@@ -41,7 +41,7 @@ pub fn test_compact_roundtrip() -> bool {
 #[cfg(test)]
 pub fn test_invalid_magic() -> bool {
     let bad_data = [0u8; 6];
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     matches!(
         parse_compact_kspt(&bad_data, &mut tx),
         Err(PsktError::InvalidMagic)
@@ -63,7 +63,12 @@ pub fn test_signed_response_size() -> bool {
 
 #[cfg(test)]
 pub fn test_signing_rejects_empty_transaction() -> bool {
-    sign_transaction(&Transaction::new(), &[1u8; 32], SigHashType::All).is_err()
+    sign_transaction(
+        &Transaction::try_new().expect("transaction test allocation"),
+        &[1u8; 32],
+        SigHashType::All,
+    )
+    .is_err()
 }
 
 #[cfg(test)]

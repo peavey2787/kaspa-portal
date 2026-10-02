@@ -8,30 +8,16 @@ use metadata::{parse_bip32_derivations, parse_partial_sigs};
 
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
 use crate::transaction::model::{
-    Transaction, TransactionInput, MAX_SCRIPT_SIZE, MAX_SIGS_PER_INPUT,
+    Transaction, TransactionInput, MAX_REDEEM_SIZE, MAX_SIGS_PER_INPUT,
 };
 
-use super::super::preservation::capture_unknown;
 use super::super::{PskError, Tok, Tokenizer};
 use super::helpers::{
-    capture_nonempty_object, capture_nullable_hex, consume_object_separator, expect,
-    expect_exact_u64, expect_string, expect_u64, mark_seen_u16, parse_hex_field,
-    reject_empty_object, skip_and_capture_unknown,
+    capture_nonempty_object, consume_object_separator, expect, expect_string, expect_u64,
+    mark_schema_field, parse_hex_field, parse_json_number_u64, reject_empty_object,
+    require_schema_fields, validate_hex_string, ScopedPreservation,
 };
 use super::SIGHASH_ALL;
-
-const UTXO: u16 = 0x0001;
-const OUTPOINT: u16 = 0x0002;
-const SEQUENCE: u16 = 0x0004;
-const MIN_TIME: u16 = 0x0008;
-const PARTIAL_SIGS: u16 = 0x0010;
-const SIGHASH: u16 = 0x0020;
-const REDEEM_SCRIPT: u16 = 0x0040;
-const SIG_OP_COUNT: u16 = 0x0080;
-const BIP32_DERIVATIONS: u16 = 0x0100;
-const FINAL_SCRIPT_SIG: u16 = 0x0200;
-const PROPRIETARIES: u16 = 0x0400;
-const REQUIRED: u16 = 0x0023;
 
 pub(super) fn parse_inputs_array(
     tok: &mut Tokenizer<'_>,
@@ -72,8 +58,20 @@ fn parse_input_at(
     count: usize,
 ) -> Result<(), PskError> {
     tx.ensure_input_slots(count + 1)
-        .map_err(|_| PskError::TooManyInputs)
-        .and_then(|()| parse_input(tok, &mut tx.inputs[count], parsed, count))
+        .map_err(|_| PskError::TooManyInputs)?;
+    tx.inputs[count] = TransactionInput::empty();
+    let mut redeem = [0u8; MAX_REDEEM_SIZE];
+    let mut redeem_len = 0usize;
+    parse_input(
+        tok,
+        &mut tx.inputs[count],
+        parsed,
+        count,
+        &mut redeem,
+        &mut redeem_len,
+    )?;
+    tx.store_redeem(count, &redeem[..redeem_len])
+        .map_err(|_| PskError::InvalidScriptLen)
 }
 
 fn input_array_is_empty(tok: &mut Tokenizer<'_>) -> Result<bool, PskError> {
@@ -110,6 +108,8 @@ fn parse_input(
     input: &mut TransactionInput,
     parsed: &mut PsktParsed,
     index: usize,
+    redeem: &mut [u8; MAX_REDEEM_SIZE],
+    redeem_len: &mut usize,
 ) -> Result<(), PskError> {
     expect(tok, Tok::LBrace)?;
     reject_empty_object(tok)?;
@@ -118,6 +118,8 @@ fn parse_input(
         input,
         parsed,
         index,
+        redeem,
+        redeem_len,
         seen: 0,
     };
     loop {
@@ -133,7 +135,65 @@ struct InputParser<'a> {
     input: &'a mut TransactionInput,
     parsed: &'a mut PsktParsed,
     index: usize,
-    seen: u16,
+    redeem: &'a mut [u8; MAX_REDEEM_SIZE],
+    redeem_len: &'a mut usize,
+    seen: u64,
+}
+
+fn parse_covenant_execution_object(tok: &mut Tokenizer<'_>) -> Result<(u16, u16), PskError> {
+    expect(tok, Tok::LBrace)?;
+    reject_empty_object(tok)?;
+    let mut seen = 0u64;
+    let mut mask = 0u16;
+    let mut truth = 0u16;
+    loop {
+        parse_covenant_execution_member(tok, &mut seen, &mut mask, &mut truth)?;
+        if !consume_object_separator(tok)? {
+            break;
+        }
+    }
+    require_schema_fields(
+        crate::transaction::interchange::pskt::schema::Scope::CovenantExecution,
+        seen,
+    )?;
+    if truth & !mask != 0 {
+        return Err(PskError::UnexpectedToken);
+    }
+    Ok((mask, truth))
+}
+
+fn parse_covenant_execution_member(
+    tok: &mut Tokenizer<'_>,
+    seen: &mut u64,
+    mask: &mut u16,
+    truth: &mut u16,
+) -> Result<(), PskError> {
+    let key = expect_string(tok)?;
+    expect(tok, Tok::Colon)?;
+    if !mark_schema_field(
+        tok,
+        seen,
+        crate::transaction::interchange::pskt::schema::Scope::CovenantExecution,
+        key,
+    )? {
+        return Err(PskError::UnexpectedToken);
+    }
+    let value = u16::try_from(expect_u64(tok)?).map_err(|_| PskError::UnexpectedToken)?;
+    assign_covenant_execution_member(key, value, mask, truth)
+}
+
+fn assign_covenant_execution_member(
+    key: &[u8],
+    value: u16,
+    mask: &mut u16,
+    truth: &mut u16,
+) -> Result<(), PskError> {
+    match key {
+        b"suppliedMask" => *mask = value,
+        b"suppliedTrueMask" => *truth = value,
+        _ => return Err(PskError::UnexpectedToken),
+    }
+    Ok(())
 }
 
 impl InputParser<'_> {
@@ -141,6 +201,12 @@ impl InputParser<'_> {
         let key_start = tok.position();
         let key = expect_string(tok)?;
         expect(tok, Tok::Colon)?;
+        mark_schema_field(
+            tok,
+            &mut self.seen,
+            crate::transaction::interchange::pskt::schema::Scope::Input,
+            key,
+        )?;
         self.parse_field(tok, key_start, key)
     }
 
@@ -175,27 +241,23 @@ impl InputParser<'_> {
             b"sigOpCount" => self.parse_sig_op_count(tok),
             b"bip32Derivations" => self.parse_bip32(tok, key_start),
             b"finalScriptSig" => self.parse_final_script_sig(tok, key_start),
-            b"proprietaries" => {
-                mark_seen_u16(&mut self.seen, PROPRIETARIES)?;
-                capture_nonempty_object(tok, self.parsed, key_start, self.scope())
-            }
-            _ => skip_and_capture_unknown(tok, self.parsed, self.scope(), key_start),
+            b"proprietaries" => self.parse_proprietaries(tok, key_start),
+            b"covenantExecution" => self.parse_covenant_execution(tok),
+            b"minimumSignatures" => self.parse_minimum_signatures(tok, key_start),
+            _ => self.preserve_unknown(tok, key_start),
         }
     }
 
     fn parse_utxo(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, UTXO)?;
         parse_utxo_entry(tok, self.input, self.parsed, self.index)
     }
 
     fn parse_previous_outpoint(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, OUTPOINT)?;
         parse_outpoint(tok, self.input, self.parsed, self.index)
     }
 
     fn parse_sequence(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, SEQUENCE)?;
-        self.input.sequence = expect_exact_u64(tok)?;
+        self.input.sequence = expect_u64(tok)?;
         Ok(())
     }
 
@@ -204,9 +266,12 @@ impl InputParser<'_> {
         tok: &mut Tokenizer<'_>,
         key_start: usize,
     ) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, MIN_TIME)?;
         match tok.next_token()? {
             Tok::Null => Ok(()),
+            Tok::Num(value) => {
+                parse_json_number_u64(value)?;
+                self.capture(key_start, tok.position())
+            }
             Tok::Str(value) => {
                 super::super::parse_u64_num(value)?;
                 self.capture(key_start, tok.position())
@@ -216,12 +281,10 @@ impl InputParser<'_> {
     }
 
     fn parse_partial_signatures(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, PARTIAL_SIGS)?;
         parse_partial_sigs(tok, self.input)
     }
 
     fn parse_sighash(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, SIGHASH)?;
         if expect_u64(tok)? != SIGHASH_ALL as u64 {
             return Err(PskError::InvalidSighashType);
         }
@@ -230,10 +293,9 @@ impl InputParser<'_> {
     }
 
     fn parse_redeem_script(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, REDEEM_SCRIPT)?;
         match tok.next_token()? {
             Tok::Null => {
-                self.input.redeem_script_len = 0;
+                *self.redeem_len = 0;
                 Ok(())
             }
             Tok::Str(hex_str) => self.decode_redeem_script(hex_str),
@@ -242,15 +304,14 @@ impl InputParser<'_> {
     }
 
     fn decode_redeem_script(&mut self, hex_str: &[u8]) -> Result<(), PskError> {
-        if hex_str.len() / 2 > MAX_SCRIPT_SIZE {
+        if hex_str.len() / 2 > MAX_REDEEM_SIZE {
             return Err(PskError::InvalidScriptLen);
         }
-        self.input.redeem_script_len = parse_hex_field(hex_str, &mut self.input.redeem_script)?;
+        *self.redeem_len = parse_hex_field(hex_str, self.redeem)?;
         Ok(())
     }
 
     fn parse_sig_op_count(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, SIG_OP_COUNT)?;
         let count = expect_u64(tok)?;
         if count > MAX_SIGS_PER_INPUT as u64 {
             return Err(PskError::TooManyPartialSigs);
@@ -260,7 +321,6 @@ impl InputParser<'_> {
     }
 
     fn parse_bip32(&mut self, tok: &mut Tokenizer<'_>, key_start: usize) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, BIP32_DERIVATIONS)?;
         parse_bip32_derivations(tok, self.parsed, key_start, self.index, self.input)
     }
 
@@ -269,13 +329,54 @@ impl InputParser<'_> {
         tok: &mut Tokenizer<'_>,
         key_start: usize,
     ) -> Result<(), PskError> {
-        mark_seen_u16(&mut self.seen, FINAL_SCRIPT_SIG)?;
-        capture_nullable_hex(tok, self.parsed, self.scope(), key_start)
+        match tok.next_token()? {
+            Tok::Null => Ok(()),
+            Tok::Str(hex_str) => {
+                validate_hex_string(hex_str)?;
+                self.capture(key_start, tok.position())
+            }
+            _ => Err(PskError::UnexpectedToken),
+        }
     }
 
-    fn capture(&mut self, field_start: usize, field_end: usize) -> Result<(), PskError> {
+    fn parse_covenant_execution(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
+        if matches!(tok.peek()?, Tok::Null) {
+            tok.next_token()?;
+            self.clear_covenant_execution();
+            return Ok(());
+        }
+        let (mask, truth) = parse_covenant_execution_object(tok)?;
+        self.input.covenant_execution_present = true;
+        self.input.covenant_execution_mask = mask;
+        self.input.covenant_execution_true_mask = truth;
+        Ok(())
+    }
+
+    fn clear_covenant_execution(&mut self) {
+        self.input.covenant_execution_present = false;
+        self.input.covenant_execution_mask = 0;
+        self.input.covenant_execution_true_mask = 0;
+    }
+
+    fn parse_minimum_signatures(
+        &mut self,
+        tok: &mut Tokenizer<'_>,
+        key_start: usize,
+    ) -> Result<(), PskError> {
+        let count = expect_u64(tok)?;
+        if count == 0 || count > MAX_SIGS_PER_INPUT as u64 {
+            return Err(PskError::TooManyPartialSigs);
+        }
+        self.capture(key_start, tok.position())
+    }
+
+    fn parse_proprietaries(
+        &mut self,
+        tok: &mut Tokenizer<'_>,
+        key_start: usize,
+    ) -> Result<(), PskError> {
         let scope = self.scope();
-        capture_unknown(self.parsed, scope, field_start, field_end)
+        capture_nonempty_object(tok, self.parsed, key_start, scope)
     }
 
     fn scope(&self) -> PsktUnknownScope {
@@ -283,9 +384,19 @@ impl InputParser<'_> {
     }
 
     fn require_fields(&self) -> Result<(), PskError> {
-        if self.seen & REQUIRED != REQUIRED {
-            return Err(PskError::MissingField);
-        }
-        Ok(())
+        require_schema_fields(
+            crate::transaction::interchange::pskt::schema::Scope::Input,
+            self.seen,
+        )
+    }
+}
+
+impl ScopedPreservation for InputParser<'_> {
+    fn preservation(&mut self) -> &mut PsktParsed {
+        self.parsed
+    }
+
+    fn preservation_scope(&self) -> PsktUnknownScope {
+        self.scope()
     }
 }

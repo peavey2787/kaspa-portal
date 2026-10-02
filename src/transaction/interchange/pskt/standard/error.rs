@@ -2,8 +2,9 @@
 
 /// Error type for PSKT parse and serialize operations.
 ///
-/// Variant order is stable because the enum is `repr(u8)` and discriminants
-/// are part of the PSKT public error ABI. New variants are appended.
+/// Existing variants retain their original order because the enum is
+/// `repr(u8)` and crosses the embedded-signer FFI boundary. New variants
+/// are appended so existing discriminants remain stable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum PskError {
@@ -62,7 +63,7 @@ pub enum PskError {
     OutputBufferTooSmall,
 
     // Appended after the original variants to preserve existing discriminants.
-    /// Decoded JSON cannot be represented by the u16 preservation offsets.
+    /// Decoded JSON cannot be represented by the u32 preservation offsets.
     JsonTooLarge,
     /// A skipped JSON value exceeded the bounded nesting stack.
     JsonNestingTooDeep,
@@ -74,4 +75,8 @@ pub enum PskError {
     OutputAmountOverflow,
     /// Aggregate outputs exceed aggregate inputs.
     OutputsExceedInputs,
+    /// A merge attempted to replace an existing signature with different bytes.
+    SignatureConflict,
+    /// A payload or decode buffer could not be allocated.
+    StorageExhausted,
 }

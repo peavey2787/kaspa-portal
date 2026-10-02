@@ -1,7 +1,13 @@
 use alloc::{format, string::ToString, vec, vec::Vec};
 
-use super::super::{hex_decode_strict, parse_u64_num, PskError, PSKB_MAGIC, PSKT_MAGIC};
-use super::common::{parse_json, transaction_json, COVENANT_ID, TXID_ZERO};
+use crate::transaction::interchange::pskt::shared::PsktParsed;
+
+use crate::transaction::model::{Transaction, MAX_REDEEM_SIZE};
+
+use super::super::{
+    hex_decode_strict, parse_pskt, parse_u64_num, PskError, PSKB_MAGIC, PSKT_MAGIC,
+};
+use super::common::{encode_wire, parse_json, transaction_json, COVENANT_ID, TXID_ZERO};
 
 #[test]
 fn strict_hex_decoder_covers_each_fail_closed_boundary() {
@@ -29,28 +35,12 @@ fn strict_hex_decoder_covers_each_fail_closed_boundary() {
 #[test]
 fn declared_counts_are_validated_after_field_order_is_resolved() {
     let json = format!(
-        "{{\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[],\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":0,\"outputCount\":0}}}}"
+        "{{\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[],\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":0,\"outputCount\":0}}}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, json.as_bytes()).unwrap_err(),
         PskError::CountMismatch
     );
-}
-
-#[test]
-fn pskt_version_zero_is_the_only_accepted_version() {
-    let current = br#"{"global":{"version":0,"txVersion":1,"inputCount":0,"outputCount":0},"inputs":[],"outputs":[]}"#;
-    assert!(parse_json(PSKT_MAGIC, current).is_ok());
-    for version in [1, 2] {
-        let json = format!(
-            r#"{{"global":{{"version":{version},"txVersion":1,"inputCount":0,"outputCount":0}},"inputs":[],"outputs":[]}}"#
-        );
-        assert_eq!(
-            parse_json(PSKT_MAGIC, json.as_bytes()).unwrap_err(),
-            PskError::VersionNotSupported,
-            "version {version}"
-        );
-    }
 }
 
 #[test]
@@ -65,7 +55,7 @@ fn zero_count_transaction_uses_the_explicit_empty_array_grammar() {
 fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
     let max = u64::MAX;
     let input_overflow = format!(
-        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":2,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}},{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":1}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":2,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}},{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":1}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, input_overflow.as_bytes()).unwrap_err(),
@@ -73,7 +63,7 @@ fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
     );
 
     let output_overflow = format!(
-        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":2}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":2}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}},{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, output_overflow.as_bytes()).unwrap_err(),
@@ -81,7 +71,7 @@ fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
     );
 
     let outputs_exceed_inputs = format!(
-        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"41\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"42\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":41,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":42,\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, outputs_exceed_inputs.as_bytes()).unwrap_err(),
@@ -89,7 +79,7 @@ fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
     );
 
     let exact_max = format!(
-        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":2,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}},{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":1}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}}]}}",
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":2,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"{}\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}},{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":1}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"{max}\",\"scriptPublicKey\":\"0000\"}}]}}",
         max - 1
     );
     let (parsed, _, _) = parse_json(PSKT_MAGIC, exact_max.as_bytes()).expect("exact max parses");
@@ -106,12 +96,24 @@ fn pskt_parser_rejects_aggregate_monetary_overflow_and_accepts_exact_u64_max() {
 #[test]
 fn mismatched_nested_delimiters_are_rejected() {
     let json = format!(
-        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"future\":{{\"a\":[1}}],\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"future\":{{\"a\":[1}}],\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, json.as_bytes()).unwrap_err(),
         PskError::UnexpectedToken
     );
+}
+
+#[test]
+fn opaque_json_numbers_must_fit_the_shared_u64_grammar() {
+    let too_large = transaction_json(r#","futureNumber":18446744073709551616"#, "", "");
+    assert_eq!(
+        parse_json(PSKT_MAGIC, &too_large).unwrap_err(),
+        PskError::UnexpectedToken
+    );
+
+    let exact_max = transaction_json(r#","futureNumber":18446744073709551615"#, "", "");
+    assert!(parse_json(PSKT_MAGIC, &exact_max).is_ok());
 }
 
 #[test]
@@ -128,7 +130,7 @@ fn opaque_json_requires_full_container_grammar() {
 #[test]
 fn empty_required_objects_and_opaque_nested_objects_have_distinct_grammar_results() {
     let empty_global = format!(
-        "{{\"global\":{{}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, empty_global.as_bytes()).unwrap_err(),
@@ -155,11 +157,11 @@ fn opaque_json_nesting_is_bounded() {
     nested.push(b'0');
     nested.extend(core::iter::repeat_n(b']', 33));
     nested.extend_from_slice(
-        b",\"inputs\":[{\"utxoEntry\":{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"},\"previousOutpoint\":{\"transactionId\":\"",
+        b",\"inputs\":[{\"utxoEntry\":{\"amount\":1,\"scriptPublicKey\":\"0000\"},\"previousOutpoint\":{\"transactionId\":\"",
     );
     nested.extend_from_slice(TXID_ZERO.as_bytes());
     nested.extend_from_slice(
-        b"\",\"index\":0},\"sighashType\":1}],\"outputs\":[{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}]}",
+        b"\",\"index\":0},\"sighashType\":1}],\"outputs\":[{\"amount\":1,\"scriptPublicKey\":\"0000\"}]}",
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, &nested).unwrap_err(),
@@ -170,7 +172,7 @@ fn opaque_json_nesting_is_bounded() {
 #[test]
 fn duplicate_known_fields_are_rejected_consistently() {
     let input_duplicates = [
-        ",\"sequence\":\"1\",\"sequence\":\"2\"",
+        ",\"sequence\":1,\"sequence\":2",
         ",\"redeemScript\":null,\"redeemScript\":null",
         ",\"sigOpCount\":1,\"sigOpCount\":1",
         ",\"partialSigs\":{},\"partialSigs\":{}",
@@ -197,6 +199,36 @@ fn duplicate_known_fields_are_rejected_consistently() {
             PskError::DuplicateField
         );
     }
+}
+
+#[test]
+fn duplicate_unknown_fields_are_rejected_in_their_object_scope() {
+    let duplicate_top = transaction_json(r#","future":1,"future":2"#, "", "");
+    assert_eq!(
+        parse_json(PSKT_MAGIC, &duplicate_top).unwrap_err(),
+        PskError::DuplicateField
+    );
+
+    let duplicate_input = transaction_json("", r#","futureInput":1,"futureInput":2"#, "");
+    assert_eq!(
+        parse_json(PSKT_MAGIC, &duplicate_input).unwrap_err(),
+        PskError::DuplicateField
+    );
+
+    let duplicate_output = transaction_json("", "", r#","futureOutput":1,"futureOutput":2"#);
+    assert_eq!(
+        parse_json(PSKT_MAGIC, &duplicate_output).unwrap_err(),
+        PskError::DuplicateField
+    );
+}
+
+#[test]
+fn deeply_nested_duplicate_unknown_extension_keys_are_rejected_by_shared_grammar() {
+    let duplicate = transaction_json(r#","future":{"nested":[{"same":1,"same":2}]}"#, "", "");
+    assert_eq!(
+        parse_json(PSKT_MAGIC, &duplicate).unwrap_err(),
+        PskError::DuplicateField
+    );
 }
 
 #[test]
@@ -237,7 +269,7 @@ fn known_fields_require_their_declared_types() {
 #[test]
 fn duplicate_global_and_top_level_fields_are_rejected() {
     let global_duplicates = [
-        ",\"version\":1",
+        ",\"version\":0",
         ",\"txVersion\":1",
         ",\"fallbackLockTime\":null,\"fallbackLockTime\":null",
         ",\"inputsModifiable\":true,\"inputsModifiable\":true",
@@ -256,7 +288,7 @@ fn duplicate_global_and_top_level_fields_are_rejected() {
     }
 
     let duplicate_top_level = format!(
-        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
     );
     assert_eq!(
         parse_json(PSKT_MAGIC, duplicate_top_level.as_bytes()).unwrap_err(),
@@ -309,33 +341,51 @@ fn pskb_bundle_rejects_a_second_element_at_the_comma_boundary() {
 }
 
 #[test]
-fn decoded_json_accepts_exact_u16_offset_capacity_and_wider_bookkeeping() {
+fn decoded_json_past_the_u16_range_is_representable() {
+    // Preservation offsets are u32, so documents carrying a large payload
+    // (hosts allow up to `u16::MAX` payload bytes, i.e. twice that in hex)
+    // still parse with exact offsets.
     let mut json = transaction_json("", "", "");
     assert!(json.len() < u16::MAX as usize);
-    json.resize(u16::MAX as usize, b' ');
-    let (tx, parsed, _) = parse_json(PSKT_MAGIC, &json).expect("exact u16 JSON length");
-    assert_eq!(parsed.json_len, u16::MAX as u32);
+    json.resize(u16::MAX as usize + 1, b' ');
+    let (tx, parsed, _) = parse_json(PSKT_MAGIC, &json).expect("JSON past the u16 range");
+    assert_eq!(parsed.json_len, u32::from(u16::MAX) + 1);
     assert_eq!(tx.num_inputs, 1);
     assert_eq!(tx.num_outputs, 1);
 }
 
 #[test]
-fn decoded_json_larger_than_u16_offsets_is_supported() {
-    let mut json = transaction_json("", "", "");
-    json.resize(u16::MAX as usize + 1024, b' ');
-    let (tx, parsed, _) = parse_json(PSKT_MAGIC, &json).expect("large PSKT JSON");
-    assert_eq!(parsed.json_len as usize, json.len());
-    assert_eq!(tx.num_inputs, 1);
-    assert_eq!(tx.num_outputs, 1);
+fn decoded_json_larger_than_the_scratch_buffer_is_rejected() {
+    // The caller-owned scratch buffer is the document bound: one byte more
+    // than it holds is rejected before any parsing.
+    let json = transaction_json("", "", "");
+    let wire = encode_wire(PSKT_MAGIC, &json);
+    let mut scratch = vec![0u8; json.len() - 1];
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
+    let mut parsed = PsktParsed::empty();
+    assert_eq!(
+        parse_pskt(&wire, &mut scratch, &mut tx, &mut parsed),
+        Err(PskError::ScratchBufferTooSmall)
+    );
 }
 
 #[test]
 fn partial_signatures_cover_empty_valid_and_invalid_entries() {
     let pubkey = format!("02{}", "11".repeat(32));
     let signature = "22".repeat(64);
-    let valid = format!(",\"partialSigs\":{{\"{pubkey}\":{{\"schnorr\":\"{signature}\"}}}}");
-    let (tx, _, _) = parse_json(PSKT_MAGIC, &transaction_json("", &valid, "")).unwrap();
+    let structurally_valid_but_unverified =
+        format!(",\"partialSigs\":{{\"{pubkey}\":{{\"schnorr\":\"{signature}\"}}}}");
+    let (tx, _, _) = parse_json(
+        PSKT_MAGIC,
+        &transaction_json("", &structurally_valid_but_unverified, ""),
+    )
+    .expect("structurally valid partial signature parses as untrusted data");
     assert_eq!(tx.inputs[0].incoming_partial_sigs_count, 1);
+    assert_eq!(
+        crate::transaction::interchange::pskt::standard::pskt_signature_status(&tx),
+        (0, 1),
+        "unverified signature must not contribute to status"
+    );
 
     let empty = parse_json(PSKT_MAGIC, &transaction_json("", ",\"partialSigs\":{}", "")).unwrap();
     assert_eq!(empty.0.inputs[0].incoming_partial_sigs_count, 0);
@@ -404,7 +454,7 @@ fn bip32_derivations_cover_null_objects_duplicates_and_limits() {
 #[test]
 fn outpoint_parser_covers_unknown_duplicate_missing_and_bounds() {
     let unknown = format!(
-        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"future\":{{\"nested\":true}},\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"future\":{{\"nested\":true}},\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
     );
     let (_, parsed, _) = parse_json(PSKT_MAGIC, unknown.as_bytes()).unwrap();
     assert!(parsed.unknowns_count > 0);
@@ -419,7 +469,7 @@ fn outpoint_parser_covers_unknown_duplicate_missing_and_bounds() {
         "{\"transactionId\":\"00\",\"index\":0}".to_string(),
     ] {
         let json = format!(
-            "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{outpoint},\"sighashType\":1}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}}]}}"
+            "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{outpoint},\"sighashType\":1}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
         );
         assert!(parse_json(PSKT_MAGIC, json.as_bytes()).is_err());
     }
@@ -526,14 +576,77 @@ fn tokenizer_number_string_and_keyword_boundaries_are_exact() {
 }
 
 #[test]
+fn covenant_branch_and_minimum_signature_fields_cover_canonical_boundaries() {
+    for branch in ["owner", "owner-time", "beneficiary", "savings"] {
+        let extra = format!(r#","covenantBranch":"{branch}""#);
+        parse_json(PSKT_MAGIC, &transaction_json(&extra, "", ""))
+            .expect("supported covenant branch");
+    }
+    parse_json(
+        PSKT_MAGIC,
+        &transaction_json(r#","covenantBranch":null"#, "", ""),
+    )
+    .expect("null covenant branch");
+    for invalid in [
+        r#","covenantBranch":"oracle-v1-claim""#,
+        r#","covenantBranch":1"#,
+    ] {
+        assert_eq!(
+            parse_json(PSKT_MAGIC, &transaction_json(invalid, "", "")).unwrap_err(),
+            PskError::UnexpectedToken,
+        );
+    }
+
+    for execution in [
+        r#","covenantExecution":null"#,
+        r#","covenantExecution":{"suppliedMask":1,"suppliedTrueMask":0}"#,
+        r#","covenantExecution":{"suppliedMask":"3","suppliedTrueMask":"1"}"#,
+    ] {
+        parse_json(PSKT_MAGIC, &transaction_json("", execution, ""))
+            .expect("canonical covenant execution");
+    }
+    for invalid in [
+        r#","covenantExecution":1"#,
+        r#","covenantExecution":{}"#,
+        r#","covenantExecution":{"suppliedMask":1}"#,
+        r#","covenantExecution":{"suppliedMask":1,"suppliedTrueMask":2}"#,
+        r#","covenantExecution":{"suppliedMask":65536,"suppliedTrueMask":0}"#,
+        r#","covenantExecution":{"suppliedMask":1,"suppliedTrueMask":0,"extra":0}"#,
+    ] {
+        assert!(parse_json(PSKT_MAGIC, &transaction_json("", invalid, "")).is_err());
+    }
+
+    for minimum in [1u8, 5] {
+        let extra = format!(r#","minimumSignatures":{minimum}"#);
+        parse_json(PSKT_MAGIC, &transaction_json("", &extra, ""))
+            .expect("supported legacy numeric minimum signature count");
+    }
+    for minimum in ["1", "5"] {
+        let extra = format!(r#","minimumSignatures":"{minimum}""#);
+        parse_json(PSKT_MAGIC, &transaction_json("", &extra, ""))
+            .expect("supported canonical decimal-string minimum signature count");
+    }
+    for invalid in [
+        r#","minimumSignatures":0"#,
+        r#","minimumSignatures":6"#,
+        r#","minimumSignatures":"0""#,
+        r#","minimumSignatures":"6""#,
+        r#","minimumSignatures":"01""#,
+        r#","minimumSignatures":"1.0""#,
+    ] {
+        assert!(parse_json(PSKT_MAGIC, &transaction_json("", invalid, "")).is_err());
+    }
+}
+
+#[test]
 fn required_pskt_schema_fields_are_independently_enforced() {
     let valid_global = r#"{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}"#;
-    let valid_utxo = r#"{"amount":"1","scriptPublicKey":"0000"}"#;
+    let valid_utxo = r#"{"amount":1,"scriptPublicKey":"0000"}"#;
     let valid_outpoint = format!(r#"{{"transactionId":"{TXID_ZERO}","index":0}}"#);
     let valid_input = format!(
         r#"{{"utxoEntry":{valid_utxo},"previousOutpoint":{valid_outpoint},"sighashType":1}}"#
     );
-    let valid_output = r#"{"amount":"1","scriptPublicKey":"0000"}"#;
+    let valid_output = r#"{"amount":1,"scriptPublicKey":"0000"}"#;
     let document = |global: &str, input: &str, output: &str| {
         format!(r#"{{"global":{global},"inputs":[{input}],"outputs":[{output}]}}"#)
     };
@@ -569,7 +682,7 @@ fn required_pskt_schema_fields_are_independently_enforced() {
         );
     }
 
-    for utxo in [r#"{"scriptPublicKey":"0000"}"#, r#"{"amount":"1"}"#] {
+    for utxo in [r#"{"scriptPublicKey":"0000"}"#, r#"{"amount":1}"#] {
         let input = format!(
             r#"{{"utxoEntry":{utxo},"previousOutpoint":{valid_outpoint},"sighashType":1}}"#
         );
@@ -600,7 +713,7 @@ fn required_pskt_schema_fields_are_independently_enforced() {
         );
     }
 
-    for output in [r#"{"scriptPublicKey":"0000"}"#, r#"{"amount":"1"}"#] {
+    for output in [r#"{"scriptPublicKey":"0000"}"#, r#"{"amount":1}"#] {
         assert_eq!(
             parse_json(
                 PSKT_MAGIC,
@@ -615,26 +728,26 @@ fn required_pskt_schema_fields_are_independently_enforced() {
 #[test]
 fn pskt_parser_accepts_dynamic_inputs_and_fixed_output_boundaries() {
     let input = format!(
-        r#"{{"utxoEntry":{{"amount":"1","scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}"#
+        r#"{{"utxoEntry":{{"amount":1,"scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}"#
     );
-    let output = r#"{"amount":"1","scriptPublicKey":"0000"}"#;
-    let inputs_sixteen = vec![input.as_str(); 16].join(",");
+    let output = r#"{"amount":1,"scriptPublicKey":"0000"}"#;
+    let inputs_thirty_two = vec![input.as_str(); 32].join(",");
     let outputs_eight = [
         output, output, output, output, output, output, output, output,
     ]
     .join(",");
 
     let dynamic_inputs = format!(
-        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":16,"outputCount":1}},"inputs":[{inputs_sixteen}],"outputs":[{output}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":32,"outputCount":1}},"inputs":[{inputs_thirty_two}],"outputs":[{output}]}}"#
     );
     let parsed_inputs = parse_json(PSKT_MAGIC, dynamic_inputs.as_bytes()).expect("dynamic inputs");
-    assert_eq!(parsed_inputs.0.num_inputs, 16);
+    assert_eq!(parsed_inputs.0.num_inputs, 32);
 
     // Keep the output-capacity fixture monetarily valid: eight outputs of one sompi
     // require at least eight sompi of input value. This test is about the fixed
     // output-count boundary, not the OutputsExceedInputs rejection path.
     let input_for_eight_outputs = format!(
-        r#"{{"utxoEntry":{{"amount":"8","scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}"#
+        r#"{{"utxoEntry":{{"amount":8,"scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}"#
     );
     let max_outputs = format!(
         r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":8}},"inputs":[{input_for_eight_outputs}],"outputs":[{outputs_eight}]}}"#
@@ -656,7 +769,7 @@ fn pskt_parser_accepts_dynamic_inputs_and_fixed_output_boundaries() {
     assert!(parse_json(PSKT_MAGIC, tx_version_zero.as_bytes()).is_ok());
 
     let max_index_input = format!(
-        r#"{{"utxoEntry":{{"amount":"1","scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":4294967295}},"sighashType":1,"sigOpCount":5}}"#
+        r#"{{"utxoEntry":{{"amount":1,"scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":4294967295}},"sighashType":1,"sigOpCount":5}}"#
     );
     let max_index_document = format!(
         r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{max_index_input}],"outputs":[{output}]}}"#
@@ -677,17 +790,17 @@ fn pskt_parser_accepts_dynamic_inputs_and_fixed_output_boundaries() {
         PskError::UnexpectedToken,
     );
 
-    let script_at_limit = "aa".repeat(512);
+    let script_at_limit = "aa".repeat(MAX_REDEEM_SIZE);
     let redeem_at_limit = format!(r#","redeemScript":"{script_at_limit}""#);
     assert!(parse_json(PSKT_MAGIC, &transaction_json("", &redeem_at_limit, ""),).is_ok());
-    let redeem_too_large = format!(r#","redeemScript":"{}""#, "aa".repeat(513));
+    let redeem_too_large = format!(r#","redeemScript":"{}""#, "aa".repeat(MAX_REDEEM_SIZE + 1));
     assert_eq!(
         parse_json(PSKT_MAGIC, &transaction_json("", &redeem_too_large, "")).unwrap_err(),
         PskError::InvalidScriptLen,
     );
 
     let spk_at_limit = format!("0000{}", "aa".repeat(512));
-    let large_output = format!(r#"{{"amount":"1","scriptPublicKey":"{spk_at_limit}"}}"#);
+    let large_output = format!(r#"{{"amount":1,"scriptPublicKey":"{spk_at_limit}"}}"#);
     let large_output_document = format!(
         r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{input}],"outputs":[{large_output}]}}"#
     );
@@ -707,8 +820,8 @@ fn optional_numeric_string_and_default_utxo_metadata_paths_remain_distinct() {
     let (tx, parsed, _) = parse_json(
         PSKT_MAGIC,
         &transaction_json(
-            r#","fallbackLockTime":"7","id":"session-1""#,
-            r#","minTime":"9","finalScriptSig":"aa""#,
+            r#","fallbackLockTime":7,"id":"session-1""#,
+            r#","minTime":9,"finalScriptSig":"aa""#,
             "",
         ),
     )
@@ -717,14 +830,14 @@ fn optional_numeric_string_and_default_utxo_metadata_paths_remain_distinct() {
     assert!(parsed.unknowns_count >= 4);
 
     let default_metadata = format!(
-        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{{"utxoEntry":{{"amount":"1","scriptPublicKey":"0000","blockDaaScore":"0","isCoinbase":false}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}],"outputs":[{{"amount":"1","scriptPublicKey":"0000"}}]}}"#
+        r#"{{"global":{{"version":0,"txVersion":1,"inputCount":1,"outputCount":1}},"inputs":[{{"utxoEntry":{{"amount":1,"scriptPublicKey":"0000","blockDaaScore":0,"isCoinbase":false}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}],"outputs":[{{"amount":1,"scriptPublicKey":"0000"}}]}}"#
     );
     let (_, parsed, _) =
         parse_json(PSKT_MAGIC, default_metadata.as_bytes()).expect("default metadata");
     assert_eq!(parsed.unknowns_count, 0);
 
     let nondefault_metadata = default_metadata
-        .replace(r#""blockDaaScore":"0""#, r#""blockDaaScore":"17""#)
+        .replace(r#""blockDaaScore":0"#, r#""blockDaaScore":17"#)
         .replace(r#""isCoinbase":false"#, r#""isCoinbase":true"#);
     let (tx, parsed, scratch) =
         parse_json(PSKT_MAGIC, nondefault_metadata.as_bytes()).expect("nondefault metadata");
@@ -746,12 +859,12 @@ fn optional_numeric_string_and_default_utxo_metadata_paths_remain_distinct() {
 fn covenant_binding_accepts_dynamic_authorizer_and_requires_both_members() {
     const MANY_INPUTS: usize = 16;
     let input = format!(
-        r#"{{"utxoEntry":{{"amount":"1","scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}"#
+        r#"{{"utxoEntry":{{"amount":1,"scriptPublicKey":"0000"}},"previousOutpoint":{{"transactionId":"{TXID_ZERO}","index":0}},"sighashType":1}}"#
     );
     let inputs = vec![input.as_str(); MANY_INPUTS].join(",");
     let max_authorizer = MANY_INPUTS - 1;
     let output = format!(
-        r#"{{"amount":"1","scriptPublicKey":"0000","covenantBinding":{{"authorizingInput":{max_authorizer},"covenantId":"{COVENANT_ID}"}}}}"#
+        r#"{{"amount":1,"scriptPublicKey":"0000","covenantBinding":{{"authorizingInput":{max_authorizer},"covenantId":"{COVENANT_ID}"}}}}"#
     );
     let document = format!(
         r#"{{"global":{{"version":0,"txVersion":1,"inputCount":{MANY_INPUTS},"outputCount":1}},"inputs":[{inputs}],"outputs":[{output}]}}"#
@@ -800,7 +913,7 @@ fn global_parser_covers_version_count_and_modifiable_branch_boundaries() {
     for (from, to, expected) in [
         (
             "\"version\":0",
-            "\"version\":2",
+            "\"version\":1",
             PskError::VersionNotSupported,
         ),
         (
@@ -871,4 +984,82 @@ fn bip32_derivation_path_populates_untrusted_ms45_hint_end_to_end() {
         tx.inputs[0].ms45_hint,
         crate::transaction::model::Ms45Hint::none()
     );
+}
+
+#[test]
+fn output_bip32_derivation_extracts_ms45_hint_when_no_hint_is_present_yet() {
+    let pubkey = format!("02{}", "33".repeat(32));
+    let extra = format!(
+        ",\"bip32Derivations\":{{\"{pubkey}\":{{\"masterFingerprint\":\"00000000\",\"derivationPath\":\"m/45'/111111'/0'/2/1/17\"}}}}"
+    );
+    let (tx, _, _) =
+        parse_json(PSKT_MAGIC, &transaction_json("", "", &extra)).expect("output derivation");
+    assert!(tx.outputs[0].ms45_hint.present);
+    assert_eq!(tx.outputs[0].ms45_hint.cosigner, 2);
+    assert_eq!(tx.outputs[0].ms45_hint.chain, 1);
+    assert_eq!(tx.outputs[0].ms45_hint.index, 17);
+}
+
+#[test]
+fn consensus_committed_global_fields_are_first_class_transaction_state() {
+    let subnetwork = "42".repeat(20);
+    let json = transaction_json(
+        &format!(",\"subnetworkId\":\"{subnetwork}\",\"gas\":\"17\",\"txPayload\":\"cafe01\""),
+        "",
+        "",
+    );
+    let (tx, _, _) = parse_json(PSKT_MAGIC, &json).expect("consensus globals parse");
+    assert_eq!(tx.subnetwork_id, [0x42; 20]);
+    assert_eq!(tx.gas, 17);
+    assert_eq!(tx.payload, [0xca, 0xfe, 0x01]);
+}
+
+#[test]
+fn consensus_committed_global_fields_fail_closed_on_malformed_values() {
+    for extra in [
+        ",\"subnetworkId\":\"00\"".to_string(),
+        format!(",\"subnetworkId\":\"{}\"", "GG".repeat(20)),
+        ",\"gas\":true".to_string(),
+        ",\"gas\":\"01\"".to_string(),
+        ",\"txPayload\":\"0\"".to_string(),
+        ",\"txPayload\":true".to_string(),
+    ] {
+        assert!(
+            parse_json(PSKT_MAGIC, &transaction_json(&extra, "", "")).is_err(),
+            "malformed consensus global unexpectedly accepted: {extra}"
+        );
+    }
+}
+
+#[test]
+fn top_level_dispatch_covers_preserved_extension_and_known_field_fail_closed_paths() {
+    let extended = format!(
+        "{{\"futureTopLevel\":{{\"nested\":[1,true,null]}},\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
+    );
+    assert!(parse_json(PSKT_MAGIC, extended.as_bytes()).is_ok());
+
+    let empty_bundle = br#"[]"#;
+    assert_eq!(
+        parse_json(PSKB_MAGIC, empty_bundle).unwrap_err(),
+        PskError::MissingField
+    );
+
+    let single = transaction_json("", "", "");
+    let object = core::str::from_utf8(&single).expect("fixture is UTF-8");
+    let multiple = format!("[{},{}]", object, object);
+    assert_eq!(
+        parse_json(PSKB_MAGIC, multiple.as_bytes()).unwrap_err(),
+        PskError::BundleMultiElement
+    );
+
+    let duplicate_global = format!(
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
+    );
+    assert_eq!(
+        parse_json(PSKT_MAGIC, duplicate_global.as_bytes()).unwrap_err(),
+        PskError::DuplicateField
+    );
+
+    let malformed_known = "{\"global\":{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1},\"inputs\":null,\"outputs\":[{\"amount\":1,\"scriptPublicKey\":\"0000\"}]}".to_string();
+    assert!(parse_json(PSKT_MAGIC, malformed_known.as_bytes()).is_err());
 }

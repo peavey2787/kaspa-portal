@@ -12,7 +12,7 @@ fn heap_compact_serializer_is_covered_by_round_trip_fixture() {
     tx.network = crate::primitives::address::KaspaNetwork::Mainnet;
     let wire = serialize_compact_kspt_vec(&tx).expect("heap compact serialization");
     assert_eq!(&wire[..5], b"KSPT\x01");
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire, &mut parsed).expect("parse heap compact KSPT");
     assert_eq!(parsed.num_inputs, tx.num_inputs);
     assert_eq!(parsed.num_outputs, tx.num_outputs);
@@ -29,7 +29,7 @@ fn compact_redeem_script_round_trips() {
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize compact KSPT");
     assert_eq!(&wire[..5], b"KSPT\x01");
 
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse compact KSPT");
     assert_eq!(parsed.redeem_bytes(0), redeem);
     assert_eq!(parsed.inputs[0].sig_count, 1);
@@ -51,7 +51,7 @@ fn compact_codec_accepts_exact_maximum_signature_slots() {
 
     let mut wire = vec![0u8; 16_384];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize exact signature capacity");
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse exact signature capacity");
     assert_eq!(parsed.inputs[0].sig_count as usize, MAX_SIGS_PER_INPUT);
     for (position, slot) in parsed.inputs[0].sigs.iter().enumerate() {
@@ -71,7 +71,7 @@ fn compact_covenant_binding_round_trips() {
 
     let mut wire = [0u8; 2048];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize compact KSPT");
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse compact KSPT");
     assert!(parsed.outputs[0].has_covenant);
     assert_eq!(parsed.outputs[0].covenant_id, [0x42; 32]);
@@ -89,7 +89,7 @@ fn compact_v1_binds_network_and_output_derivation_hint() {
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize v1 KSPT");
     assert_eq!(&wire[..5], b"KSPT\x01");
 
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse v1 KSPT");
     assert_eq!(
         parsed.network,
@@ -108,7 +108,7 @@ fn compact_parser_rejects_non_v1_versions() {
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize compact KSPT");
     for unsupported in [0u8, 2u8, 3u8, 4u8, u8::MAX] {
         wire[4] = unsupported;
-        let mut parsed = Transaction::new();
+        let mut parsed = Transaction::try_new().expect("transaction storage");
         assert_eq!(
             parse_compact_kspt(&wire[..len], &mut parsed),
             Err(PsktError::UnsupportedVersion)
@@ -119,16 +119,16 @@ fn compact_parser_rejects_non_v1_versions() {
 #[test]
 fn compact_parser_does_not_preallocate_untrusted_v1_input_count() {
     // libFuzzer/ASan regression: this v1 corpus entry declares 2,046,820,367
-    // inputs and zero outputs. The old parser tried to resize the full input
-    // vector before validating the rest of the envelope, requesting terabytes.
+    // inputs and zero outputs. The count exceeds the format limit, so it is
+    // refused before any input storage is reserved.
     let crash = [
         75, 83, 80, 84, 1, 0, 176, 167, 15, 0, 0, 122, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0,
         3, 75, 54, 54, 54, 54, 54, 0, 83, 80, 84, 3, 83, 80, 0,
     ];
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&crash, &mut parsed),
-        Err(PsktError::NoOutputs)
+        Err(PsktError::TooManyInputs)
     );
     assert_eq!(
         parsed.inputs.len(),
@@ -139,15 +139,23 @@ fn compact_parser_does_not_preallocate_untrusted_v1_input_count() {
 #[test]
 fn compact_parser_grows_inputs_only_as_wire_records_are_consumed() {
     // Complete v1 global section with one output, but no input body at all.
-    // A declared u32::MAX count must reach the missing-record error without
-    // attempting to reserve u32::MAX TransactionInput values first.
+    // The largest count the format admits must reach the missing-record error
+    // without reserving that many TransactionInput values first; anything
+    // larger is refused outright.
     let mut wire = [0u8; 51];
     wire[..4].copy_from_slice(b"KSPT");
     wire[4] = 1;
     wire[8..12].copy_from_slice(&u32::MAX.to_le_bytes());
     wire[12] = 1;
+    let mut parsed = Transaction::try_new().expect("transaction storage");
+    assert_eq!(
+        parse_compact_kspt(&wire, &mut parsed),
+        Err(PsktError::TooManyInputs)
+    );
 
-    let mut parsed = Transaction::new();
+    let format_limit = u32::from(u16::MAX);
+    wire[8..12].copy_from_slice(&format_limit.to_le_bytes());
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&wire, &mut parsed),
         Err(PsktError::BufferTooShort)
@@ -167,7 +175,7 @@ fn compact_parser_rejects_unknown_flags_and_trailing_bytes() {
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize compact KSPT");
 
     wire[5] |= 0x80;
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&wire[..len], &mut parsed),
         Err(PsktError::InvalidFlags)
@@ -193,7 +201,7 @@ fn compact_serializer_accepts_more_than_the_historical_eight_inputs() {
     tx.num_inputs = MANY_INPUTS;
     let mut wire = vec![0u8; 16_384];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("dynamic input KSPT");
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse dynamic input KSPT");
     assert_eq!(parsed.num_inputs, MANY_INPUTS);
 }
@@ -218,7 +226,7 @@ fn compact_codec_accepts_dynamic_inputs_and_fixed_global_boundaries() {
 
     let mut wire = vec![0u8; 128 * 1024];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize exact limits");
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse exact limits");
     assert_eq!(parsed.num_inputs, MANY_INPUTS);
     assert_eq!(parsed.num_outputs, MAX_OUTPUTS);
@@ -272,7 +280,7 @@ fn compact_parser_rejects_monetary_overflow_and_accepts_exact_u64_max_boundary()
 
     let mut wire = vec![0u8; 4096];
     let len = serialize_compact_kspt(&exact_max, &mut wire).expect("serialize exact max boundary");
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     assert_eq!(parse_compact_kspt(&wire[..len], &mut parsed), Ok(()));
     assert_eq!(
         parsed
@@ -287,7 +295,7 @@ fn compact_parser_rejects_monetary_overflow_and_accepts_exact_u64_max_boundary()
         + V1_UNSIGNED_FIXTURE_INPUT_RECORD_LEN
         + V1_INPUT_AMOUNT_OFFSET_WITHIN_RECORD;
     wire[second_input_amount..second_input_amount + 8].copy_from_slice(&1u64.to_le_bytes());
-    let mut input_overflow = Transaction::new();
+    let mut input_overflow = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&wire[..len], &mut input_overflow),
         Err(PsktError::InputAmountOverflow)
@@ -303,7 +311,7 @@ fn compact_parser_rejects_monetary_overflow_and_accepts_exact_u64_max_boundary()
         .expect("serialize output overflow precursor");
     let second_output_amount = V1_FIRST_OUTPUT_OFFSET + V1_FIXTURE_OUTPUT_RECORD_LEN;
     wire[second_output_amount..second_output_amount + 8].copy_from_slice(&1u64.to_le_bytes());
-    let mut parsed_output_overflow = Transaction::new();
+    let mut parsed_output_overflow = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&wire[..output_len], &mut parsed_output_overflow),
         Err(PsktError::OutputAmountOverflow)
@@ -314,7 +322,7 @@ fn compact_parser_rejects_monetary_overflow_and_accepts_exact_u64_max_boundary()
         serialize_compact_kspt(&negative_fee, &mut wire).expect("serialize negative fee precursor");
     wire[V1_FIRST_OUTPUT_OFFSET..V1_FIRST_OUTPUT_OFFSET + 8]
         .copy_from_slice(&(negative_fee.inputs[0].utxo_entry.amount + 1).to_le_bytes());
-    let mut parsed_negative_fee = Transaction::new();
+    let mut parsed_negative_fee = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&wire[..negative_len], &mut parsed_negative_fee),
         Err(PsktError::OutputsExceedInputs)
@@ -334,7 +342,7 @@ fn compact_parser_rejects_each_global_count_boundary() {
     ] {
         let (mut wire, len) = unsigned_compact_wire();
         wire[offset] = value;
-        let mut parsed = Transaction::new();
+        let mut parsed = Transaction::try_new().expect("transaction storage");
         assert_eq!(parse_compact_kspt(&wire[..len], &mut parsed), Err(expected));
     }
 }
@@ -347,7 +355,7 @@ fn compact_parser_rejects_oversized_input_and_output_scripts_before_copying() {
     input_wire[V1_FIRST_INPUT_SPK_LEN_OFFSET] = 0xff;
     input_wire[V1_FIRST_INPUT_SPK_LEN_OFFSET + 1..V1_FIRST_INPUT_SPK_LEN_OFFSET + 3]
         .copy_from_slice(&oversized.to_le_bytes());
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&input_wire[..input_len], &mut parsed),
         Err(PsktError::ScriptTooLong)
@@ -387,7 +395,7 @@ fn compact_trailers_cover_stealth_serialization_duplicates_and_covenant_validati
     tx.stealth_tweak = [0x77; 32];
     let mut wire = vec![0u8; 4096];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("stealth trailer serialize");
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("stealth trailer parse");
     assert!(parsed.has_stealth_tweak);
     assert_eq!(parsed.stealth_tweak, [0x77; 32]);
@@ -458,7 +466,7 @@ fn append_derivation_trailer(
 #[test]
 fn compact_v1_requires_one_valid_network_trailer() {
     let (mut wire, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
 
     assert_eq!(
         parse_compact_kspt(&wire[..len - 2], &mut parsed),
@@ -489,7 +497,7 @@ fn compact_v1_requires_one_valid_network_trailer() {
 
 #[test]
 fn compact_v1_derivation_trailers_reject_bad_position_branch_and_duplicates() {
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
 
     let (mut bad_output, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
     let end = append_derivation_trailer(&mut bad_output, len, 1, 0, 9);
@@ -513,10 +521,143 @@ fn compact_v1_derivation_trailers_reject_bad_position_branch_and_duplicates() {
         Err(PsktError::InvalidTrailer),
     );
 
+    let (mut hardened, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
+    let end = append_derivation_trailer(&mut hardened, len, 0, 0, 0x8000_0000);
+    assert_eq!(
+        parse_compact_kspt(&hardened[..end], &mut parsed),
+        Err(PsktError::InvalidTrailer),
+    );
+
     let (mut valid, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
-    let end = append_derivation_trailer(&mut valid, len, 0, 0, u32::MAX);
-    parse_compact_kspt(&valid[..end], &mut parsed).expect("maximum derivation index parses");
-    assert_eq!(parsed.outputs[0].derivation_index, u32::MAX);
+    let end = append_derivation_trailer(&mut valid, len, 0, 0, 0x7fff_ffff);
+    parse_compact_kspt(&valid[..end], &mut parsed).expect("maximum soft derivation index parses");
+    assert_eq!(parsed.outputs[0].derivation_index, 0x7fff_ffff);
+}
+
+fn append_record(wire: &mut [u8], pos: usize, record: &[u8]) -> usize {
+    wire[pos..pos + record.len()].copy_from_slice(record);
+    pos + record.len()
+}
+
+#[test]
+fn compact_v1_input_derivation_hint_round_trips_and_rejects_untrusted_values() {
+    let mut tx = transaction();
+    tx.inputs[0].has_derivation_hint = true;
+    tx.inputs[0].derivation_branch = 1;
+    tx.inputs[0].derivation_index = 500;
+    let mut wire = [0u8; 4096];
+    let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize input hint");
+    let mut parsed = Transaction::try_new().expect("transaction storage");
+    parse_compact_kspt(&wire[..len], &mut parsed).expect("parse input hint");
+    assert!(parsed.inputs[0].has_derivation_hint);
+    assert_eq!(parsed.inputs[0].derivation_branch, 1);
+    assert_eq!(parsed.inputs[0].derivation_index, 500);
+
+    for record in [
+        [b'A', 0, 2, 1, 0, 0, 0],
+        [b'A', 0, 0, 0, 0, 0, 0x80],
+        [b'A', 1, 0, 1, 0, 0, 0],
+    ] {
+        let (mut bad, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
+        let end = append_record(&mut bad, len, &record);
+        assert_eq!(
+            parse_compact_kspt(&bad[..end], &mut parsed),
+            Err(PsktError::InvalidTrailer)
+        );
+    }
+
+    let (mut duplicate, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
+    let first = append_record(&mut duplicate, len, &[b'A', 0, 0, 1, 0, 0, 0]);
+    let end = append_record(&mut duplicate, first, &[b'A', 0, 0, 2, 0, 0, 0]);
+    assert_eq!(
+        parse_compact_kspt(&duplicate[..end], &mut parsed),
+        Err(PsktError::InvalidTrailer)
+    );
+}
+
+#[test]
+fn compact_v1_trailers_must_follow_canonical_kind_order() {
+    let mut parsed = Transaction::try_new().expect("transaction storage");
+    // Output derivation (rank 7) followed by input derivation (rank 6).
+    let (mut wire, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
+    let first = append_record(&mut wire, len, &[b'D', 0, 0, 1, 0, 0, 0]);
+    let end = append_record(&mut wire, first, &[b'A', 0, 0, 1, 0, 0, 0]);
+    assert_eq!(
+        parse_compact_kspt(&wire[..end], &mut parsed),
+        Err(PsktError::InvalidTrailer)
+    );
+
+    // Any trailer before the network binding is refused.
+    let mut tx = transaction();
+    tx.inputs[0].has_derivation_hint = true;
+    let mut wire = vec![0u8; 4096];
+    let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize");
+    let network = len - 7 - 2;
+    assert_eq!(&wire[network..network + 1], b"N");
+    let mut reordered = wire[..network].to_vec();
+    reordered.extend_from_slice(&wire[network + 2..len]);
+    reordered.extend_from_slice(&wire[network..network + 2]);
+    assert_eq!(
+        parse_compact_kspt(&reordered, &mut parsed),
+        Err(PsktError::InvalidTrailer)
+    );
+}
+
+#[test]
+fn compact_v1_covenant_execution_round_trips_and_rejects_inconsistent_masks() {
+    let mut tx = transaction();
+    tx.inputs[0].covenant_execution_present = true;
+    tx.inputs[0].covenant_execution_mask = 0b101;
+    tx.inputs[0].covenant_execution_true_mask = 0b001;
+    let wire = serialize_compact_kspt_vec(&tx).expect("serialize covenant execution");
+    let mut parsed = Transaction::try_new().expect("transaction storage");
+    parse_compact_kspt(&wire, &mut parsed).expect("parse covenant execution");
+    assert!(parsed.inputs[0].covenant_execution_present);
+    assert_eq!(parsed.inputs[0].covenant_execution_mask, 0b101);
+    assert_eq!(parsed.inputs[0].covenant_execution_true_mask, 0b001);
+
+    tx.inputs[0].covenant_execution_true_mask = 0b010;
+    assert_eq!(
+        serialize_compact_kspt_vec(&tx),
+        Err(PsktError::InvalidModel)
+    );
+    let (mut bad, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
+    let end = append_record(&mut bad, len, &[b'E', 0, 0b01, 0, 0b10, 0]);
+    assert_eq!(
+        parse_compact_kspt(&bad[..end], &mut parsed),
+        Err(PsktError::InvalidTrailer)
+    );
+}
+
+#[test]
+fn compact_parser_honours_device_payload_and_input_limits() {
+    use crate::transaction::model::TransactionLimits;
+
+    let mut tx = transaction();
+    tx.set_payload(&[7u8; 9]).expect("payload");
+    let wire = serialize_compact_kspt_vec(&tx).expect("serialize payload");
+    let device = TransactionLimits {
+        max_inputs: 1,
+        max_payload_bytes: 8,
+    };
+    let mut parsed = Transaction::try_new_with(device).expect("device storage");
+    assert_eq!(
+        parse_compact_kspt(&wire, &mut parsed),
+        Err(PsktError::PayloadTooLong)
+    );
+
+    let mut tx = transaction();
+    tx.ensure_input_slots(2).expect("second input");
+    tx.inputs[1] = tx.inputs[0].clone();
+    tx.inputs[1].previous_outpoint.index = 1;
+    tx.num_inputs = 2;
+    let wire = serialize_compact_kspt_vec(&tx).expect("serialize two inputs");
+    let mut parsed = Transaction::try_new_with(device).expect("device storage");
+    assert_eq!(
+        parse_compact_kspt(&wire, &mut parsed),
+        Err(PsktError::TooManyInputs)
+    );
+    assert_eq!(parsed.inputs.len(), device.max_inputs);
 }
 
 #[test]
@@ -566,7 +707,7 @@ fn compact_v1_hd45_input_and_change_hints_round_trip_and_reject_duplicates() {
     };
     let mut wire = vec![0u8; 4096];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize 45' v1 hints");
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse 45' v1 hints");
     assert_eq!(parsed.inputs[0].ms45_hint, tx.inputs[0].ms45_hint);
     assert_eq!(parsed.outputs[0].ms45_hint, tx.outputs[0].ms45_hint);
@@ -577,7 +718,7 @@ fn compact_v1_hd45_input_and_change_hints_round_trip_and_reject_duplicates() {
     wire.extend_from_slice(&2u32.to_le_bytes());
     wire.extend_from_slice(&0u32.to_le_bytes());
     wire.extend_from_slice(&17u32.to_le_bytes());
-    let mut duplicate = Transaction::new();
+    let mut duplicate = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&wire, &mut duplicate),
         Err(PsktError::InvalidTrailer)
@@ -595,7 +736,7 @@ fn compact_v1_rejects_invalid_hd45_chain_without_trusting_the_hint() {
     wire.extend_from_slice(&1u32.to_le_bytes());
     wire.extend_from_slice(&2u32.to_le_bytes());
     wire.extend_from_slice(&0u32.to_le_bytes());
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&wire, &mut parsed),
         Err(PsktError::InvalidTrailer)

@@ -30,8 +30,9 @@ impl From<PsktError> for AntiKleptoVerifyError {
 pub(super) use commitment::commitment_position_is_valid;
 pub use commitment::validate_host_commitment;
 pub use finalization::{
-    finalize_account_set_signatures, finalize_account_signatures, finalize_raw_key_signatures,
-    initial_signature_counts,
+    finalize_account_set_signatures, finalize_account_set_signatures_with_checkpoint,
+    finalize_account_signatures, finalize_account_signatures_with_checkpoint,
+    finalize_raw_key_signatures, initial_signature_counts,
 };
 #[cfg(test)]
 pub(super) use keys::{pubkey_is_allowed_for_input, signing_pubkey_xonly};

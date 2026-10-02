@@ -16,8 +16,17 @@ pub(super) fn transaction_json(
     input_extra: &str,
     output_extra: &str,
 ) -> Vec<u8> {
+    transaction_json_with_utxo_extra(global_extra, "", input_extra, output_extra)
+}
+
+pub(super) fn transaction_json_with_utxo_extra(
+    global_extra: &str,
+    utxo_extra: &str,
+    input_extra: &str,
+    output_extra: &str,
+) -> Vec<u8> {
     format!(
-        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1{global_extra}}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1{input_extra}}}],\"outputs\":[{{\"amount\":\"1\",\"scriptPublicKey\":\"0000\"{output_extra}}}]}}"
+        "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1{global_extra}}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"{utxo_extra}}},\"previousOutpoint\":{{\"transactionId\":\"{TXID_ZERO}\",\"index\":0}},\"sighashType\":1{input_extra}}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"{output_extra}}}]}}"
     )
     .into_bytes()
 }
@@ -39,7 +48,7 @@ pub(super) fn parse_json(
 ) -> Result<(Transaction, PsktParsed, Vec<u8>), PskError> {
     let wire = encode_wire(magic, json);
     let mut scratch = vec![0u8; json.len()];
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     let mut parsed = PsktParsed::empty();
     parse_pskt(&wire, &mut scratch, &mut tx, &mut parsed)?;
     Ok((tx, parsed, scratch))

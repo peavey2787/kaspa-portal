@@ -1,26 +1,24 @@
-// Kaspa multisig transaction model.
+// Kaspa protocol implementation
 // SPDX-License-Identifier: GPL-3.0-only
 
-use crate::{
-    transaction::sighash::blake2b_hash,
-    wallet::{
-        derivation::bip32::{derive_child_pub, ExtendedPubKey},
-        key::xpub::KpubParts,
-    },
-};
+use crate::{transaction::sighash::blake2b_hash, wallet::key::xpub::KpubParts};
 
 use super::{
-    constants::{
-        MAX_MULTISIG_KEYS, MAX_MULTISIG_WALLETS, MAX_SCRIPT_SIZE, OP_1, OP_CHECKMULTISIG,
-        OP_DATA_32,
-    },
+    constants::{MAX_MULTISIG_KEYS, MAX_MULTISIG_WALLETS, MAX_SCRIPT_SIZE},
     input::Ms45Hint,
+    multisig_validation::{contains_cosigner, slot_empty, valid_config},
 };
 
-/// Canonical 45' multisig configuration.
-///
-/// Addresses derive `/cosigner/chain/index` beneath `m/45'/111111'/0'` and
-/// preserve canonical parent ordering across every derived address.
+mod derivation;
+
+use derivation::{
+    derive_children_at, derive_multisig_children, encode_redeem, push_byte, serialized_parts,
+    sort_xonly_children, write_multisig_script,
+};
+
+/// Strict v1.0.6 45' multisig plus legacy 44' compatibility. New 45' wallets
+/// derive `/cosigner/chain/index` beneath `m/45'/111111'/0'`; legacy descriptors
+/// retain `/0/index` with per-address child-key sorting.
 #[derive(Clone)]
 pub struct MultisigConfig {
     pub m: u8,
@@ -28,11 +26,13 @@ pub struct MultisigConfig {
     pub cosigner_pubkeys: [[u8; 33]; MAX_MULTISIG_KEYS],
     pub cosigner_chain_codes: [[u8; 32]; MAX_MULTISIG_KEYS],
     pub addr_index: u32,
-    /// This wallet's position in the canonical descriptor.
+    pub v45: bool,
+    /// Address family this device issues. In 45' it is this device's position
+    /// in the sorted descriptor; ignored for legacy 44'.
     pub cosigner_index: u8,
-    /// Address chain: 0=external/receive, 1=change.
+    /// 0=external/receive, 1=change for 45'; ignored by legacy 44'.
     pub chain: u8,
-    /// Metadata required to re-serialize each participant byte-identically.
+    /// Metadata required to re-serialize each 45' participant byte-identically.
     pub cosigner_depth: [u8; MAX_MULTISIG_KEYS],
     pub cosigner_parent_fp: [[u8; 4]; MAX_MULTISIG_KEYS],
     pub cosigner_child_num: [[u8; 4]; MAX_MULTISIG_KEYS],
@@ -55,6 +55,7 @@ impl MultisigConfig {
             cosigner_pubkeys: [[0; 33]; MAX_MULTISIG_KEYS],
             cosigner_chain_codes: [[0; 32]; MAX_MULTISIG_KEYS],
             addr_index: 0,
+            v45: false,
             cosigner_index: 0,
             chain: 0,
             cosigner_depth: [0; MAX_MULTISIG_KEYS],
@@ -66,10 +67,17 @@ impl MultisigConfig {
         }
     }
 
-    /// Store one full cosigner entry so canonical descriptor ordering can be
-    /// reproduced without discarding BIP32 metadata.
+    /// Return whether an in-range cosigner slot contains no participant data.
+    #[must_use]
+    pub fn slot_empty(&self, index: usize) -> bool {
+        slot_empty(self, index)
+    }
+
+    /// Store one full cosigner entry. Keeping all five serialized kpub fields
+    /// together prevents creation/import from accidentally changing parent
+    /// ordering on descriptor export.
     pub fn set_cosigner(&mut self, index: usize, parts: &KpubParts) -> bool {
-        if index >= MAX_MULTISIG_KEYS {
+        if index >= MAX_MULTISIG_KEYS || contains_cosigner(self, parts, Some(index)) {
             return false;
         }
         self.cosigner_pubkeys[index] = parts.pubkey;
@@ -80,27 +88,33 @@ impl MultisigConfig {
         true
     }
 
-    #[must_use]
-    pub fn slot_empty(&self, index: usize) -> bool {
-        index < MAX_MULTISIG_KEYS && self.cosigner_pubkeys[index] == [0; 33]
-    }
-
-    /// Build the redeem script for the current family/chain/index.
+    /// Build the redeem script for this config's current family/chain/index.
+    /// 45' preserves canonical parent order; legacy 44' sorts derived children.
     pub fn build_script(&mut self) -> usize {
-        if !valid_multisig_config(self.m, self.n) || self.chain > 1 {
+        if !valid_config(self.m, self.n) {
             return 0;
         }
-        let Some(children) = derive_multisig_children(self) else {
+        let Some(mut children) = derive_multisig_children(self) else {
             return 0;
         };
+        if !self.v45 {
+            sort_xonly_children(&mut children, self.n as usize);
+        }
         write_multisig_script(self, &children)
     }
 
-    /// Check whether this descriptor reproduces a P2SH script hash at an
-    /// untrusted derivation hint. Hints are lookup indexes, never authority.
+    /// Does this 45' descriptor reproduce the P2SH script hash at an untrusted
+    /// derivation hint? The caller can therefore use hints as lookup indexes
+    /// without trusting them as authorization.
     #[must_use]
     pub fn matches_at(&self, hint: &Ms45Hint, script_hash: &[u8; 32]) -> bool {
-        if !valid_hint(self, hint) {
+        if !self.v45
+            || !hint.present
+            || hint.chain > 1
+            || hint.cosigner >= 0x8000_0000
+            || hint.index >= 0x8000_0000
+            || !valid_config(self.m, self.n)
+        {
             return false;
         }
         let Some(children) = derive_children_at(self, hint.cosigner, hint.chain, hint.index) else {
@@ -113,8 +127,12 @@ impl MultisigConfig {
         blake2b_hash(&redeem[..length]) == *script_hash
     }
 
-    /// Sort account parents into canonical serialized-kpub order.
+    /// Sort 45' cosigner parents into the v1.0.6/rusty-kaspa canonical order.
+    /// Legacy 44' configs are intentionally not reordered here.
     pub fn sort_cosigners(&mut self) {
+        if !self.v45 {
+            return;
+        }
         let n = self.n as usize;
         for index in 1..n {
             let mut cursor = index;
@@ -132,11 +150,13 @@ impl MultisigConfig {
     #[must_use]
     pub fn same_wallet_as(&self, other: &Self) -> bool {
         (
+            self.v45,
             self.m,
             self.n,
             &self.cosigner_pubkeys,
             &self.cosigner_chain_codes,
         ) == (
+            other.v45,
             other.m,
             other.n,
             &other.cosigner_pubkeys,
@@ -144,9 +164,13 @@ impl MultisigConfig {
         )
     }
 
-    /// Resolve this wallet's family by matching its account kpub against the
-    /// already-canonicalized descriptor.
+    /// Resolve this device's own 45' family by matching its account kpub parts
+    /// against the already-canonicalized descriptor.
     pub fn resolve_cosigner_index(&mut self, own: &KpubParts) -> bool {
+        if !self.v45 {
+            self.cosigner_index = 0;
+            return true;
+        }
         let own_entry = serialized_parts(own);
         for index in 0..self.n as usize {
             if self.serialized_entry(index) == own_entry {
@@ -157,7 +181,8 @@ impl MultisigConfig {
         false
     }
 
-    /// Human-readable multisig label including family and chain.
+    /// Human-readable wallet label. 45' includes the address family and chain
+    /// because neither can be inferred from a P2SH address.
     pub fn label(&self, buf: &mut [u8]) -> usize {
         let mut pos = 0usize;
         push_byte(buf, &mut pos, b'0' + self.m);
@@ -165,18 +190,22 @@ impl MultisigConfig {
             push_byte(buf, &mut pos, *byte);
         }
         push_byte(buf, &mut pos, b'0' + self.n);
-        for byte in b" 45' S" {
-            push_byte(buf, &mut pos, *byte);
+        if self.v45 {
+            for byte in b" 45' S" {
+                push_byte(buf, &mut pos, *byte);
+            }
+            push_byte(buf, &mut pos, b'0' + self.cosigner_index);
+            for byte in b"/C" {
+                push_byte(buf, &mut pos, *byte);
+            }
+            push_byte(buf, &mut pos, b'0' + self.chain);
         }
-        push_byte(buf, &mut pos, b'0' + self.cosigner_index);
-        for byte in b"/C" {
-            push_byte(buf, &mut pos, *byte);
-        }
-        push_byte(buf, &mut pos, b'0' + self.chain);
         pos.min(buf.len())
     }
 
     fn serialized_entry(&self, index: usize) -> [u8; 74] {
+        // Version bytes are equal for every kpub, so omitting them preserves
+        // exactly the same order while avoiding an unnecessary dependency.
         let mut out = [0u8; 74];
         out[0] = self.cosigner_depth[index];
         out[1..5].copy_from_slice(&self.cosigner_parent_fp[index]);
@@ -187,109 +216,15 @@ impl MultisigConfig {
     }
 }
 
-fn valid_hint(config: &MultisigConfig, hint: &Ms45Hint) -> bool {
-    hint.present
-        && hint.chain <= 1
-        && hint.cosigner < 0x8000_0000
-        && hint.index < 0x8000_0000
-        && valid_multisig_config(config.m, config.n)
-}
-
-fn serialized_parts(parts: &KpubParts) -> [u8; 74] {
-    let mut out = [0u8; 74];
-    out[0] = parts.depth;
-    out[1..5].copy_from_slice(&parts.parent_fp);
-    out[5..9].copy_from_slice(&parts.child_num);
-    out[9..41].copy_from_slice(&parts.chain_code);
-    out[41..74].copy_from_slice(&parts.pubkey);
-    out
-}
-
-fn push_byte(buf: &mut [u8], pos: &mut usize, byte: u8) {
-    if *pos < buf.len() {
-        buf[*pos] = byte;
-    }
-    *pos = pos.saturating_add(1);
-}
-
-fn valid_multisig_config(m: u8, n: u8) -> bool {
-    m != 0 && n != 0 && m <= n && n as usize <= MAX_MULTISIG_KEYS
-}
-
-fn derive_multisig_children(config: &MultisigConfig) -> Option<[[u8; 32]; MAX_MULTISIG_KEYS]> {
-    derive_children_at(
-        config,
-        u32::from(config.cosigner_index),
-        u32::from(config.chain),
-        config.addr_index,
-    )
-}
-
-fn derive_children_at(
-    config: &MultisigConfig,
-    cosigner: u32,
-    chain: u32,
-    index: u32,
-) -> Option<[[u8; 32]; MAX_MULTISIG_KEYS]> {
-    let mut children = [[0u8; 32]; MAX_MULTISIG_KEYS];
-    for (slot, child) in children.iter_mut().enumerate().take(config.n as usize) {
-        let parent = ExtendedPubKey {
-            pubkey: config.cosigner_pubkeys[slot],
-            chain_code: config.cosigner_chain_codes[slot],
-            depth: config.cosigner_depth[slot].max(3),
-        };
-        let family = derive_child_pub(&parent, cosigner).ok()?;
-        let chain_key = derive_child_pub(&family, chain).ok()?;
-        let address = derive_child_pub(&chain_key, index).ok()?;
-        *child = address.x_only();
-    }
-    Some(children)
-}
-
-fn encode_redeem(
-    m: u8,
-    n: u8,
-    children: &[[u8; 32]; MAX_MULTISIG_KEYS],
-    out: &mut [u8],
-) -> Option<usize> {
-    if !valid_multisig_config(m, n) {
-        return None;
-    }
-    let needed = 1 + n as usize * 33 + 2;
-    if needed > out.len() {
-        return None;
-    }
-    let mut pos = 0usize;
-    out[pos] = OP_1 + m - 1;
-    pos += 1;
-    for child in children.iter().take(n as usize) {
-        out[pos] = OP_DATA_32;
-        pos += 1;
-        out[pos..pos + 32].copy_from_slice(child);
-        pos += 32;
-    }
-    out[pos] = OP_1 + n - 1;
-    pos += 1;
-    out[pos] = OP_CHECKMULTISIG;
-    pos += 1;
-    Some(pos)
-}
-
-fn write_multisig_script(
-    config: &mut MultisigConfig,
-    children: &[[u8; 32]; MAX_MULTISIG_KEYS],
-) -> usize {
-    let Some(length) = encode_redeem(config.m, config.n, children, &mut config.script) else {
-        return 0;
-    };
-    config.script_len = length;
-    length
-}
-
 /// Storage for multisig wallet configurations.
-#[derive(Default)]
 pub struct MultisigStore {
     pub configs: [MultisigConfig; MAX_MULTISIG_WALLETS],
+}
+
+impl Default for MultisigStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MultisigStore {

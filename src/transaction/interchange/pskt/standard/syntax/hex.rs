@@ -29,7 +29,7 @@ fn decode_nibble(value: u8) -> Result<u8, PskError> {
 /// use kaspa_portal::transaction::interchange::pskt::standard::hex_decode_strict;
 ///
 /// let mut out = [0u8; 4];
-/// let n = hex_decode_strict(b"deadbeef", &mut out).expect("valid lowercase hexadecimal");
+/// let n = hex_decode_strict(b"deadbeef", &mut out).expect("valid lowercase hex");
 /// assert_eq!(n, 4);
 /// assert_eq!(&out[..n], &[0xde, 0xad, 0xbe, 0xef]);
 /// ```
@@ -41,7 +41,7 @@ pub fn hex_decode_strict(src: &[u8], dst: &mut [u8]) -> Result<usize, PskError> 
     if dst.len() < need {
         return Err(PskError::ScratchBufferTooSmall);
     }
-    for (index, pair) in src.chunks_exact(2).enumerate() {
+    for (index, pair) in src.as_chunks::<2>().0.iter().enumerate() {
         let hi = decode_nibble(pair[0])?;
         let lo = decode_nibble(pair[1])?;
         dst[index] = hi * 16 + lo;

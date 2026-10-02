@@ -175,7 +175,7 @@ fn account_finalization_entry_points_cover_zero_addition_range_without_fabricati
     let account = derive_account_key(&[0x31u8; 64]).expect("account key");
     let mut tx = transaction();
     let initial = initial_signature_counts(&tx);
-    assert_eq!(initial.as_slice(), &[0]);
+    assert_eq!(&initial[..tx.num_inputs], &[0]);
 
     let session = [0x51u8; crate::transaction::signing::anti_klepto::protocol::SESSION_ID_LEN];
     assert_eq!(
@@ -265,6 +265,8 @@ fn hd45_input_signing_covers_match_duplicate_miss_and_entropy_routes() {
         Ok(1),
     );
     assert_eq!(tx.inputs[0].sig_count, 1);
+    assert_ne!(tx.inputs[0].sigs[0].signature, [0u8; 64]);
+    assert_ne!(tx.inputs[0].sigs[0].signature, [1u8; 64]);
     assert_eq!(
         ms45::sign_input(&mut tx, 0, &info, &context, SigHashType::All, None, &hint),
         Ok(0),
@@ -315,4 +317,39 @@ fn hd45_input_signing_covers_match_duplicate_miss_and_entropy_routes() {
         ),
         Ok(0),
     );
+}
+
+#[test]
+fn signing_context_account_sets_reject_absent_and_out_of_range_hd45_slots() {
+    use crate::transaction::model::Ms45Hint;
+
+    let seed0 = [0x91u8; 64];
+    let seed1 = [0x92u8; 64];
+    let account0 = derive_account_key(&seed0).expect("account 0");
+    let account1 = derive_account_key(&seed1).expect("account 1");
+    let ms0 =
+        crate::wallet::derivation::bip32::derive_multisig_account_key(&seed0, 0).expect("ms0");
+    let ms1 =
+        crate::wallet::derivation::bip32::derive_multisig_account_key(&seed1, 0).expect("ms1");
+    let hint = Ms45Hint {
+        present: true,
+        cosigner: 0,
+        chain: 0,
+        index: 0,
+    };
+
+    let absent = SigningContext::from_account_sets(
+        &[(account0.to_raw(), true), (account1.to_raw(), true)],
+        &[(ms0.to_raw(), true), (ms1.to_raw(), false)],
+    );
+    assert!(absent.ms45_material(0, &hint).is_some());
+    assert!(absent.ms45_material(1, &hint).is_none());
+
+    let out_of_range = SigningContext::from_account_sets(
+        &[(account0.to_raw(), true)],
+        &[(ms0.to_raw(), true), (ms1.to_raw(), true)],
+    );
+    assert_eq!(out_of_range.seed_count(), 1);
+    assert!(out_of_range.ms45_material(0, &hint).is_some());
+    assert!(out_of_range.ms45_material(1, &hint).is_none());
 }

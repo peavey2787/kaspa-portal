@@ -22,6 +22,9 @@ fn parse_partial_sig_pubkey(
     }
     let mut pubkey = [0u8; 33];
     hex_decode_strict(pubkey_hex, &mut pubkey)?;
+    if !matches!(pubkey[0], 0x02 | 0x03) {
+        return Err(PskError::InvalidPubkeyLen);
+    }
     if input.incoming_partial_sigs[..count]
         .iter()
         .any(|previous| previous.pubkey == pubkey)
@@ -142,6 +145,9 @@ fn parse_derivation_pubkey(
     }
     let mut pubkey = [0u8; 33];
     hex_decode_strict(pubkey_hex, &mut pubkey)?;
+    if !matches!(pubkey[0], 0x02 | 0x03) {
+        return Err(PskError::InvalidPubkeyLen);
+    }
     if pubkeys[..count].contains(&pubkey) {
         return Err(PskError::DuplicateField);
     }

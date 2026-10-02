@@ -3,7 +3,10 @@ use alloc::{format, vec};
 use crate::transaction::interchange::pskt::shared::TxInputFormat;
 
 use super::super::{serialize_pskt, PskError, PSKT_MAGIC};
-use super::common::{contains_subslice, parse_json, serialize_json, transaction_json, COVENANT_ID};
+use super::common::{
+    contains_subslice, parse_json, serialize_json, transaction_json,
+    transaction_json_with_utxo_extra, COVENANT_ID,
+};
 
 #[test]
 fn covenant_binding_is_strict_and_is_emitted() {
@@ -95,5 +98,50 @@ fn serializer_rejects_a_programmatic_covenant_with_no_authorizing_input() {
     assert_eq!(
         serialize_pskt(&tx, &parsed, &scratch, TxInputFormat::PsktSingle, &mut wire,),
         Err(PskError::InvalidCovenantBinding)
+    );
+}
+
+#[test]
+fn input_utxo_covenant_id_covers_null_preservation_and_rejection_boundaries() {
+    let valid = format!(",\"covenantId\":\"{COVENANT_ID}\"");
+    let json = transaction_json_with_utxo_extra("", &valid, "", "");
+    let (tx, parsed, scratch) = parse_json(PSKT_MAGIC, &json).expect("valid input covenant id");
+    let emitted = serialize_json(&tx, &parsed, &scratch, TxInputFormat::PsktSingle)
+        .expect("serialize preserved input covenant id");
+    let expected = format!("\"covenantId\":\"{COVENANT_ID}\"");
+    assert!(contains_subslice(&emitted, expected.as_bytes()));
+
+    parse_json(
+        PSKT_MAGIC,
+        &transaction_json_with_utxo_extra("", ",\"covenantId\":null", "", ""),
+    )
+    .expect("null input covenant id");
+
+    assert_eq!(
+        parse_json(
+            PSKT_MAGIC,
+            &transaction_json_with_utxo_extra("", ",\"covenantId\":\"00\"", "", ""),
+        )
+        .unwrap_err(),
+        PskError::UnexpectedToken
+    );
+
+    let bad_hex = format!(",\"covenantId\":\"{}g\"", &COVENANT_ID[..63]);
+    assert_eq!(
+        parse_json(
+            PSKT_MAGIC,
+            &transaction_json_with_utxo_extra("", &bad_hex, "", ""),
+        )
+        .unwrap_err(),
+        PskError::BadHexChar
+    );
+
+    assert_eq!(
+        parse_json(
+            PSKT_MAGIC,
+            &transaction_json_with_utxo_extra("", ",\"covenantId\":true", "", ""),
+        )
+        .unwrap_err(),
+        PskError::UnexpectedToken
     );
 }

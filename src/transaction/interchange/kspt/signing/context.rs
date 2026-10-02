@@ -1,3 +1,5 @@
+use alloc::{boxed::Box, vec::Vec};
+
 use crate::wallet::derivation::bip32;
 
 const MAX_SEED_SLOTS: usize = 8;
@@ -13,7 +15,7 @@ pub(super) struct SigningContext {
     account_keys: [Option<bip32::ExtendedPrivKey>; MAX_SEED_SLOTS],
     account_xonly: [Option<[u8; 32]>; MAX_SEED_SLOTS],
     account_compressed: [Option<[u8; 33]>; MAX_SEED_SLOTS],
-    address_tables: [Option<bip32::AddrPubkeyTable>; MAX_SEED_SLOTS],
+    address_tables: [Option<Box<[bip32::AddrPubkeyTable]>>; MAX_SEED_SLOTS],
     ms45_account_keys: [Option<bip32::ExtendedPrivKey>; MAX_SEED_SLOTS],
 }
 
@@ -74,9 +76,13 @@ impl SigningContext {
     ) -> Self {
         let mut context = Self::from_account_raw(accounts);
         for (index, (raw, present)) in ms45_accounts.iter().take(MAX_SEED_SLOTS).enumerate() {
-            if *present && index < context.num_seeds {
-                context.ms45_account_keys[index] = Some(bip32::ExtendedPrivKey::from_raw(raw));
+            if !*present {
+                continue;
             }
+            if index >= context.num_seeds {
+                continue;
+            }
+            context.ms45_account_keys[index] = Some(bip32::ExtendedPrivKey::from_raw(raw));
         }
         context
     }
@@ -141,20 +147,41 @@ impl SigningContext {
         seed_index: usize,
         target_xonly: &[u8; 32],
     ) -> Option<SigningKeyMaterial> {
-        self.ensure_address_table(seed_index)?;
-        let (address_index, is_change) = self.address_tables[seed_index]
-            .as_ref()?
-            .find_by_pubkey(target_xonly)?;
-        self.derived_address_material(seed_index, address_index, is_change)
+        let mut no_checkpoint = || {};
+        self.cached_address_material_with_checkpoint(seed_index, target_xonly, &mut no_checkpoint)
     }
 
-    fn ensure_address_table(&mut self, seed_index: usize) -> Option<()> {
+    pub(super) fn cached_address_material_with_checkpoint(
+        &mut self,
+        seed_index: usize,
+        target_xonly: &[u8; 32],
+        checkpoint: &mut (impl FnMut() + ?Sized),
+    ) -> Option<SigningKeyMaterial> {
+        self.ensure_address_table_with_checkpoint(seed_index, checkpoint)?;
+        let table = self.address_tables[seed_index].as_ref()?.first()?;
+        let (address_index, is_change) = table.find_by_pubkey(target_xonly)?;
+        checkpoint();
+        let material = self.derived_address_material(seed_index, address_index, is_change);
+        checkpoint();
+        material
+    }
+
+    fn ensure_address_table_with_checkpoint(
+        &mut self,
+        seed_index: usize,
+        checkpoint: &mut (impl FnMut() + ?Sized),
+    ) -> Option<()> {
         if seed_index >= self.num_seeds {
             return None;
         }
         if self.address_tables[seed_index].is_none() {
             let account = self.account_keys[seed_index].as_ref()?;
-            self.address_tables[seed_index] = Some(bip32::AddrPubkeyTable::build(account));
+            let mut tables = Vec::new();
+            tables.try_reserve_exact(1).ok()?;
+            tables.push(bip32::AddrPubkeyTable::build_with_checkpoint(
+                account, checkpoint,
+            ));
+            self.address_tables[seed_index] = Some(tables.into_boxed_slice());
         }
         Some(())
     }
@@ -176,15 +203,28 @@ impl SigningContext {
             compressed_public_key: key.public_key_compressed().ok()?,
         })
     }
+    #[cfg(test)]
     pub(super) fn matching_material(
         &mut self,
         target_xonly: &[u8; 32],
     ) -> Option<SigningKeyMaterial> {
+        let mut no_checkpoint = || {};
+        self.matching_material_with_checkpoint(target_xonly, &mut no_checkpoint)
+    }
+
+    pub(super) fn matching_material_with_checkpoint(
+        &mut self,
+        target_xonly: &[u8; 32],
+        checkpoint: &mut (impl FnMut() + ?Sized),
+    ) -> Option<SigningKeyMaterial> {
         for seed_index in 0..self.seed_count() {
+            checkpoint();
             if self.account_xonly(seed_index) == Some(*target_xonly) {
                 return self.account_material(seed_index);
             }
-            if let Some(material) = self.cached_address_material(seed_index, target_xonly) {
+            if let Some(material) =
+                self.cached_address_material_with_checkpoint(seed_index, target_xonly, checkpoint)
+            {
                 return Some(material);
             }
         }

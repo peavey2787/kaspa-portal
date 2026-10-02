@@ -38,14 +38,15 @@ impl<'a> HexWriter<'a> {
         let Some(end) = self.pos.checked_add(encoded_len) else {
             return Err(PskError::OutputBufferTooSmall);
         };
-        if end > self.out.len() {
-            return Err(PskError::OutputBufferTooSmall);
+        let destination = self
+            .out
+            .get_mut(self.pos..end)
+            .ok_or(PskError::OutputBufferTooSmall)?;
+        for (chunk, &b) in destination.as_chunks_mut::<2>().0.iter_mut().zip(s) {
+            chunk[0] = HEX_CHARS[(b >> 4) as usize];
+            chunk[1] = HEX_CHARS[(b & 0x0F) as usize];
         }
-        for &b in s {
-            self.out[self.pos] = HEX_CHARS[(b >> 4) as usize];
-            self.out[self.pos + 1] = HEX_CHARS[(b & 0x0F) as usize];
-            self.pos += 2;
-        }
+        self.pos = end;
         Ok(())
     }
 

@@ -16,7 +16,7 @@ mod preserved;
 mod writer;
 
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope, TxInputFormat};
-use crate::transaction::model::Transaction;
+use crate::transaction::model::{Transaction, MAX_INPUTS};
 
 use super::preservation::validate_preservation_metadata;
 use super::{validate_monetary_shape, PskError, PSKB_MAGIC, PSKT_MAGIC};
@@ -39,6 +39,9 @@ fn validate_serialization_shape(
     parsed: &PsktParsed,
     scratch: &[u8],
 ) -> Result<(), PskError> {
+    if tx.num_inputs > MAX_INPUTS {
+        return Err(PskError::TooManyInputs);
+    }
     if tx.inputs.get(..tx.num_inputs).is_none() {
         return Err(PskError::CountMismatch);
     }
@@ -126,7 +129,11 @@ fn serialize_pskt_vec_with_capacity(
     format: TxInputFormat,
     capacity: usize,
 ) -> Result<alloc::vec::Vec<u8>, PskError> {
-    let mut output = alloc::vec![0u8; capacity];
+    let mut output = alloc::vec::Vec::new();
+    output
+        .try_reserve_exact(capacity)
+        .map_err(|_| PskError::OutputBufferTooSmall)?;
+    output.resize(capacity, 0u8);
     serialize_pskt(tx, parsed, scratch, format, &mut output)
         .map(|length| {
             output.truncate(length);
@@ -143,11 +150,15 @@ fn retry_pskt_vec(
     capacity: usize,
     error: PskError,
 ) -> Result<alloc::vec::Vec<u8>, PskError> {
-    if error != PskError::OutputBufferTooSmall {
-        return Err(error);
+    match error {
+        PskError::OutputBufferTooSmall => capacity
+            .checked_mul(2)
+            .ok_or(PskError::OutputBufferTooSmall)
+            .and_then(|next| serialize_pskt_vec_with_capacity(tx, parsed, scratch, format, next)),
+        other => Err(other),
     }
-    capacity
-        .checked_mul(2)
-        .ok_or(PskError::OutputBufferTooSmall)
-        .and_then(|next| serialize_pskt_vec_with_capacity(tx, parsed, scratch, format, next))
 }
+
+#[cfg(test)]
+#[path = "unit-tests/mod.rs"]
+mod unit_tests;

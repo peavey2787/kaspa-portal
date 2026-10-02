@@ -97,7 +97,7 @@ fn read_signature_slot(
     }
     seen_positions[position] = true;
     let sighash_type = reader.read_u8()?;
-    if SigHashType::from_byte(sighash_type).is_none() {
+    if sighash_type != SigHashType::All.to_byte() {
         return Err(PsktError::InvalidSigHashType);
     }
     slot.pubkey_pos = pubkey_position;
@@ -126,9 +126,9 @@ fn read_signature_slots(
     }
     let input = &mut tx.inputs[input_index];
     input.sig_count = signature_count as u8;
-    if let Some(first) = input.sigs[..signature_count].first() {
-        input.sighash_type = first.sighash_type;
-    }
+    // KSPT carries the project-wide SIGHASH_ALL policy implicitly for unsigned
+    // inputs; individual signature records repeat it when present.
+    input.sighash_type = SigHashType::All.to_byte();
     Ok(())
 }
 

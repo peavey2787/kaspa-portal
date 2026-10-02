@@ -1,4 +1,6 @@
-use crate::transaction::model::{Transaction, MAX_OUTPUTS, MAX_PAYLOAD_SIZE, MAX_SCRIPT_SIZE};
+use crate::transaction::model::{
+    Transaction, TransactionLimits, TransactionStorageError, MAX_OUTPUTS, MAX_SCRIPT_SIZE,
+};
 
 use super::super::error::PsktError;
 use super::io::{ByteReader, ByteWriter};
@@ -11,9 +13,16 @@ fn read_global_counts(reader: &mut ByteReader<'_>) -> Result<(u16, usize, usize)
     Ok((version, num_inputs, num_outputs))
 }
 
-fn validate_global_counts(num_inputs: usize, num_outputs: usize) -> Result<(), PsktError> {
+fn validate_global_counts(
+    num_inputs: usize,
+    num_outputs: usize,
+    limits: TransactionLimits,
+) -> Result<(), PsktError> {
     if num_inputs == 0 {
         return Err(PsktError::NoInputs);
+    }
+    if num_inputs > limits.max_inputs {
+        return Err(PsktError::TooManyInputs);
     }
     if num_outputs == 0 {
         return Err(PsktError::NoOutputs);
@@ -29,15 +38,14 @@ fn read_global_tail(reader: &mut ByteReader<'_>, tx: &mut Transaction) -> Result
     tx.subnetwork_id.copy_from_slice(reader.read_bytes(20)?);
     tx.gas = reader.read_u64_le()?;
     let payload_len = reader.read_u16_le()? as usize;
-    if payload_len > MAX_PAYLOAD_SIZE {
+    if payload_len > tx.limits.max_payload_bytes {
         return Err(PsktError::PayloadTooLong);
     }
-    tx.payload.clear();
-    if payload_len != 0 {
-        tx.payload
-            .extend_from_slice(reader.read_bytes(payload_len)?);
-    }
-    Ok(())
+    tx.set_payload(reader.read_bytes(payload_len)?)
+        .map_err(|error| match error {
+            TransactionStorageError::PayloadTooLarge => PsktError::PayloadTooLong,
+            _ => PsktError::StorageExhausted,
+        })
 }
 
 pub(super) fn read_global(
@@ -45,7 +53,7 @@ pub(super) fn read_global(
     tx: &mut Transaction,
 ) -> Result<(usize, usize), PsktError> {
     let (version, num_inputs, num_outputs) = read_global_counts(reader)?;
-    validate_global_counts(num_inputs, num_outputs)?;
+    validate_global_counts(num_inputs, num_outputs, tx.limits)?;
     tx.version = version;
     read_global_tail(reader, tx)?;
     Ok((num_inputs, num_outputs))

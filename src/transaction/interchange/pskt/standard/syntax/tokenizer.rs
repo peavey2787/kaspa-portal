@@ -70,13 +70,13 @@ pub enum Tok<'a> {
     /// `null`
     Null,
     /// End of input. Emitted once the buffer is consumed; subsequent
-    /// `next()` calls keep returning `Eof`.
+    /// `next_token()` calls keep returning `Eof`.
     Eof,
 }
 
 /// Flat one-pass tokenizer over a byte slice.
 ///
-/// Does not carry interior `Result` state — every `next()` call returns
+/// Does not carry interior `Result` state — every `next_token()` call returns
 /// a fresh `Result<Tok, PskError>`. Errors leave the `pos` cursor
 /// pointing at the offending byte so callers can build useful diagnostics
 /// (line/column if they want, byte offset otherwise).
@@ -105,7 +105,7 @@ impl<'a> Tokenizer<'a> {
         Self { data, pos: 0 }
     }
 
-    /// Byte offset of the next token that `next()` will try to parse.
+    /// Byte offset of the next token that `next_token()` will try to parse.
     /// Useful for the parser's byte-range capture of unknown regions
     /// (see the scoped ranges in `crate::transaction::interchange::pskt::shared::PsktParsed`).
     pub fn position(&self) -> usize {
@@ -269,19 +269,6 @@ impl<'a> Tokenizer<'a> {
 /// Used by the parser for fields like `amount`, `sequence`,
 /// `blockDaaScore`, `sigOpCount`, `version`, `txVersion`, etc.
 pub fn parse_u64_num(bytes: &[u8]) -> Result<u64, PskError> {
-    if bytes.is_empty() || (bytes.len() > 1 && bytes[0] == b'0') {
-        return Err(PskError::UnexpectedToken);
-    }
-    let mut acc: u64 = 0;
-    for &b in bytes {
-        if !b.is_ascii_digit() {
-            return Err(PskError::UnexpectedToken);
-        }
-        let digit = (b - b'0') as u64;
-        acc = match acc.checked_mul(10).and_then(|x| x.checked_add(digit)) {
-            Some(v) => v,
-            None => return Err(PskError::UnexpectedToken), // overflow
-        };
-    }
-    Ok(acc)
+    crate::transaction::interchange::pskt::schema::parse_canonical_u64_bytes(bytes)
+        .map_err(|_| PskError::UnexpectedToken)
 }

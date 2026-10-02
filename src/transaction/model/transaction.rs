@@ -13,18 +13,18 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::primitives::address::KaspaNetwork;
-use alloc::vec::Vec;
+mod formatting;
 
 use super::{
     constants::{
-        SubnetworkId, DEFAULT_INPUT_CAPACITY, MAX_OUTPUTS, MAX_REDEEM_SIZE, MAX_SCRIPT_SIZE,
-        REDEEM_POOL_SIZE, SUBNETWORK_ID_NATIVE,
+        SubnetworkId, TransactionLimits, DEFAULT_INPUT_CAPACITY, MAX_OUTPUTS, MAX_REDEEM_SIZE,
+        MAX_SCRIPT_SIZE, REDEEM_POOL_SIZE, SUBNETWORK_ID_NATIVE,
     },
     input::TransactionInput,
     output::TransactionOutput,
 };
-
+use crate::primitives::address::KaspaNetwork;
+use alloc::{boxed::Box, vec::Vec};
 /// Aggregate monetary totals for a transaction after checked arithmetic.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TransactionAmounts {
@@ -32,7 +32,6 @@ pub struct TransactionAmounts {
     pub output_total: u64,
     pub fee: u64,
 }
-
 /// Monetary-shape failures that must reject a transaction before review/signing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransactionAmountError {
@@ -41,21 +40,23 @@ pub enum TransactionAmountError {
     OutputsExceedInputs,
 }
 
-/// Storage-allocation and redeem-script storage failures.
+/// Fallible-storage failures while constructing or expanding a transaction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransactionStorageError {
     AllocationFailed,
+    TooManyInputs,
+    PayloadTooLarge,
     RedeemScriptTooLarge,
     RedeemPoolFull,
+    InternalStorageInvariant,
 }
-
 /// A complete Kaspa transaction with inputs, outputs, and metadata.
 #[derive(Debug)]
 pub struct Transaction {
     pub version: u16,
     pub inputs: Vec<TransactionInput>,
     pub num_inputs: usize,
-    pub outputs: [TransactionOutput; MAX_OUTPUTS],
+    pub outputs: Box<[TransactionOutput; MAX_OUTPUTS]>,
     pub num_outputs: usize,
     /// Network bound by mandatory KSPT v1 metadata for address review.
     /// `Unknown` is valid only for a newly constructed, not-yet-serialized model.
@@ -63,39 +64,63 @@ pub struct Transaction {
     pub locktime: u64,
     pub subnetwork_id: SubnetworkId,
     pub gas: u64,
-    /// Heap-backed application payload. KSPT v1 limits this to `u16::MAX` bytes.
+    /// Application payload, at most `limits.max_payload_bytes` long. Set it
+    /// through [`Transaction::set_payload`], which allocates fallibly.
     pub payload: Vec<u8>,
     /// Stealth address tweak: if non-zero, the signing key is
     /// account_privkey + stealth_tweak (scalar addition mod n).
-    /// Set by KasSee when spending a stealth UTXO.
+    /// Set by Companion when spending a stealth UTXO.
     pub stealth_tweak: [u8; 32],
     pub has_stealth_tweak: bool,
     /// Shared pool for redeem scripts > MAX_SCRIPT_SIZE bytes.
     /// Inputs with `redeem_in_pool == true` store their redeem data here
     /// at `redeem_script_offset..redeem_script_offset + redeem_script_len`.
-    pub redeem_pool: [u8; REDEEM_POOL_SIZE],
+    pub redeem_pool: Box<[u8; REDEEM_POOL_SIZE]>,
     /// Next free byte in redeem_pool.
     pub redeem_pool_used: usize,
+    /// Resource ceilings fixed at construction.
+    pub limits: TransactionLimits,
 }
-
-impl Default for Transaction {
-    fn default() -> Self {
-        Self::new()
+fn try_boxed_array<T, F, const N: usize>(
+    mut make: F,
+) -> Result<Box<[T; N]>, TransactionStorageError>
+where
+    F: FnMut() -> T,
+{
+    let mut values = Vec::new();
+    values
+        .try_reserve_exact(N)
+        .map_err(|_| TransactionStorageError::AllocationFailed)?;
+    for _ in 0..N {
+        values.push(make());
     }
+    let boxed: Box<[T]> = values.into_boxed_slice();
+    boxed
+        .try_into()
+        .map_err(|_| TransactionStorageError::InternalStorageInvariant)
 }
-
 impl Transaction {
-    /// Create an empty transaction. The input vector starts with capacity for
-    /// ordinary eight-input transactions but grows dynamically as a PSKT/KSPT
-    /// declares more inputs.
-    pub fn new() -> Self {
-        let mut inputs = Vec::with_capacity(DEFAULT_INPUT_CAPACITY);
-        inputs.resize_with(DEFAULT_INPUT_CAPACITY, TransactionInput::empty);
-        Self {
+    /// Create an empty transaction with the KSPT v1 format limits.
+    pub fn try_new() -> Result<Self, TransactionStorageError> {
+        Self::try_new_with(TransactionLimits::FORMAT)
+    }
+
+    /// Create an empty transaction bounded by `limits`. The input vector
+    /// starts with capacity for ordinary eight-input transactions and grows
+    /// only up to `limits.max_inputs`. All storage is allocated fallibly so
+    /// firmware callers can reject memory pressure rather than panic.
+    pub fn try_new_with(limits: TransactionLimits) -> Result<Self, TransactionStorageError> {
+        let initial_inputs = DEFAULT_INPUT_CAPACITY.min(limits.max_inputs);
+        let mut inputs = Vec::new();
+        inputs
+            .try_reserve_exact(initial_inputs)
+            .map_err(|_| TransactionStorageError::AllocationFailed)?;
+        inputs.resize_with(initial_inputs, TransactionInput::empty);
+        Ok(Self {
             version: 0,
             inputs,
             num_inputs: 0,
-            outputs: core::array::from_fn(|_| TransactionOutput::empty()),
+            outputs: try_boxed_array(TransactionOutput::empty)?,
             num_outputs: 0,
             network: KaspaNetwork::Unknown,
             locktime: 0,
@@ -104,9 +129,10 @@ impl Transaction {
             payload: Vec::new(),
             stealth_tweak: [0u8; 32],
             has_stealth_tweak: false,
-            redeem_pool: [0u8; REDEEM_POOL_SIZE],
+            redeem_pool: try_boxed_array(|| 0u8)?,
             redeem_pool_used: 0,
-        }
+            limits,
+        })
     }
 
     /// Reset the transaction while retaining allocated input capacity.
@@ -116,7 +142,7 @@ impl Transaction {
         for input in &mut self.inputs {
             *input = TransactionInput::empty();
         }
-        for output in &mut self.outputs {
+        for output in self.outputs.iter_mut() {
             *output = TransactionOutput::empty();
         }
         self.num_outputs = 0;
@@ -124,6 +150,7 @@ impl Transaction {
         self.locktime = 0;
         self.subnetwork_id = SUBNETWORK_ID_NATIVE;
         self.gas = 0;
+        self.payload.fill(0);
         self.payload.clear();
         self.stealth_tweak.fill(0);
         self.has_stealth_tweak = false;
@@ -134,12 +161,30 @@ impl Transaction {
     /// Ensure storage exists for every declared input. This grows only the
     /// backing vector; `num_inputs` remains controlled by the parser/builder.
     pub fn ensure_input_slots(&mut self, count: usize) -> Result<(), TransactionStorageError> {
+        if count > self.limits.max_inputs {
+            return Err(TransactionStorageError::TooManyInputs);
+        }
         if count > self.inputs.len() {
             self.inputs
                 .try_reserve(count - self.inputs.len())
                 .map_err(|_| TransactionStorageError::AllocationFailed)?;
             self.inputs.resize_with(count, TransactionInput::empty);
         }
+        Ok(())
+    }
+
+    /// Replace the application payload, rejecting anything past
+    /// `limits.max_payload_bytes` and allocation failure.
+    pub fn set_payload(&mut self, payload: &[u8]) -> Result<(), TransactionStorageError> {
+        if payload.len() > self.limits.max_payload_bytes {
+            return Err(TransactionStorageError::PayloadTooLarge);
+        }
+        self.payload.fill(0);
+        self.payload.clear();
+        self.payload
+            .try_reserve_exact(payload.len())
+            .map_err(|_| TransactionStorageError::AllocationFailed)?;
+        self.payload.extend_from_slice(payload);
         Ok(())
     }
 
@@ -161,7 +206,7 @@ impl Transaction {
 
     /// Store a redeem script for input `idx`. Scripts <= MAX_SCRIPT_SIZE
     /// go inline; larger ones go into the shared pool.
-    /// Returns an explicit storage error if the script or shared pool cannot be stored.
+    /// Returns a specific storage error if the script cannot be retained safely.
     pub fn store_redeem(&mut self, idx: usize, data: &[u8]) -> Result<(), TransactionStorageError> {
         let len = data.len();
         if len == 0 {
@@ -244,68 +289,5 @@ impl Transaction {
     /// Implicit fee = inputs - outputs, rejecting an invalid monetary shape.
     pub fn fee(&self) -> Result<u64, TransactionAmountError> {
         self.checked_amounts().map(|amounts| amounts.fee)
-    }
-
-    /// Format a sompi value as KAS (no-alloc, returns in buffer)
-    /// Example: 123_456_789 sompi -> "1.23456789"
-    pub fn format_kas(sompi: u64, buf: &mut [u8]) -> usize {
-        let kas = sompi / 100_000_000;
-        let frac = sompi % 100_000_000;
-        let mut pos = 0;
-
-        // Integer part
-        pos += Self::write_u64(kas, &mut buf[pos..]);
-
-        // Decimal point
-        if pos < buf.len() {
-            buf[pos] = b'.';
-            pos += 1;
-        }
-
-        // Fractional part (8 digits with leading zeros)
-        let mut frac_buf = [b'0'; 8];
-        let mut f = frac;
-        for i in (0..8).rev() {
-            frac_buf[i] = b'0' + (f % 10) as u8;
-            f /= 10;
-        }
-
-        // Write fraction (trim unnecessary trailing zeros)
-        let mut last_nonzero = 0;
-        for (i, digit) in frac_buf.iter().enumerate() {
-            if *digit != b'0' {
-                last_nonzero = i;
-            }
-        }
-        let frac_digits = if frac == 0 { 2 } else { last_nonzero + 1 };
-        for digit in frac_buf.iter().take(frac_digits) {
-            if pos < buf.len() {
-                buf[pos] = *digit;
-                pos += 1;
-            }
-        }
-
-        pos
-    }
-
-    fn write_u64(mut val: u64, buf: &mut [u8]) -> usize {
-        if val == 0 {
-            if !buf.is_empty() {
-                buf[0] = b'0';
-            }
-            return 1;
-        }
-        let mut digits = [0u8; 20];
-        let mut count = 0;
-        while val > 0 {
-            digits[count] = b'0' + (val % 10) as u8;
-            val /= 10;
-            count += 1;
-        }
-        let written = count.min(buf.len());
-        for i in 0..written {
-            buf[i] = digits[count - 1 - i];
-        }
-        written
     }
 }

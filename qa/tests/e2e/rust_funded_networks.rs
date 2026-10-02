@@ -62,7 +62,7 @@ fn relay_transaction(wire: &str, network_name: &str) -> Transaction {
     let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, network_name)
         .expect("relay funded PSKB as compact KSPT");
     let relay = hex::decode(relay_hex).expect("decode relayed KSPT");
-    let mut transaction = Transaction::new();
+    let mut transaction = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&relay, &mut transaction).expect("parse relayed KSPT");
     transaction
 }

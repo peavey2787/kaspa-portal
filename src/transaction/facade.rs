@@ -234,7 +234,8 @@ impl TransactionApi {
 }
 
 fn parse_compact_transaction(wire: &[u8]) -> Result<Transaction> {
-    let mut transaction = Transaction::new();
+    let mut transaction = Transaction::try_new()
+        .map_err(|error| Error::Transaction(format!("transaction storage: {error:?}")))?;
     kspt::parse_compact_kspt(wire, &mut transaction)
         .map_err(|error| Error::Transaction(format!("KSPT parse failed: {error:?}")))?;
     Ok(transaction)

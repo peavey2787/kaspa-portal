@@ -60,3 +60,12 @@ fn ms45_path_parser_rejects_short_hardened_invalid_chain_and_large_components() 
     assert_eq!(parse_soft_decimal(&[0xff]), None);
     assert_eq!(parse_soft_decimal(b""), None);
 }
+
+#[test]
+fn derivation_path_delimiter_search_is_limited_to_the_pre_value_region() {
+    let source = br#"{"derivationPath":"m/45'/111111'/0'/2/1/17","later":1}"#;
+    let hint = extract_ms45_hint(source, 0, source.len()).expect("hint");
+    assert_eq!(hint.cosigner, 2);
+    assert_eq!(hint.chain, 1);
+    assert_eq!(hint.index, 17);
+}

@@ -9,20 +9,21 @@ mod outputs;
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
 use crate::transaction::model::Transaction;
 
-use super::preservation::capture_unknown;
+use super::preservation::capture_unknown_keyed;
 use super::{
     hex_decode_strict, strip_pskt_magic, validate_monetary_shape, PskError, Tok, Tokenizer,
     PSKB_MAGIC, PSKT_MAGIC,
 };
 use global::parse_global;
-use helpers::{expect, expect_string, skip_value};
+use helpers::{expect, expect_string, mark_schema_field, require_schema_fields, skip_value};
 use inputs::parse_inputs_array;
 use outputs::parse_outputs_array;
 
-pub(super) const MAX_TX_VERSION: u16 = 1;
-/// PSKT format version (rusty-kaspa `Version::Zero`), emitted by every encoder.
+/// rusty-kaspa's PSKT `global.version` (`Version::Zero`); no other value is
+/// accepted. The executable schema states the same constant.
 pub(super) const PSKT_VERSION: u64 = 0;
-pub(super) const SIGHASH_ALL: u8 = 1;
+const _: () = assert!(PSKT_VERSION == crate::transaction::interchange::pskt::schema::PSKT_VERSION);
+pub(super) const SIGHASH_ALL: u8 = crate::transaction::interchange::pskt::schema::SIGHASH_ALL;
 
 #[derive(Debug, Default)]
 pub(super) struct ParseContext {
@@ -46,6 +47,16 @@ fn parse_decoded_json(
     parsed: &mut PsktParsed,
     is_bundle: bool,
 ) -> Result<(), PskError> {
+    crate::transaction::interchange::pskt::schema::validate_canonical_json(json).map_err(
+        |error| {
+            use crate::transaction::interchange::pskt::schema::JsonSyntaxError;
+            match error {
+                JsonSyntaxError::DuplicateKey => PskError::DuplicateField,
+                JsonSyntaxError::NestingTooDeep => PskError::JsonNestingTooDeep,
+                _ => PskError::UnexpectedToken,
+            }
+        },
+    )?;
     let mut tok = Tokenizer::new(json);
     if is_bundle {
         parse_bundle_array(&mut tok, tx, parsed)?;
@@ -69,7 +80,7 @@ pub fn parse_pskt(
     *parsed = PsktParsed::empty();
     parsed.json_start = 0;
     parsed.json_len = json_len_u32;
-    tx.clear();
+    tx.prepare_for_parse();
     parse_decoded_json(&scratch[..json_len], tx, parsed, is_bundle)
 }
 
@@ -91,57 +102,63 @@ fn parse_bundle_array(
     }
 }
 
-const HAS_GLOBAL: u8 = 0b001;
-const HAS_INPUTS: u8 = 0b010;
-const HAS_OUTPUTS: u8 = 0b100;
-const REQUIRED_TOP_LEVEL_FIELDS: u8 = 0b111;
-
 fn parse_top_level_field(
     tok: &mut Tokenizer<'_>,
     tx: &mut Transaction,
     parsed: &mut PsktParsed,
     context: &mut ParseContext,
-    seen: &mut u8,
+    seen: &mut u64,
 ) -> Result<(), PskError> {
+    use crate::transaction::interchange::pskt::schema::Scope;
     let key_start = tok.position();
     let key = expect_string(tok)?;
     expect(tok, Tok::Colon)?;
-    let field = top_level_field_bit(key);
-    reject_duplicate_top_level(*seen, field)?;
-    parse_top_level_value(tok, tx, parsed, context, key_start, field)?;
-    *seen |= field;
-    Ok(())
+    let known = mark_schema_field(tok, seen, Scope::TopLevel, key)?;
+    dispatch_top_level_field(tok, tx, parsed, context, key_start, key, known)
 }
 
-fn top_level_field_bit(key: &[u8]) -> u8 {
-    match key {
-        b"global" => HAS_GLOBAL,
-        b"inputs" => HAS_INPUTS,
-        b"outputs" => HAS_OUTPUTS,
-        _ => 0,
-    }
-}
-
-fn reject_duplicate_top_level(seen: u8, field: u8) -> Result<(), PskError> {
-    if field != 0 && seen & field != 0 {
-        return Err(PskError::DuplicateField);
-    }
-    Ok(())
-}
-
-fn parse_top_level_value(
+fn dispatch_top_level_field(
     tok: &mut Tokenizer<'_>,
     tx: &mut Transaction,
     parsed: &mut PsktParsed,
     context: &mut ParseContext,
     key_start: usize,
-    field: u8,
+    key: &[u8],
+    known: bool,
 ) -> Result<(), PskError> {
-    match field {
-        HAS_GLOBAL => parse_global(tok, tx, parsed, context),
-        HAS_INPUTS => parse_inputs_array(tok, tx, parsed),
-        HAS_OUTPUTS => parse_outputs_array(tok, tx, parsed),
-        _ => preserve_unknown_top_level(tok, parsed, key_start),
+    if let Some(result) = dispatch_known_top_level_field(tok, tx, parsed, context, key) {
+        return result;
+    }
+    dispatch_unknown_top_level_field(tok, parsed, key_start, known)
+}
+
+fn dispatch_known_top_level_field(
+    tok: &mut Tokenizer<'_>,
+    tx: &mut Transaction,
+    parsed: &mut PsktParsed,
+    context: &mut ParseContext,
+    key: &[u8],
+) -> Option<Result<(), PskError>> {
+    match key {
+        b"global" => Some(parse_global(tok, tx, parsed, context)),
+        b"inputs" => Some(parse_inputs_array(tok, tx, parsed)),
+        b"outputs" => Some(parse_outputs_array(tok, tx, parsed)),
+        _ => None,
+    }
+}
+
+fn dispatch_unknown_top_level_field(
+    tok: &mut Tokenizer<'_>,
+    parsed: &mut PsktParsed,
+    key_start: usize,
+    known: bool,
+) -> Result<(), PskError> {
+    if !known
+        && crate::transaction::interchange::pskt::schema::EXTENSION_GRAMMAR.preserve_unknown_fields
+    {
+        preserve_unknown_top_level(tok, parsed, key_start)
+    } else {
+        Err(PskError::UnexpectedToken)
     }
 }
 
@@ -151,9 +168,10 @@ fn preserve_unknown_top_level(
     key_start: usize,
 ) -> Result<(), PskError> {
     skip_value(tok)?;
-    capture_unknown(
+    capture_unknown_keyed(
         parsed,
         PsktUnknownScope::top_level(),
+        tok.source(),
         key_start,
         tok.position(),
     )
@@ -162,11 +180,12 @@ fn preserve_unknown_top_level(
 fn validate_top_level_object(
     tx: &Transaction,
     context: &ParseContext,
-    seen: u8,
+    seen: u64,
 ) -> Result<(), PskError> {
-    if seen != REQUIRED_TOP_LEVEL_FIELDS {
-        return Err(PskError::MissingField);
-    }
+    require_schema_fields(
+        crate::transaction::interchange::pskt::schema::Scope::TopLevel,
+        seen,
+    )?;
     if context.declared_input_count != Some(tx.num_inputs)
         || context.declared_output_count != Some(tx.num_outputs)
     {
@@ -191,7 +210,7 @@ fn parse_pskt_object(
         return Err(PskError::MissingField);
     }
 
-    let mut seen = 0u8;
+    let mut seen = 0u64;
     let mut context = ParseContext::default();
     loop {
         parse_top_level_field(tok, tx, parsed, &mut context, &mut seen)?;

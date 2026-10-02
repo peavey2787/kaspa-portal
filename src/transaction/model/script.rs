@@ -68,12 +68,18 @@ pub struct UtxoEntry {
 // ─── Multisig Script Info ────────────────────────────────────────────
 
 /// Parsed multisig script: M-of-N with extracted pubkeys
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 /// Detected M-of-N multisig parameters from a script.
 pub struct MultisigInfo {
     pub m: u8, // required signatures
     pub n: u8, // total pubkeys
     pub pubkeys: [[u8; 32]; MAX_MULTISIG_KEYS],
+}
+
+impl Default for MultisigInfo {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MultisigInfo {

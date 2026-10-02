@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+Hardened signer core merged from KasKold, so the hardware signer can depend on
+Portal instead of carrying its own copy.
+
+- Transaction model: runtime `TransactionLimits` (inputs, payload bytes) with
+  `Transaction::try_new_with`; payload is a fallibly allocated `Vec`; input
+  storage grows only as wire records are consumed and never past the limit.
+- KSPT signature status is cryptographic: `is_fully_signed` and
+  `signature_status` verify every BIP340 signature over the exact SIGHASH_ALL
+  digest instead of counting occupied slots.
+- KSPT enforces SIGHASH_ALL for every signature slot, honours the
+  transaction's device limits while decoding, and rejects hardened
+  derivation indexes.
+- KSPT trailers are canonical: fixed kind order, strictly increasing
+  positions, network binding first. New input-derivation (`A`) and
+  covenant-execution (`E`) trailers.
+- Covenant signing binds candidate keys to the supplied execution branch
+  selectors (`contract::covenant::branch`) instead of scanning every pushed key.
+- Watchdog-friendly `*_with_checkpoint` variants of address lookup, account
+  signing and anti-klepto finalization for constrained hardware.
+- Standard PSKT parser/serializer replaced by the hardened implementation with
+  a split schema module, u32 offsets, and fallible storage.
+
 ## 1.3.0
 
 - New default `std` feature. With `default-features = false` Kaspa Portal is a

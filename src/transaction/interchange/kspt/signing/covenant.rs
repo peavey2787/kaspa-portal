@@ -9,6 +9,8 @@ const MAX_COVENANT_KEYS: usize = 8;
 
 pub(super) struct CandidateKeys {
     pub(super) keys: [[u8; 32]; MAX_COVENANT_KEYS],
+    /// Original resolver positions, preserved even when inactive branches are filtered out.
+    pub(super) positions: [u8; MAX_COVENANT_KEYS],
     pub(super) len: usize,
 }
 
@@ -16,100 +18,141 @@ impl CandidateKeys {
     const fn new() -> Self {
         Self {
             keys: [[0u8; 32]; MAX_COVENANT_KEYS],
+            positions: [0u8; MAX_COVENANT_KEYS],
             len: 0,
         }
     }
-
-    fn push(&mut self, key: &[u8]) {
-        if self.len < MAX_COVENANT_KEYS {
-            self.keys[self.len].copy_from_slice(key);
-            self.len += 1;
-        }
-    }
 }
 
-fn checked_advance(offset: usize, amount: usize, script_len: usize) -> Result<usize, PsktError> {
-    let next = offset.checked_add(amount).ok_or(PsktError::InvalidModel)?;
-    if next > script_len || next <= offset {
+/// Structural resolver used by parser-focused unit tests. Signing authorization must use
+/// `candidate_keys_for_input`, which additionally binds candidates to covenantExecution.
+#[cfg(test)]
+pub(super) fn scan_candidate_keys(script: &[u8]) -> Result<CandidateKeys, PsktError> {
+    let resolved = crate::contract::covenant::branch::resolve_covenant_branches(script)
+        .map_err(|_| PsktError::InvalidModel)?;
+    if resolved.len() > MAX_COVENANT_KEYS {
         return Err(PsktError::InvalidModel);
     }
-    Ok(next)
-}
-
-pub(super) fn scan_candidate_keys(script: &[u8]) -> Result<CandidateKeys, PsktError> {
     let mut candidates = CandidateKeys::new();
-    let mut offset = 0usize;
-    while offset < script.len() {
-        record_candidate_key(script, offset, &mut candidates)?;
-        let next_offset = next_script_offset(script, offset)?;
-        if next_offset <= offset {
-            return Err(PsktError::InvalidModel);
-        }
-        offset = next_offset;
+    for position in 0..resolved.len() {
+        let position = u8::try_from(position).map_err(|_| PsktError::InvalidModel)?;
+        let branch = resolved
+            .key_at(position)
+            .map_err(|_| PsktError::InvalidModel)?;
+        candidates.keys[candidates.len] = branch.key;
+        candidates.positions[candidates.len] = position;
+        candidates.len += 1;
     }
     Ok(candidates)
 }
 
-fn record_candidate_key(
+fn scan_active_candidate_keys(
     script: &[u8],
-    offset: usize,
+    supplied_mask: u16,
+    supplied_true_mask: u16,
+) -> Result<CandidateKeys, PsktError> {
+    let resolved = resolve_execution_branches(script, supplied_mask, supplied_true_mask)?;
+    let candidates = collect_active_candidate_keys(&resolved, supplied_mask, supplied_true_mask)?;
+    require_single_active_candidate(candidates)
+}
+
+fn resolve_execution_branches(
+    script: &[u8],
+    supplied_mask: u16,
+    supplied_true_mask: u16,
+) -> Result<crate::contract::covenant::branch::BranchResolution, PsktError> {
+    if supplied_true_mask & !supplied_mask != 0 {
+        return Err(PsktError::InvalidModel);
+    }
+    let resolved = crate::contract::covenant::branch::resolve_covenant_branches(script)
+        .map_err(|_| PsktError::InvalidModel)?;
+    if supplied_mask != resolved.selector_mask() {
+        return Err(PsktError::InvalidModel);
+    }
+    // Signing and raw-KSPT broadcasting deliberately have different topology
+    // boundaries. A Vault may sign a fully specified richer selector assignment
+    // when it resolves to exactly one active signing key; after merge, the host
+    // must still prove a typed family-specific VerifiedWitnessPlan before such a
+    // witness can be materialized. Raw generic KSPT broadcast remains restricted
+    // to the single-selector generic plan.
+    if resolved.len() > MAX_COVENANT_KEYS {
+        return Err(PsktError::InvalidModel);
+    }
+    Ok(resolved)
+}
+
+fn collect_active_candidate_keys(
+    resolved: &crate::contract::covenant::branch::BranchResolution,
+    supplied_mask: u16,
+    supplied_true_mask: u16,
+) -> Result<CandidateKeys, PsktError> {
+    let mut candidates = CandidateKeys::new();
+    for position in 0..resolved.len() {
+        append_active_candidate(
+            &mut candidates,
+            resolved,
+            position,
+            supplied_mask,
+            supplied_true_mask,
+        )?;
+    }
+    Ok(candidates)
+}
+
+fn append_active_candidate(
     candidates: &mut CandidateKeys,
+    resolved: &crate::contract::covenant::branch::BranchResolution,
+    position: usize,
+    supplied_mask: u16,
+    supplied_true_mask: u16,
 ) -> Result<(), PsktError> {
-    if script.get(offset).copied() != Some(0x20) {
+    let encoded_position = u8::try_from(position).map_err(|_| PsktError::InvalidModel)?;
+    let binding = resolved
+        .key_at(encoded_position)
+        .map_err(|_| PsktError::InvalidModel)?;
+    if !binding.matches_selectors(supplied_mask, supplied_true_mask) {
         return Ok(());
     }
-    let after = checked_advance(offset, 33, script.len())?;
-    let tail = script.get(after..).unwrap_or_default();
-    let has_checksig = tail
-        .first()
-        .is_some_and(|opcode| matches!(opcode, 0xac | 0xad))
-        || tail
-            .get(1)
-            .is_some_and(|opcode| matches!(opcode, 0xac | 0xad));
-    if has_checksig {
-        candidates.push(&script[offset + 1..offset + 33]);
-    }
+    // A branchless canonical CHECKSIG has no structural selector bits.
+    // When covenantExecution is present and the supplied mask exactly
+    // matches the resolver's zero selector mask, that is a complete
+    // execution proof rather than an absent proof.
+    candidates.keys[candidates.len] = binding.key;
+    candidates.positions[candidates.len] = encoded_position;
+    candidates.len += 1;
     Ok(())
 }
 
-fn next_script_offset(script: &[u8], offset: usize) -> Result<usize, PsktError> {
-    let opcode = *script.get(offset).ok_or(PsktError::InvalidModel)?;
-    match opcode {
-        0x01..=0x4b => checked_advance(offset, 1 + opcode as usize, script.len()),
-        0x4c => next_pushdata1_offset(script, offset),
-        0x4d => next_pushdata2_offset(script, offset),
-        0x4e => next_pushdata4_offset(script, offset),
-        _ => checked_advance(offset, 1, script.len()),
+fn require_single_active_candidate(candidates: CandidateKeys) -> Result<CandidateKeys, PsktError> {
+    // Signing is intentionally fail-closed around signature cardinality: every
+    // supplied selector assignment must resolve to exactly one active signing key.
+    // Richer witness topology is authorized separately by the typed host finalizer.
+    if candidates.len != 1 {
+        return Err(PsktError::InvalidModel);
     }
-}
-
-fn next_pushdata1_offset(script: &[u8], offset: usize) -> Result<usize, PsktError> {
-    let header_end = checked_advance(offset, 2, script.len())?;
-    checked_advance(header_end, script[offset + 1] as usize, script.len())
-}
-
-fn next_pushdata2_offset(script: &[u8], offset: usize) -> Result<usize, PsktError> {
-    let header_end = checked_advance(offset, 3, script.len())?;
-    let length = u16::from_le_bytes([script[offset + 1], script[offset + 2]]) as usize;
-    checked_advance(header_end, length, script.len())
-}
-
-fn next_pushdata4_offset(script: &[u8], offset: usize) -> Result<usize, PsktError> {
-    let header_end = checked_advance(offset, 5, script.len())?;
-    let length = u32::from_le_bytes([
-        script[offset + 1],
-        script[offset + 2],
-        script[offset + 3],
-        script[offset + 4],
-    ]) as usize;
-    checked_advance(header_end, length, script.len())
+    Ok(candidates)
 }
 
 pub(super) fn candidate_keys_for_input(
     tx: &Transaction,
     input_index: usize,
 ) -> Result<CandidateKeys, PsktError> {
-    checked_redeem_bytes(tx, input_index).and_then(scan_candidate_keys)
+    let input = tx.inputs.get(input_index).ok_or(PsktError::InvalidModel)?;
+    if !input.covenant_execution_present {
+        return Err(PsktError::InvalidModel);
+    }
+    checked_redeem_bytes(tx, input_index).and_then(|script| {
+        scan_active_candidate_keys(
+            script,
+            input.covenant_execution_mask,
+            input.covenant_execution_true_mask,
+        )
+    })
+}
+
+struct CovenantCandidate<'a> {
+    position: u8,
+    target: &'a [u8; 32],
 }
 
 pub(super) fn sign_covenant_input(
@@ -127,13 +170,13 @@ pub(super) fn sign_covenant_input(
     for candidate_index in 0..candidates.len {
         if sign_covenant_candidate(
             tx,
+            input_index,
             context,
-            CovenantCandidateRequest {
-                input_index,
-                sighash_type,
-                active_seed_index,
-                signing_entropy,
-                candidate_index,
+            sighash_type,
+            active_seed_index,
+            signing_entropy,
+            CovenantCandidate {
+                position: candidates.positions[candidate_index],
                 target: &candidates.keys[candidate_index],
             },
         )? {
@@ -143,40 +186,35 @@ pub(super) fn sign_covenant_input(
     Ok(0)
 }
 
-struct CovenantCandidateRequest<'a> {
-    input_index: usize,
-    sighash_type: SigHashType,
-    active_seed_index: Option<usize>,
-    signing_entropy: Option<&'a [u8; 32]>,
-    candidate_index: usize,
-    target: &'a [u8; 32],
-}
-
 fn sign_covenant_candidate(
     tx: &mut Transaction,
+    input_index: usize,
     context: &mut SigningContext,
-    request: CovenantCandidateRequest<'_>,
+    sighash_type: SigHashType,
+    active_seed_index: Option<usize>,
+    signing_entropy: Option<&[u8; 32]>,
+    candidate: CovenantCandidate<'_>,
 ) -> Result<bool, PsktError> {
     for seed_index in 0..context.seed_count() {
-        if !seed_is_active(request.active_seed_index, seed_index) {
+        if !seed_is_active(active_seed_index, seed_index) {
             continue;
         }
-        let Some(mut material) = covenant_material(context, seed_index, request.target) else {
+        let Some(mut material) = covenant_material(context, seed_index, candidate.target) else {
             continue;
         };
         let signature = super::sign_input_with_optional_entropy(
             tx,
-            request.input_index,
+            input_index,
             &material.private_key,
-            request.sighash_type,
-            request.signing_entropy,
+            sighash_type,
+            signing_entropy,
         )?;
         zeroize_bytes(&mut material.private_key);
         set_single_signature(
-            &mut tx.inputs[request.input_index],
+            &mut tx.inputs[input_index],
             signature,
-            request.sighash_type.to_byte(),
-            request.candidate_index as u8,
+            sighash_type.to_byte(),
+            candidate.position,
             material.compressed_public_key,
         );
         return Ok(true);

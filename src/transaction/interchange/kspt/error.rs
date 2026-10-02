@@ -47,4 +47,6 @@ pub enum PsktError {
     OutputAmountOverflow,
     /// Aggregate outputs exceed aggregate inputs.
     OutputsExceedInputs,
+    /// Transaction storage could not be allocated.
+    StorageExhausted,
 }

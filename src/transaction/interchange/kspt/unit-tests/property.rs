@@ -44,8 +44,8 @@ fn key_derivation_is_deterministic_and_separates_receive_from_change() {
 #[test]
 fn compact_kspt_roundtrip_is_canonical_for_generated_transactions() {
     for case in 0..64u8 {
-        let mut transaction = Transaction::new();
-        transaction.version = u16::from(case);
+        let mut transaction = Transaction::try_new().expect("transaction test allocation");
+        transaction.version = u16::from(case & 1);
         transaction.network = crate::primitives::address::KaspaNetwork::Mainnet;
         transaction.num_inputs = 1;
         transaction.num_outputs = 1;
@@ -68,15 +68,14 @@ fn compact_kspt_roundtrip_is_canonical_for_generated_transactions() {
             case.wrapping_add(2),
         );
         transaction.locktime = u64::from(case) * 17;
-        transaction.payload = vec![0u8; usize::from(case % 17)];
-        for (index, byte) in transaction.payload.iter_mut().enumerate() {
-            *byte = case.wrapping_add(index as u8);
-        }
+        transaction.payload = (0..case % 17)
+            .map(|index| case.wrapping_add(index))
+            .collect();
 
         let mut encoded = [0u8; 4096];
         let written = serialize_compact_kspt(&transaction, &mut encoded)
             .expect("generated transaction serializes");
-        let mut recovered = Transaction::new();
+        let mut recovered = Transaction::try_new().expect("transaction test allocation");
         parse_compact_kspt(&encoded[..written], &mut recovered)
             .expect("serialized transaction parses");
         let mut canonical = [0u8; 4096];
@@ -93,7 +92,7 @@ fn compact_kspt_roundtrip_is_canonical_for_generated_transactions() {
 
 #[test]
 fn compact_kspt_rejects_every_truncated_prefix_of_a_valid_message() {
-    let mut transaction = Transaction::new();
+    let mut transaction = Transaction::try_new().expect("transaction test allocation");
     transaction.network = crate::primitives::address::KaspaNetwork::Mainnet;
     transaction.num_inputs = 1;
     transaction.num_outputs = 1;
@@ -111,7 +110,7 @@ fn compact_kspt_rejects_every_truncated_prefix_of_a_valid_message() {
     let mut encoded = [0u8; 4096];
     let written = serialize_compact_kspt(&transaction, &mut encoded).expect("fixture serializes");
     for length in 0..written {
-        let mut parsed = Transaction::new();
+        let mut parsed = Transaction::try_new().expect("transaction test allocation");
         assert!(
             parse_compact_kspt(&encoded[..length], &mut parsed).is_err(),
             "truncated prefix {length}/{written} was accepted"
@@ -119,7 +118,7 @@ fn compact_kspt_rejects_every_truncated_prefix_of_a_valid_message() {
     }
     let mut invalid_magic = encoded;
     invalid_magic[0] ^= 0xff;
-    let mut parsed = Transaction::new();
+    let mut parsed = Transaction::try_new().expect("transaction test allocation");
     assert_eq!(
         parse_compact_kspt(&invalid_magic[..written], &mut parsed),
         Err(PsktError::InvalidMagic)

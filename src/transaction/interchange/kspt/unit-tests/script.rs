@@ -126,8 +126,6 @@ fn multisig_configuration_builds_deterministic_child_script_and_rejects_invalid_
 
     let mut forward = config(&first, &second);
     let mut reverse = config(&second, &first);
-    forward.sort_cosigners();
-    reverse.sort_cosigners();
     let expected_len = 1 + 2 * 33 + 2;
     assert_eq!(forward.build_script(), expected_len);
     assert_eq!(reverse.build_script(), expected_len);

@@ -52,8 +52,34 @@ pub fn finalize_account_signatures(
     session_id: &[u8; SESSION_ID_LEN],
     host_secret: &[u8; 32],
 ) -> Result<usize, PsktError> {
+    let mut no_checkpoint = || {};
+    finalize_account_signatures_with_checkpoint(
+        tx,
+        account_key,
+        initial_counts,
+        session_id,
+        host_secret,
+        &mut no_checkpoint,
+    )
+}
+
+pub fn finalize_account_signatures_with_checkpoint(
+    tx: &mut Transaction,
+    account_key: &bip32::ExtendedPrivKey,
+    initial_counts: &[u8],
+    session_id: &[u8; SESSION_ID_LEN],
+    host_secret: &[u8; 32],
+    checkpoint: &mut (impl FnMut() + ?Sized),
+) -> Result<usize, PsktError> {
     let raw = account_key.to_raw();
-    finalize_account_set_signatures(tx, &[(raw, true)], initial_counts, session_id, host_secret)
+    finalize_account_set_signatures_with_checkpoint(
+        tx,
+        &[(raw, true)],
+        initial_counts,
+        session_id,
+        host_secret,
+        checkpoint,
+    )
 }
 
 pub fn finalize_account_set_signatures(
@@ -63,23 +89,47 @@ pub fn finalize_account_set_signatures(
     session_id: &[u8; SESSION_ID_LEN],
     host_secret: &[u8; 32],
 ) -> Result<usize, PsktError> {
+    let mut no_checkpoint = || {};
+    finalize_account_set_signatures_with_checkpoint(
+        tx,
+        accounts,
+        initial_counts,
+        session_id,
+        host_secret,
+        &mut no_checkpoint,
+    )
+}
+
+pub fn finalize_account_set_signatures_with_checkpoint(
+    tx: &mut Transaction,
+    accounts: &[([u8; 65], bool)],
+    initial_counts: &[u8],
+    session_id: &[u8; SESSION_ID_LEN],
+    host_secret: &[u8; 32],
+    checkpoint: &mut (impl FnMut() + ?Sized),
+) -> Result<usize, PsktError> {
     let mut context = SigningContext::from_account_raw(accounts);
+    checkpoint();
     finalize_matching(
         tx,
         initial_counts,
         session_id,
         host_secret,
         |tx, sig_pubkey| {
+            checkpoint();
             let mut target = [0u8; 32];
             target.copy_from_slice(&sig_pubkey[1..33]);
-            if let Some(material) = context.matching_material(&target) {
+            if let Some(material) = context.matching_material_with_checkpoint(&target, checkpoint) {
                 return Some(material);
             }
             if tx.has_stealth_tweak {
                 for seed_index in 0..context.seed_count() {
+                    checkpoint();
                     if let Some(material) = stealth_material(&context, seed_index, tx, &target) {
+                        checkpoint();
                         return Some(material);
                     }
+                    checkpoint();
                 }
             }
             None
@@ -97,16 +147,11 @@ fn finalize_matching<F>(
 where
     F: FnMut(&Transaction, &[u8; 33]) -> Option<SigningKeyMaterial>,
 {
-    if initial_counts.len() < tx.num_inputs {
-        return Err(PsktError::InvalidSignatureState);
-    }
+    let counts = initial_counts
+        .get(..tx.num_inputs)
+        .ok_or(PsktError::InvalidSignatureState)?;
     let mut changed = 0usize;
-    for (input_index, initial_count) in initial_counts
-        .iter()
-        .copied()
-        .enumerate()
-        .take(tx.num_inputs)
-    {
+    for (input_index, &initial_count) in counts.iter().enumerate() {
         changed += finalize_input_signatures(
             tx,
             input_index,
@@ -180,11 +225,11 @@ where
     }
     let result = finalize_with_material(
         tx,
-        FinalizeSignatureMaterial {
-            input_index,
-            slot,
-            sighash_byte: sig.sighash_type,
-            provisional_bytes: sig.signature,
+        input_index,
+        slot,
+        sig.sighash_type,
+        sig.signature,
+        FinalizationMaterial {
             session_id,
             host_secret,
             private_key: &material.private_key,
@@ -194,11 +239,7 @@ where
     result
 }
 
-struct FinalizeSignatureMaterial<'a> {
-    input_index: usize,
-    slot: usize,
-    sighash_byte: u8,
-    provisional_bytes: [u8; 64],
+struct FinalizationMaterial<'a> {
     session_id: &'a [u8; SESSION_ID_LEN],
     host_secret: &'a [u8; 32],
     private_key: &'a [u8; 32],
@@ -206,13 +247,16 @@ struct FinalizeSignatureMaterial<'a> {
 
 fn finalize_with_material(
     tx: &mut Transaction,
-    material: FinalizeSignatureMaterial<'_>,
+    input_index: usize,
+    slot: usize,
+    sighash_byte: u8,
+    provisional_bytes: [u8; 64],
+    material: FinalizationMaterial<'_>,
 ) -> Result<(), PsktError> {
-    let sighash_type =
-        SigHashType::from_byte(material.sighash_byte).ok_or(PsktError::InvalidSigHashType)?;
-    let message = sighash::calculate_sighash(tx, material.input_index, sighash_type);
+    let sighash_type = SigHashType::from_byte(sighash_byte).ok_or(PsktError::InvalidSigHashType)?;
+    let message = sighash::calculate_sighash(tx, input_index, sighash_type);
     let provisional = SchnorrSignature {
-        bytes: material.provisional_bytes,
+        bytes: provisional_bytes,
     };
     let final_signature = crypto::tweak_provisional_signature(
         material.private_key,
@@ -220,11 +264,11 @@ fn finalize_with_material(
         &provisional,
         material.session_id,
         material.host_secret,
-        u32::try_from(material.input_index).map_err(|_| PsktError::TooManyInputs)?,
-        material.slot as u8,
+        u32::try_from(input_index).map_err(|_| PsktError::TooManyInputs)?,
+        slot as u8,
     )
     .map_err(|_| PsktError::SigningFailed)?;
-    tx.inputs[material.input_index].sigs[material.slot].signature = final_signature.bytes;
+    tx.inputs[input_index].sigs[slot].signature = final_signature.bytes;
     Ok(())
 }
 

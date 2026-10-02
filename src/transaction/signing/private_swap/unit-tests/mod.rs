@@ -75,7 +75,7 @@ fn canonical_script(
 fn claim_transaction() -> (Transaction, [u8; 32]) {
     let owner = [0x21; 32];
     let claimer = [0x31; 32];
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction storage");
     tx.version = 0;
     tx.network = KaspaNetwork::Mainnet;
     tx.num_inputs = 1;

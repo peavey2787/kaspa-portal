@@ -3,14 +3,12 @@
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
 use crate::transaction::model::{Transaction, TransactionOutput, MAX_OUTPUTS};
 
-use super::super::preservation::capture_unknown;
 use super::super::{hex_decode_strict, PskError, Tok, Tokenizer};
 use super::derivation::extract_ms45_hint;
 use super::helpers::{
-    capture_nonempty_object, capture_nullable_hex, consume_object_separator, expect,
-    expect_exact_u64, expect_string, expect_u64, mark_seen_u8, next_object_member,
-    parse_bounded_array, parse_script_public_key, reject_empty_object, skip_and_capture_unknown,
-    skip_until_matching,
+    capture_nonempty_object, consume_object_separator, expect, expect_string, expect_u64,
+    mark_schema_field, parse_bounded_array, parse_script_public_key, reject_empty_object,
+    require_schema_fields, skip_until_matching, validate_hex_string, ScopedPreservation,
 };
 
 pub(super) fn parse_outputs_array(
@@ -19,6 +17,7 @@ pub(super) fn parse_outputs_array(
     parsed: &mut PsktParsed,
 ) -> Result<(), PskError> {
     let count = parse_bounded_array(tok, MAX_OUTPUTS, PskError::TooManyOutputs, |tok, index| {
+        tx.outputs[index] = TransactionOutput::empty();
         parse_output(tok, &mut tx.outputs[index], parsed, index)
     })?;
     tx.num_outputs = count;
@@ -49,24 +48,24 @@ fn parse_output(
     parser.require_fields()
 }
 
-const AMOUNT: u8 = 0x01;
-const SCRIPT_PUBLIC_KEY: u8 = 0x02;
-const COVENANT_BINDING: u8 = 0x04;
-const REDEEM_SCRIPT: u8 = 0x08;
-const BIP32_DERIVATIONS: u8 = 0x10;
-const PROPRIETARIES: u8 = 0x20;
-const REQUIRED_OUTPUT_FIELDS: u8 = 0x03;
-
 struct OutputParser<'a> {
     output: &'a mut TransactionOutput,
     parsed: &'a mut PsktParsed,
     index: usize,
-    seen: u8,
+    seen: u64,
 }
 
 impl OutputParser<'_> {
     fn parse_member(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        let (key_start, key) = next_object_member(tok)?;
+        let key_start = tok.position();
+        let key = expect_string(tok)?;
+        expect(tok, Tok::Colon)?;
+        mark_schema_field(
+            tok,
+            &mut self.seen,
+            crate::transaction::interchange::pskt::schema::Scope::Output,
+            key,
+        )?;
         self.parse_field(tok, key_start, key)
     }
 
@@ -82,28 +81,22 @@ impl OutputParser<'_> {
             b"covenantBinding" => self.parse_covenant_field(tok),
             b"redeemScript" => self.parse_redeem_script(tok, key_start),
             b"bip32Derivations" => self.parse_bip32_derivations(tok, key_start),
-            b"proprietaries" => {
-                mark_seen_u8(&mut self.seen, PROPRIETARIES)?;
-                capture_nonempty_object(tok, self.parsed, key_start, self.scope())
-            }
-            _ => skip_and_capture_unknown(tok, self.parsed, self.scope(), key_start),
+            b"proprietaries" => self.parse_preserved_object(tok, key_start),
+            _ => self.preserve_unknown(tok, key_start),
         }
     }
 
     fn parse_amount(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u8(&mut self.seen, AMOUNT)?;
-        self.output.value = expect_exact_u64(tok)?;
+        self.output.value = expect_u64(tok)?;
         Ok(())
     }
 
     fn parse_script_key(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u8(&mut self.seen, SCRIPT_PUBLIC_KEY)?;
         let hex_str = expect_string(tok)?;
         parse_script_public_key(hex_str, &mut self.output.script_public_key)
     }
 
     fn parse_covenant_field(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u8(&mut self.seen, COVENANT_BINDING)?;
         self.parsed.mark_output_covenant_binding_field(self.index);
         parse_covenant_binding(tok, self.output)
     }
@@ -113,8 +106,14 @@ impl OutputParser<'_> {
         tok: &mut Tokenizer<'_>,
         key_start: usize,
     ) -> Result<(), PskError> {
-        mark_seen_u8(&mut self.seen, REDEEM_SCRIPT)?;
-        capture_nullable_hex(tok, self.parsed, self.scope(), key_start)
+        match tok.next_token()? {
+            Tok::Null => Ok(()),
+            Tok::Str(hex_str) => {
+                validate_hex_string(hex_str)?;
+                self.capture(key_start, tok.position())
+            }
+            _ => Err(PskError::UnexpectedToken),
+        }
     }
 
     fn parse_bip32_derivations(
@@ -122,7 +121,6 @@ impl OutputParser<'_> {
         tok: &mut Tokenizer<'_>,
         key_start: usize,
     ) -> Result<(), PskError> {
-        mark_seen_u8(&mut self.seen, BIP32_DERIVATIONS)?;
         let value_start = tok.position();
         expect(tok, Tok::LBrace)?;
         if matches!(tok.peek()?, Tok::RBrace) {
@@ -135,7 +133,16 @@ impl OutputParser<'_> {
                 self.output.ms45_hint = hint;
             }
         }
-        capture_unknown(self.parsed, self.scope(), key_start, tok.position())
+        self.capture(key_start, tok.position())
+    }
+
+    fn parse_preserved_object(
+        &mut self,
+        tok: &mut Tokenizer<'_>,
+        key_start: usize,
+    ) -> Result<(), PskError> {
+        let scope = self.scope();
+        capture_nonempty_object(tok, self.parsed, key_start, scope)
     }
 
     fn scope(&self) -> PsktUnknownScope {
@@ -145,20 +152,16 @@ impl OutputParser<'_> {
     }
 
     fn require_fields(&self) -> Result<(), PskError> {
-        if self.seen & REQUIRED_OUTPUT_FIELDS != REQUIRED_OUTPUT_FIELDS {
-            return Err(PskError::MissingField);
-        }
-        Ok(())
+        require_schema_fields(
+            crate::transaction::interchange::pskt::schema::Scope::Output,
+            self.seen,
+        )
     }
 }
 
-const COVENANT_AUTHORIZING_INPUT: u8 = 0x01;
-const COVENANT_ID_FIELD: u8 = 0x02;
-const REQUIRED_COVENANT_FIELDS: u8 = 0x03;
-
 struct CovenantBindingParser<'a> {
     output: &'a mut TransactionOutput,
-    seen: u8,
+    seen: u64,
 }
 
 impl CovenantBindingParser<'_> {
@@ -178,6 +181,14 @@ impl CovenantBindingParser<'_> {
     fn parse_member(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
         let key = expect_string(tok)?;
         expect(tok, Tok::Colon)?;
+        if !mark_schema_field(
+            tok,
+            &mut self.seen,
+            crate::transaction::interchange::pskt::schema::Scope::CovenantBinding,
+            key,
+        )? {
+            return Err(PskError::UnexpectedToken);
+        }
         match key {
             b"authorizingInput" => self.parse_authorizing_input(tok),
             b"covenantId" => self.parse_covenant_id(tok),
@@ -186,7 +197,6 @@ impl CovenantBindingParser<'_> {
     }
 
     fn parse_authorizing_input(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u8(&mut self.seen, COVENANT_AUTHORIZING_INPUT)?;
         let input_index = expect_u64(tok)?;
         self.output.covenant_auth_input =
             u16::try_from(input_index).map_err(|_| PskError::InvalidCovenantBinding)?;
@@ -194,7 +204,6 @@ impl CovenantBindingParser<'_> {
     }
 
     fn parse_covenant_id(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        mark_seen_u8(&mut self.seen, COVENANT_ID_FIELD)?;
         let covenant_id = expect_string(tok)?;
         if covenant_id.len() != 64 {
             return Err(PskError::InvalidCovenantBinding);
@@ -205,9 +214,10 @@ impl CovenantBindingParser<'_> {
     }
 
     fn finish(&mut self) -> Result<(), PskError> {
-        if self.seen & REQUIRED_COVENANT_FIELDS != REQUIRED_COVENANT_FIELDS {
-            return Err(PskError::MissingField);
-        }
+        require_schema_fields(
+            crate::transaction::interchange::pskt::schema::Scope::CovenantBinding,
+            self.seen,
+        )?;
         self.output.has_covenant = true;
         Ok(())
     }
@@ -224,5 +234,15 @@ fn parse_covenant_binding(
         }
         Tok::LBrace => CovenantBindingParser { output, seen: 0 }.parse_object(tok),
         _ => Err(PskError::UnexpectedToken),
+    }
+}
+
+impl ScopedPreservation for OutputParser<'_> {
+    fn preservation(&mut self) -> &mut PsktParsed {
+        self.parsed
+    }
+
+    fn preservation_scope(&self) -> PsktUnknownScope {
+        self.scope()
     }
 }

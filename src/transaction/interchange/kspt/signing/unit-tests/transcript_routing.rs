@@ -215,6 +215,9 @@ fn anti_klepto_key_authorization_distinguishes_multisig_covenant_and_missing_key
     redeem[33] = 0xac;
     let mut covenant = transaction();
     set_p2sh(&mut covenant, &redeem);
+    covenant.inputs[0].covenant_execution_present = true;
+    covenant.inputs[0].covenant_execution_mask = 0;
+    covenant.inputs[0].covenant_execution_true_mask = 0;
     assert_eq!(
         pubkey_is_allowed_for_input(&covenant, 0, &covenant_key),
         Ok(true)

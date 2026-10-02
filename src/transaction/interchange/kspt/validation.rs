@@ -71,6 +71,9 @@ fn validate_transaction_shape(tx: &Transaction) -> Result<(), PsktError> {
     if tx.num_inputs == 0 {
         return Err(PsktError::NoInputs);
     }
+    if tx.num_inputs > tx.limits.max_inputs {
+        return Err(PsktError::TooManyInputs);
+    }
     if tx.num_inputs > tx.inputs.len() {
         return Err(PsktError::InvalidModel);
     }
@@ -80,7 +83,7 @@ fn validate_transaction_shape(tx: &Transaction) -> Result<(), PsktError> {
     if tx.num_outputs > MAX_OUTPUTS {
         return Err(PsktError::TooManyOutputs);
     }
-    if tx.payload.len() > MAX_PAYLOAD_SIZE {
+    if tx.payload.len() > tx.limits.max_payload_bytes.min(MAX_PAYLOAD_SIZE) {
         return Err(PsktError::PayloadTooLong);
     }
     if tx.redeem_pool_used > REDEEM_POOL_SIZE {
@@ -148,7 +151,7 @@ fn validate_present_signature(
     if !slot.present {
         return Err(PsktError::InvalidSignatureState);
     }
-    if SigHashType::from_byte(slot.sighash_type).is_none() {
+    if slot.sighash_type != SigHashType::All.to_byte() {
         return Err(PsktError::InvalidSigHashType);
     }
     let position = slot.pubkey_pos as usize;
@@ -162,8 +165,16 @@ fn validate_present_signature(
 pub(crate) fn validate_partial_signed(tx: &Transaction) -> Result<(), PsktError> {
     validate_base_transaction(tx)?;
     for input_index in 0..tx.num_inputs {
-        validate_signature_slots(&tx.inputs[input_index])?;
+        let input = &tx.inputs[input_index];
+        if input.sighash_type != 0 && input.sighash_type != SigHashType::All.to_byte() {
+            return Err(PsktError::InvalidSigHashType);
+        }
+        validate_signature_slots(input)?;
         checked_redeem_bytes(tx, input_index)?;
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "validation/unit-tests/mod.rs"]
+mod unit_tests;

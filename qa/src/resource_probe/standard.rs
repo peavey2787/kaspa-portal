@@ -28,7 +28,7 @@ fn sign_pskb_for_seed(wire: &str, seed: &[u8; 64]) -> Result<String, String> {
     let imported = import_xprv_with_metadata(&encoded[..len]).map_err(|error| error.to_string())?;
     let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, &super::standard_network_name())?;
     let relay = hex::decode(relay_hex).map_err(|error| error.to_string())?;
-    let mut transaction = Transaction::new();
+    let mut transaction = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&relay, &mut transaction)
         .map_err(|error| format!("parse resource-probe KSPT: {error:?}"))?;
     let signed = sign_transaction_account_multi_addr_with_entropy(

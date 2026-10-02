@@ -28,7 +28,11 @@ fn captured_unknown_ranges_enforce_every_json_boundary() {
     for (start, end) in [(9usize, 10usize), (20, 19), (10, 31), (65_536, 65_536)] {
         let mut invalid = PsktParsed::empty();
         invalid.json_start = 10;
-        invalid.json_len = 20;
+        invalid.json_len = if end > u16::MAX as usize {
+            u32::from(u16::MAX)
+        } else {
+            20
+        };
         assert_eq!(
             capture_unknown(&mut invalid, scope, start, end),
             Err(PskError::JsonTooLarge),
@@ -71,9 +75,7 @@ fn metadata_and_output_redeem_script_are_preserved() {
     let insert_at = position + needle.len();
     json.splice(
         insert_at..insert_at,
-        b",\"blockDaaScore\":\"42\",\"isCoinbase\":true"
-            .iter()
-            .copied(),
+        b",\"blockDaaScore\":42,\"isCoinbase\":true".iter().copied(),
     );
 
     let (tx, parsed, scratch) = parse_json(PSKT_MAGIC, &json).expect("parse");
@@ -92,7 +94,7 @@ fn invalid_external_preservation_metadata_is_not_silently_dropped() {
     parsed.unknown_scopes[0] = PsktUnknownScope::global();
     parsed.json_len = 2;
 
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.version = 1;
     let mut output = vec![0u8; 4096];
     assert_eq!(
@@ -121,7 +123,7 @@ fn preservation_metadata_rejects_a_field_start_before_the_declared_json_window()
 
 #[test]
 fn preservation_metadata_count_and_scope_are_validated_before_writing() {
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.version = 1;
     let mut output = vec![0u8; 4096];
 
@@ -168,7 +170,7 @@ fn preservation_scope_rejects_output_index_equal_to_output_count() {
 
 #[test]
 fn duplicate_preserved_names_in_one_scope_are_rejected() {
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.version = 1;
     let scratch = b"\"x\":1,\"x\":2";
     let mut parsed = PsktParsed::empty();
@@ -193,20 +195,20 @@ fn duplicate_preserved_names_in_one_scope_are_rejected() {
 }
 
 #[test]
-fn preservation_range_accepts_offsets_above_u16_and_rejects_empty_regions() {
+fn preservation_range_accepts_the_json_end_boundary_and_rejects_empty_regions() {
     use super::super::preservation::capture_unknown;
 
     let mut parsed = PsktParsed::empty();
-    parsed.json_len = u16::MAX as u32 + 2;
+    parsed.json_len = u32::from(u16::MAX);
     capture_unknown(
         &mut parsed,
         PsktUnknownScope::global(),
+        0,
         u16::MAX as usize,
-        u16::MAX as usize + 1,
     )
-    .expect("offsets above u16::MAX are representable");
+    .expect("end offset at the JSON boundary is representable");
     assert_eq!(parsed.unknowns_count, 1);
-    assert_eq!(parsed.unknowns[0], (u16::MAX as u32, u16::MAX as u32 + 1));
+    assert_eq!(parsed.unknowns[0], (0, u32::from(u16::MAX)));
 
     let mut empty = PsktParsed::empty();
     empty.json_len = 16;

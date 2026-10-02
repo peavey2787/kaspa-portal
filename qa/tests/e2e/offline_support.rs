@@ -62,7 +62,7 @@ pub fn sign_pskb_for_account(
     let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, &standard_network_name())
         .expect("relay offline PSKB as compact KSPT");
     let relay = hex::decode(relay_hex).expect("decode offline relayed KSPT");
-    let mut transaction = Transaction::new();
+    let mut transaction = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&relay, &mut transaction).expect("parse offline relayed KSPT");
     let signed = sign_transaction_account_multi_addr_with_entropy(
         &mut transaction,

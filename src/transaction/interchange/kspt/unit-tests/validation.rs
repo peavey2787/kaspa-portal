@@ -36,7 +36,7 @@ fn base_validation_classifies_transaction_shape_and_capacity_failures() {
     );
 
     let mut tx = transaction();
-    tx.payload = vec![0u8; MAX_PAYLOAD_SIZE + 1];
+    tx.payload = alloc::vec![0; MAX_PAYLOAD_SIZE + 1];
     assert_eq!(
         validate_base_transaction(&tx),
         Err(PsktError::PayloadTooLong)
@@ -219,12 +219,28 @@ fn partial_signature_validation_rejects_every_inconsistent_slot_state() {
         Err(PsktError::InvalidSignatureState)
     );
 
+    let mut unsigned_non_all = transaction();
+    unsigned_non_all.inputs[0].sighash_type = 0x02;
+    assert_eq!(
+        validate_partial_signed(&unsigned_non_all),
+        Err(PsktError::InvalidSigHashType)
+    );
+
     let mut mismatched_policy = transaction();
     add_single_signature(&mut mismatched_policy, 0, [0x33; 64]);
     mismatched_policy.inputs[0].sighash_type = 0x02;
     assert_eq!(
         validate_partial_signed(&mismatched_policy),
-        Err(PsktError::InvalidSignatureState)
+        Err(PsktError::InvalidSigHashType)
+    );
+
+    let mut signed_non_all = transaction();
+    add_single_signature(&mut signed_non_all, 0, [0x34; 64]);
+    signed_non_all.inputs[0].sigs[0].sighash_type = 0x02;
+    signed_non_all.inputs[0].sighash_type = 0x02;
+    assert_eq!(
+        validate_partial_signed(&signed_non_all),
+        Err(PsktError::InvalidSigHashType)
     );
 
     let mut valid = transaction();
@@ -240,7 +256,7 @@ fn validation_accepts_dynamic_inputs_and_fixed_output_boundaries() {
         .expect("grow input model");
     tx.num_inputs = MANY_INPUTS;
     tx.num_outputs = MAX_OUTPUTS;
-    tx.payload = vec![0u8; MAX_PAYLOAD_SIZE];
+    tx.payload = alloc::vec![0; MAX_PAYLOAD_SIZE];
     tx.redeem_pool_used = REDEEM_POOL_SIZE;
     for input in &mut tx.inputs[..MANY_INPUTS] {
         input.utxo_entry.script_public_key.script_len = MAX_SCRIPT_SIZE;

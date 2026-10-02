@@ -11,6 +11,7 @@ pub mod mass;
 pub mod model;
 pub mod policy;
 pub mod sighash;
+pub mod signature_verification;
 pub mod signing;
 #[cfg(feature = "std")]
 pub use facade::TransactionApi;

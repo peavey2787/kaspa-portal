@@ -1,7 +1,7 @@
 use crate::transaction::model::Transaction;
 
 pub(super) fn transaction() -> Transaction {
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.version = 1;
     tx.network = crate::primitives::address::KaspaNetwork::Mainnet;
     tx.num_inputs = 1;

@@ -530,7 +530,8 @@ fn relay_preserves_explicit_covenant_bindings_and_count_boundaries() {
 #[test]
 fn compact_private_swap_sighash_wire_covers_current_single_input_relay() {
     let wire = hex::decode(RELAY_KSPT_HEX).expect("relay KSPT");
-    let mut transaction = crate::transaction::model::Transaction::new();
+    let mut transaction =
+        crate::transaction::model::Transaction::try_new().expect("transaction storage");
     crate::transaction::interchange::kspt::parse_compact_kspt(&wire, &mut transaction)
         .expect("valid compact KSPT");
     let digest = crate::transaction::sighash::calculate_sighash(
@@ -540,7 +541,8 @@ fn compact_private_swap_sighash_wire_covers_current_single_input_relay() {
     );
     assert_ne!(digest, [0u8; 32]);
 
-    let mut invalid = crate::transaction::model::Transaction::new();
+    let mut invalid =
+        crate::transaction::model::Transaction::try_new().expect("transaction storage");
     assert!(
         crate::transaction::interchange::kspt::parse_compact_kspt(b"KSPT", &mut invalid).is_err()
     );

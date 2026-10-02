@@ -81,7 +81,7 @@ fn sign_pskb(
     let relay_hex =
         relay_pskb_as_kspt_hex_for_network(wire, network_name).expect("relay PSKB as compact KSPT");
     let relay = hex::decode(relay_hex).expect("decode relayed KSPT");
-    let mut transaction = Transaction::new();
+    let mut transaction = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&relay, &mut transaction).expect("parse relayed KSPT");
     let signed = sign_transaction_account_multi_addr_with_entropy(
         &mut transaction,

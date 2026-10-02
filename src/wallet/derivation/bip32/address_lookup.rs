@@ -65,20 +65,36 @@ pub fn find_address_index_for_pubkey(
     account_key: &ExtendedPrivKey,
     target_pubkey: &[u8; 32],
 ) -> Option<(u16, bool)> {
-    // Search receive chain first (m/44'/111111'/0'/0/idx)
+    let mut no_checkpoint = || {};
+    find_address_index_for_pubkey_with_checkpoint(account_key, target_pubkey, &mut no_checkpoint)
+}
+
+/// Watchdog-friendly variant of [`find_address_index_for_pubkey`]. Expensive
+/// secp256k1 child/public-key derivations are split by caller-supplied liveness
+/// checkpoints so constrained hardware can feed its watchdog while scanning.
+pub fn find_address_index_for_pubkey_with_checkpoint(
+    account_key: &ExtendedPrivKey,
+    target_pubkey: &[u8; 32],
+    checkpoint: &mut (impl FnMut() + ?Sized),
+) -> Option<(u16, bool)> {
     for idx in 0..SIGN_MATCH_DEPTH {
+        checkpoint();
         if let Ok(key) = derive_address_key(account_key, u32::from(idx)) {
+            checkpoint();
             if let Ok(pk) = key.public_key_x_only() {
+                checkpoint();
                 if pk == *target_pubkey {
                     return Some((idx, false));
                 }
             }
         }
     }
-    // Search change chain (m/44'/111111'/0'/1/idx)
     for idx in 0..SIGN_MATCH_DEPTH {
+        checkpoint();
         if let Ok(key) = derive_change_key(account_key, u32::from(idx)) {
+            checkpoint();
             if let Ok(pk) = key.public_key_x_only() {
+                checkpoint();
                 if pk == *target_pubkey {
                     return Some((idx, true));
                 }
@@ -99,9 +115,9 @@ pub fn find_address_index_for_pubkey(
 ///   new:  1 × 40 = 40 derivations          (~2 seconds)
 ///       + 11 × 3 × 40 lookups              (negligible)
 ///
-/// The 40-slot table is ~1.3 KB on stack (40 × 32 bytes). Allocating
-/// it only when the seed has no account-level match keeps the common
-/// (account-level multisig) case stack-light.
+/// The 40-slot table is ~1.3 KB. Signing contexts keep each lazily-built
+/// table heap-backed so multi-seed signing does not reserve eight tables
+/// on the constrained firmware stack.
 pub struct AddrPubkeyTable {
     pub entries: [(bool, u16, [u8; 32]); (ADDR_SCAN_DEPTH as usize) * 2],
     pub filled: usize,
@@ -112,23 +128,36 @@ impl AddrPubkeyTable {
     /// Returns None if derivation fails anywhere (shouldn't happen for
     /// a valid account key).
     pub fn build(account_key: &ExtendedPrivKey) -> Self {
+        let mut no_checkpoint = || {};
+        Self::build_with_checkpoint(account_key, &mut no_checkpoint)
+    }
+
+    /// Watchdog-friendly table builder for embedded anti-klepto finalization.
+    pub fn build_with_checkpoint(
+        account_key: &ExtendedPrivKey,
+        checkpoint: &mut (impl FnMut() + ?Sized),
+    ) -> Self {
         let mut tbl = AddrPubkeyTable {
             entries: [(false, 0u16, [0u8; 32]); (ADDR_SCAN_DEPTH as usize) * 2],
             filled: 0,
         };
-        // Receive chain
         for idx in 0..ADDR_SCAN_DEPTH {
+            checkpoint();
             if let Ok(key) = derive_address_key(account_key, u32::from(idx)) {
+                checkpoint();
                 if let Ok(pk) = key.public_key_x_only() {
+                    checkpoint();
                     tbl.entries[tbl.filled] = (false, idx, pk);
                     tbl.filled += 1;
                 }
             }
         }
-        // Change chain
         for idx in 0..ADDR_SCAN_DEPTH {
+            checkpoint();
             if let Ok(key) = derive_change_key(account_key, u32::from(idx)) {
+                checkpoint();
                 if let Ok(pk) = key.public_key_x_only() {
+                    checkpoint();
                     tbl.entries[tbl.filled] = (true, idx, pk);
                     tbl.filled += 1;
                 }

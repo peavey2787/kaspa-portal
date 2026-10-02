@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn transaction_model_constructors_totals_and_reset_are_covered() {
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction storage");
     assert!(tx.inputs.iter().all(|input| input.sig_op_count == 1));
     assert!(tx.is_native());
 
@@ -32,7 +32,7 @@ fn transaction_model_constructors_totals_and_reset_are_covered() {
 
 #[test]
 fn monetary_totals_reject_overflow_and_outputs_exceeding_inputs_at_exact_boundaries() {
-    let mut input_overflow = Transaction::new();
+    let mut input_overflow = Transaction::try_new().expect("transaction storage");
     input_overflow.num_inputs = 2;
     input_overflow.num_outputs = 1;
     input_overflow.inputs[0].utxo_entry.amount = u64::MAX;
@@ -43,7 +43,7 @@ fn monetary_totals_reject_overflow_and_outputs_exceeding_inputs_at_exact_boundar
         Err(TransactionAmountError::InputTotalOverflow)
     );
 
-    let mut output_overflow = Transaction::new();
+    let mut output_overflow = Transaction::try_new().expect("transaction storage");
     output_overflow.num_inputs = 1;
     output_overflow.num_outputs = 2;
     output_overflow.inputs[0].utxo_entry.amount = u64::MAX;
@@ -54,7 +54,7 @@ fn monetary_totals_reject_overflow_and_outputs_exceeding_inputs_at_exact_boundar
         Err(TransactionAmountError::OutputTotalOverflow)
     );
 
-    let mut outputs_exceed_inputs = Transaction::new();
+    let mut outputs_exceed_inputs = Transaction::try_new().expect("transaction storage");
     outputs_exceed_inputs.num_inputs = 1;
     outputs_exceed_inputs.num_outputs = 1;
     outputs_exceed_inputs.inputs[0].utxo_entry.amount = 41;
@@ -64,7 +64,7 @@ fn monetary_totals_reject_overflow_and_outputs_exceeding_inputs_at_exact_boundar
         Err(TransactionAmountError::OutputsExceedInputs)
     );
 
-    let mut exact_max = Transaction::new();
+    let mut exact_max = Transaction::try_new().expect("transaction storage");
     exact_max.num_inputs = 2;
     exact_max.num_outputs = 2;
     exact_max.inputs[0].utxo_entry.amount = u64::MAX - 1;
@@ -86,7 +86,7 @@ fn monetary_totals_reject_overflow_and_outputs_exceeding_inputs_at_exact_boundar
 
 #[test]
 fn redeem_storage_covers_empty_inline_pool_and_capacity_errors() {
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction storage");
 
     tx.store_redeem(0, &[]).expect("empty redeem");
     assert!(tx.redeem_bytes(0).is_empty());
@@ -324,6 +324,7 @@ fn v106_hd45_script_hash_vector_is_exact() {
     let mut ordered = KPUBS;
     ordered.sort_unstable();
     let mut config = MultisigConfig::new();
+    config.v45 = true;
     config.m = 2;
     config.n = 5;
     config.cosigner_index = 1;
@@ -347,6 +348,7 @@ fn descriptor_backed_hd45_change_verification_rejects_only_forged_claims() {
         b"kpub1:038f332e03a7457270800000002908be01d75735944f29befbdbcd173ab00df2d44c6d5ab51a839413fda90cbf035b986b584de244f5d6a1939192f676a9f2992a63b0f43cdc452dcb40d9dd7081",
     ];
     let mut trusted = MultisigConfig::new();
+    trusted.v45 = true;
     trusted.active = true;
     trusted.m = 2;
     trusted.n = 2;
@@ -372,7 +374,7 @@ fn descriptor_backed_hd45_change_verification_rejects_only_forged_claims() {
         spk
     };
 
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction storage");
     tx.num_inputs = 1;
     tx.inputs[0].ms45_hint = Ms45Hint {
         present: true,
@@ -492,6 +494,7 @@ fn hd45_wallet_identity_and_cosigner_resolution_cover_match_and_miss() {
     let second = crate::wallet::key::xpub::parse_kpub_parts(SECOND).expect("second kpub");
 
     let mut config = MultisigConfig::new();
+    config.v45 = true;
     config.m = 1;
     config.n = 2;
     assert!(config.set_cosigner(0, &first));
@@ -508,4 +511,80 @@ fn hd45_wallet_identity_and_cosigner_resolution_cover_match_and_miss() {
     let mut missing = second;
     missing.parent_fp[0] ^= 1;
     assert!(!config.resolve_cosigner_index(&missing));
+}
+
+#[test]
+fn multisig_rejects_duplicate_cosigner_identity() {
+    let parts = crate::wallet::key::xpub::parse_kpub_parts(b"kpub1:038f332e03405ab68380000000f0453f0894cc8c84ebf6e6208e0c7916e9ddbd14919f9bbb92b0690b4e353392020327c7136972883eab5a7722ec3d4302f888804ecce61658ae962a2c56bb7571").expect("canonical v1 kpub");
+    let mut config = MultisigConfig::new();
+    config.n = 3;
+    assert!(config.set_cosigner(0, &parts));
+    assert!(!config.set_cosigner(1, &parts));
+    assert!(config.slot_empty(1));
+    assert!(config.set_cosigner(0, &parts));
+}
+
+#[test]
+fn transaction_limits_bound_inputs_payload_and_root_size() {
+    let device = TransactionLimits {
+        max_inputs: 32,
+        max_payload_bytes: 768,
+    };
+    let mut tx = Transaction::try_new_with(device).expect("bounded transaction allocation");
+    assert!(tx.ensure_input_slots(32).is_ok());
+    assert_eq!(
+        tx.ensure_input_slots(33),
+        Err(TransactionStorageError::TooManyInputs)
+    );
+    assert!(tx.set_payload(&[7u8; 768]).is_ok());
+    assert_eq!(tx.payload, [7u8; 768]);
+    assert_eq!(
+        tx.set_payload(&[7u8; 769]),
+        Err(TransactionStorageError::PayloadTooLarge)
+    );
+    assert_eq!(
+        tx.payload.len(),
+        768,
+        "a rejected payload leaves the old one"
+    );
+    tx.clear();
+    assert!(tx.payload.is_empty());
+
+    let format = Transaction::try_new().expect("format-limit transaction");
+    assert_eq!(format.limits, TransactionLimits::FORMAT);
+    assert_eq!(TransactionLimits::default(), TransactionLimits::FORMAT);
+    assert!(core::mem::size_of::<Transaction>() <= 512);
+}
+
+#[test]
+fn hd45_wallet_identity_and_cosigner_resolution_cover_match_miss_and_static() {
+    const FIRST: &[u8] = b"kpub1:038f332e03405ab68380000000f0453f0894cc8c84ebf6e6208e0c7916e9ddbd14919f9bbb92b0690b4e353392020327c7136972883eab5a7722ec3d4302f888804ecce61658ae962a2c56bb7571";
+    const SECOND: &[u8] = b"kpub1:038f332e03a7457270800000002908be01d75735944f29befbdbcd173ab00df2d44c6d5ab51a839413fda90cbf035b986b584de244f5d6a1939192f676a9f2992a63b0f43cdc452dcb40d9dd7081";
+    let first = crate::wallet::key::xpub::parse_kpub_parts(FIRST).expect("first kpub");
+    let second = crate::wallet::key::xpub::parse_kpub_parts(SECOND).expect("second kpub");
+
+    let mut config = MultisigConfig::new();
+    config.v45 = true;
+    config.m = 1;
+    config.n = 2;
+    assert!(config.set_cosigner(0, &first));
+    assert!(config.set_cosigner(1, &second));
+    let identical = config.clone();
+    assert!(config.same_wallet_as(&identical));
+
+    let mut different = identical.clone();
+    different.cosigner_chain_codes[1][0] ^= 1;
+    assert!(!config.same_wallet_as(&different));
+
+    assert!(config.resolve_cosigner_index(&second));
+    assert_eq!(config.cosigner_index, 1);
+    let mut missing = second;
+    missing.parent_fp[0] ^= 1;
+    assert!(!config.resolve_cosigner_index(&missing));
+
+    let mut static_multisig = MultisigConfig::new();
+    static_multisig.n = 1;
+    static_multisig.cosigner_index = 7;
+    assert!(static_multisig.resolve_cosigner_index(&missing));
+    assert_eq!(static_multisig.cosigner_index, 0);
 }

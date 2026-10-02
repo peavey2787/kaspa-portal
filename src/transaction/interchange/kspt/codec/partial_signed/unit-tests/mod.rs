@@ -3,7 +3,7 @@ use crate::transaction::{interchange::kspt::PsktError, model::Transaction};
 
 #[test]
 fn compact_vec_retry_covers_non_capacity_error_and_capacity_overflow() {
-    let tx = Transaction::new();
+    let tx = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         retry_compact_vec(&tx, 1, PsktError::InvalidMagic),
         Err(PsktError::InvalidMagic),

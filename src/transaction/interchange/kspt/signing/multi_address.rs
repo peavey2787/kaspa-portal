@@ -18,18 +18,13 @@ fn sign_standard_input(
     target_public_key: &[u8; 32],
     sighash_type: SigHashType,
     signing_entropy: Option<&[u8; 32]>,
+    checkpoint: &mut (impl FnMut() + ?Sized),
 ) -> Result<bool, PsktError> {
-    let Some((address_index, is_change)) =
-        bip32::find_address_index_for_pubkey(account_key, target_public_key)
-    else {
+    let key =
+        derive_standard_input_key(tx, input_index, account_key, target_public_key, checkpoint)?;
+    let Some(key) = key else {
         return Ok(false);
     };
-    let key = if is_change {
-        bip32::derive_change_key(account_key, u32::from(address_index))
-    } else {
-        bip32::derive_address_key(account_key, u32::from(address_index))
-    }
-    .map_err(|_| PsktError::DerivationFailed)?;
     let mut private_key = *key.private_key_bytes();
     let compressed_public_key = key
         .public_key_compressed()
@@ -50,6 +45,68 @@ fn sign_standard_input(
         compressed_public_key,
     );
     Ok(true)
+}
+
+fn derive_standard_input_key(
+    tx: &Transaction,
+    input_index: usize,
+    account_key: &bip32::ExtendedPrivKey,
+    target_public_key: &[u8; 32],
+    checkpoint: &mut (impl FnMut() + ?Sized),
+) -> Result<Option<bip32::ExtendedPrivKey>, PsktError> {
+    let input = &tx.inputs[input_index];
+    if input.has_derivation_hint {
+        return derive_hinted_input_key(
+            account_key,
+            input.derivation_branch,
+            input.derivation_index,
+            target_public_key,
+            checkpoint,
+        );
+    }
+    let Some((address_index, is_change)) = bip32::find_address_index_for_pubkey_with_checkpoint(
+        account_key,
+        target_public_key,
+        checkpoint,
+    ) else {
+        return Ok(None);
+    };
+    derive_child_key(account_key, u32::from(address_index), u8::from(is_change)).map(Some)
+}
+
+fn derive_hinted_input_key(
+    account_key: &bip32::ExtendedPrivKey,
+    branch: u8,
+    index: u32,
+    target_public_key: &[u8; 32],
+    checkpoint: &mut (impl FnMut() + ?Sized),
+) -> Result<Option<bip32::ExtendedPrivKey>, PsktError> {
+    if branch > 1 || index >= crate::wallet::derivation::bip32::HARDENED_BIT {
+        return Ok(None);
+    }
+    checkpoint();
+    let key = derive_child_key(account_key, index, branch)?;
+    checkpoint();
+    let derived_public_key = key
+        .public_key_x_only()
+        .map_err(|_| PsktError::DerivationFailed)?;
+    if &derived_public_key != target_public_key {
+        return Ok(None);
+    }
+    Ok(Some(key))
+}
+
+fn derive_child_key(
+    account_key: &bip32::ExtendedPrivKey,
+    index: u32,
+    branch: u8,
+) -> Result<bip32::ExtendedPrivKey, PsktError> {
+    if branch == 1 {
+        bip32::derive_change_key(account_key, index)
+    } else {
+        bip32::derive_address_key(account_key, index)
+    }
+    .map_err(|_| PsktError::DerivationFailed)
 }
 
 fn sign_stealth_input(
@@ -115,16 +172,37 @@ pub fn sign_account_input_with_entropy(
     sighash_type: SigHashType,
     signing_entropy: &[u8; 32],
 ) -> Result<bool, PsktError> {
-    super::p2pk::checked_target(tx, input_index).and_then(|target| {
-        sign_account_target(
-            tx,
-            input_index,
-            account_key,
-            sighash_type,
-            signing_entropy,
-            target,
-        )
-    })
+    let mut no_checkpoint = || {};
+    sign_account_input_with_entropy_checkpointed(
+        tx,
+        input_index,
+        account_key,
+        sighash_type,
+        signing_entropy,
+        &mut no_checkpoint,
+    )
+}
+
+/// Watchdog-friendly account-input signer. The checkpoint is called throughout
+/// address-key matching rather than only around the entire search.
+pub fn sign_account_input_with_entropy_checkpointed(
+    tx: &mut Transaction,
+    input_index: usize,
+    account_key: &bip32::ExtendedPrivKey,
+    sighash_type: SigHashType,
+    signing_entropy: &[u8; 32],
+    checkpoint: &mut (impl FnMut() + ?Sized),
+) -> Result<bool, PsktError> {
+    let target = super::p2pk::checked_target(tx, input_index)?;
+    sign_account_target(
+        tx,
+        input_index,
+        account_key,
+        sighash_type,
+        signing_entropy,
+        target,
+        checkpoint,
+    )
 }
 
 fn sign_account_target(
@@ -134,6 +212,7 @@ fn sign_account_target(
     sighash_type: SigHashType,
     signing_entropy: &[u8; 32],
     target: Option<[u8; 32]>,
+    checkpoint: &mut (impl FnMut() + ?Sized),
 ) -> Result<bool, PsktError> {
     let Some(target) = target else {
         return Ok(false);
@@ -145,6 +224,7 @@ fn sign_account_target(
         &target,
         sighash_type,
         Some(signing_entropy),
+        checkpoint,
     )
     .and_then(|signed| {
         continue_account_signing(
@@ -230,6 +310,7 @@ fn sign_account_input(
     let Some(target) = p2pk_target(tx, input_index) else {
         return Ok(false);
     };
+    let mut no_checkpoint = || {};
     if sign_standard_input(
         tx,
         input_index,
@@ -237,6 +318,7 @@ fn sign_account_input(
         &target,
         sighash_type,
         signing_entropy,
+        &mut no_checkpoint,
     )? {
         return Ok(true);
     }
@@ -281,7 +363,7 @@ fn sign_transaction_multi_addr_impl(
     sign_transaction_multi_addr_account_impl(tx, &account_key, sighash_type, signing_entropy)
 }
 
-/// Sign using standard deterministic BIP-340 nonce derivation.
+/// Sign with deterministic BIP-340 auxiliary input for host compatibility.
 pub fn sign_transaction_multi_addr(
     tx: &mut Transaction,
     seed: &[u8; 64],
@@ -290,7 +372,7 @@ pub fn sign_transaction_multi_addr(
     sign_transaction_multi_addr_impl(tx, seed, sighash_type, None)
 }
 
-/// Sign with caller-supplied CSPRNG entropy mixed into every BIP-340 nonce.
+/// Sign with health-checked device entropy mixed into every BIP-340 nonce.
 pub fn sign_transaction_multi_addr_with_entropy(
     tx: &mut Transaction,
     seed: &[u8; 64],
@@ -309,3 +391,7 @@ pub fn sign_transaction_account_multi_addr_with_entropy(
 ) -> Result<usize, PsktError> {
     sign_transaction_multi_addr_account_impl(tx, account_key, sighash_type, Some(signing_entropy))
 }
+
+#[cfg(test)]
+#[path = "multi_address/unit-tests/mod.rs"]
+mod unit_tests;

@@ -20,7 +20,7 @@ fn heap_pskt_serializer_is_covered_by_round_trip_fixture() {
         .expect("heap PSKT serialization");
     assert_eq!(&wire[..4], PSKT_MAGIC);
     let mut reparsed_scratch = vec![0u8; (wire.len() - 4) / 2];
-    let mut reparsed_tx = Transaction::new();
+    let mut reparsed_tx = Transaction::try_new().expect("transaction test allocation");
     let mut reparsed = PsktParsed::empty();
     parse_pskt(
         &wire,
@@ -37,7 +37,7 @@ fn serializer_rejects_invalid_aggregate_monetary_shapes_before_emitting_wire() {
     let parsed = PsktParsed::empty();
     let mut out = vec![0u8; 4096];
 
-    let mut input_overflow = Transaction::new();
+    let mut input_overflow = Transaction::try_new().expect("transaction test allocation");
     input_overflow.num_inputs = 2;
     input_overflow.num_outputs = 1;
     input_overflow.inputs[0].utxo_entry.amount = u64::MAX;
@@ -54,7 +54,7 @@ fn serializer_rejects_invalid_aggregate_monetary_shapes_before_emitting_wire() {
         Err(PskError::InputAmountOverflow)
     );
 
-    let mut output_overflow = Transaction::new();
+    let mut output_overflow = Transaction::try_new().expect("transaction test allocation");
     output_overflow.num_inputs = 1;
     output_overflow.num_outputs = 2;
     output_overflow.inputs[0].utxo_entry.amount = u64::MAX;
@@ -71,7 +71,7 @@ fn serializer_rejects_invalid_aggregate_monetary_shapes_before_emitting_wire() {
         Err(PskError::OutputAmountOverflow)
     );
 
-    let mut outputs_exceed_inputs = Transaction::new();
+    let mut outputs_exceed_inputs = Transaction::try_new().expect("transaction test allocation");
     outputs_exceed_inputs.num_inputs = 1;
     outputs_exceed_inputs.num_outputs = 1;
     outputs_exceed_inputs.inputs[0].utxo_entry.amount = 9;
@@ -90,7 +90,7 @@ fn serializer_rejects_invalid_aggregate_monetary_shapes_before_emitting_wire() {
 
 #[test]
 fn serializer_emits_commas_between_two_valid_outputs() {
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.num_inputs = 1;
     tx.num_outputs = 2;
     tx.inputs[0].utxo_entry.amount = 30;
@@ -108,7 +108,7 @@ fn serializer_emits_commas_between_two_valid_outputs() {
 
 #[test]
 fn generated_bip32_derivations_follow_incoming_signature_pubkeys() {
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.num_inputs = 1;
     tx.num_outputs = 1;
     tx.inputs[0].utxo_entry.amount = 1;
@@ -151,7 +151,7 @@ fn pskt_single_round_trips_through_the_single_object_parser() {
     assert_eq!(&wire[..4], PSKT_MAGIC);
 
     let mut reparsed_scratch = vec![0u8; (wire.len() - 4) / 2];
-    let mut reparsed_tx = Transaction::new();
+    let mut reparsed_tx = Transaction::try_new().expect("transaction test allocation");
     let mut reparsed = PsktParsed::empty();
     parse_pskt(
         &wire,
@@ -182,36 +182,73 @@ fn pskb_bundle_uses_the_array_parser() {
 
     let unwrapped = encode_wire(PSKB_MAGIC, &object);
     let mut bad_scratch = vec![0u8; object.len()];
-    let mut bad_tx = Transaction::new();
+    let mut bad_tx = Transaction::try_new().expect("transaction test allocation");
     let mut bad_parsed = PsktParsed::empty();
     assert!(parse_pskt(&unwrapped, &mut bad_scratch, &mut bad_tx, &mut bad_parsed,).is_err());
 }
 
 #[test]
-fn partial_signatures_and_derivations_serialize_canonically() {
-    let first = format!("02{}", "11".repeat(32));
-    let second = format!("03{}", "22".repeat(32));
-    let first_sig = "aa".repeat(64);
-    let second_sig = "bb".repeat(64);
-    let input_extra = format!(
-        ",\"partialSigs\":{{\"{first}\":{{\"schnorr\":\"{first_sig}\"}},\"{second}\":{{\"schnorr\":\"{second_sig}\"}}}},\"bip32Derivations\":{{\"{first}\":null,\"{second}\":null}}"
-    );
-    let json = transaction_json("", &input_extra, "");
-    let (tx, parsed, scratch) = parse_json(PSKT_MAGIC, &json).expect("parse signatures");
-    let emitted = serialize_json(&tx, &parsed, &scratch, TxInputFormat::PsktSingle)
-        .expect("serialize signatures");
+fn valid_partial_signature_round_trips_and_invalid_mutation_is_rejected() {
+    use crate::{
+        transaction::{model::SigHashType, sighash},
+        wallet::derivation::bip32::compressed_pubkey_from_raw_key,
+    };
+
+    let private_key = [0x31; 32];
+    let compressed = compressed_pubkey_from_raw_key(&private_key).expect("public key");
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
+    tx.version = 1;
+    tx.num_inputs = 1;
+    tx.num_outputs = 1;
+    tx.inputs[0].previous_outpoint.transaction_id = [0x44; 32];
+    tx.inputs[0].utxo_entry.amount = 10_000;
+    tx.inputs[0].sighash_type = SigHashType::All.to_byte();
+    tx.inputs[0].utxo_entry.script_public_key.script[0] = 0x20;
+    tx.inputs[0].utxo_entry.script_public_key.script[1..33].copy_from_slice(&compressed[1..33]);
+    tx.inputs[0].utxo_entry.script_public_key.script[33] = 0xac;
+    tx.inputs[0].utxo_entry.script_public_key.script_len = 34;
+    tx.outputs[0].value = 9_000;
+    tx.outputs[0].script_public_key.script[0] = 0x20;
+    tx.outputs[0].script_public_key.script[1..33].copy_from_slice(&compressed[1..33]);
+    tx.outputs[0].script_public_key.script[33] = 0xac;
+    tx.outputs[0].script_public_key.script_len = 34;
+
+    let signature = sighash::sign_input(&tx, 0, &private_key, SigHashType::All)
+        .expect("valid partial signature");
+    tx.inputs[0].incoming_partial_sigs[0].present = true;
+    tx.inputs[0].incoming_partial_sigs[0].pubkey = compressed;
+    tx.inputs[0].incoming_partial_sigs[0].signature = signature.bytes;
+    tx.inputs[0].incoming_partial_sigs_count = 1;
+
+    let emitted = serialize_json(&tx, &PsktParsed::empty(), b"", TxInputFormat::PsktSingle)
+        .expect("serialize valid partial signature");
     assert!(contains_subslice(&emitted, b"\"partialSigs\":{"));
-    assert_eq!(count_subslice(&emitted, first.as_bytes()), 2);
-    assert_eq!(count_subslice(&emitted, second.as_bytes()), 2);
-    assert!(contains_subslice(&emitted, first_sig.as_bytes()));
-    assert!(contains_subslice(&emitted, second_sig.as_bytes()));
     assert!(contains_subslice(&emitted, b"\"bip32Derivations\":{"));
+
+    let (reparsed, _, _) = parse_json(PSKT_MAGIC, &emitted).expect("valid signature reparses");
+    assert_eq!(reparsed.inputs[0].incoming_partial_sigs_count, 1);
+
+    let mut tampered = tx;
+    tampered.inputs[0].incoming_partial_sigs[0].signature[0] ^= 1;
+    let tampered_json = serialize_json(
+        &tampered,
+        &PsktParsed::empty(),
+        b"",
+        TxInputFormat::PsktSingle,
+    )
+    .expect("serialize tampered fixture");
+    let (tampered_parsed, _, _) = parse_json(PSKT_MAGIC, &tampered_json)
+        .expect("tampered signature remains parseable as untrusted PSKT data");
+    assert_eq!(
+        crate::transaction::interchange::pskt::standard::pskt_signature_status(&tampered_parsed),
+        (0, 1)
+    );
 }
 
 #[test]
 fn global_serializer_preserves_locktime_modifiability_and_absent_covenant_exactly() {
     let json = transaction_json(
-        ",\"fallbackLockTime\":\"7\",\"inputsModifiable\":false,\"outputsModifiable\":false",
+        ",\"fallbackLockTime\":7,\"inputsModifiable\":false,\"outputsModifiable\":false",
         "",
         "",
     );
@@ -302,10 +339,10 @@ fn serializer_accepts_an_exact_output_buffer_and_rejects_one_byte_short() {
 }
 
 #[test]
-fn serializer_separates_multiple_inputs_signatures_and_derivations_exactly() {
+fn serializer_keeps_multiple_input_signature_maps_scope_separated() {
     use crate::transaction::model::IncomingPartialSig;
 
-    let mut tx = Transaction::new();
+    let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.version = 1;
     tx.num_inputs = 2;
     tx.num_outputs = 1;
@@ -327,44 +364,13 @@ fn serializer_separates_multiple_inputs_signatures_and_derivations_exactly() {
         };
     }
 
-    let parsed = PsktParsed::empty();
-    let emitted = serialize_json(&tx, &parsed, b"", TxInputFormat::PsktSingle)
-        .expect("serialize two inputs and signatures");
-    let (reparsed, _, _) = parse_json(PSKT_MAGIC, &emitted).expect("serialized JSON reparses");
-    assert_eq!(reparsed.num_inputs, 2);
-    assert_eq!(reparsed.inputs[0].sighash_type, 1);
-    assert_eq!(reparsed.inputs[1].sighash_type, 1);
-    assert_eq!(reparsed.inputs[0].incoming_partial_sigs_count, 2);
-    assert_eq!(reparsed.inputs[1].incoming_partial_sigs_count, 2);
-    assert_eq!(
-        reparsed.inputs[0].incoming_partial_sigs[0].pubkey,
-        [0x40; 33]
-    );
-    assert_eq!(
-        reparsed.inputs[0].incoming_partial_sigs[1].pubkey,
-        [0x60; 33]
-    );
-    assert_eq!(
-        reparsed.inputs[1].incoming_partial_sigs[0].pubkey,
-        [0x41; 33]
-    );
-    assert_eq!(
-        reparsed.inputs[1].incoming_partial_sigs[1].pubkey,
-        [0x61; 33]
-    );
-    assert_eq!(
-        reparsed.inputs[0].incoming_partial_sigs[0].signature,
-        [0x50; 64]
-    );
-    assert_eq!(
-        reparsed.inputs[1].incoming_partial_sigs[1].signature,
-        [0x71; 64]
-    );
-
-    // `partialSigs` is input-only, while `bip32Derivations` is part of both
-    // input and output PSKT schemas. This fixture has two inputs and one output.
+    let emitted = serialize_json(&tx, &PsktParsed::empty(), b"", TxInputFormat::PsktSingle)
+        .expect("serialize two input signature maps");
     assert_eq!(count_subslice(&emitted, b"\"partialSigs\":{"), 2);
     assert_eq!(count_subslice(&emitted, b"\"bip32Derivations\":{"), 3);
+    // This fixture intentionally uses arbitrary bytes to test serializer scope
+    // separation only; parser acceptance is covered by the cryptographic
+    // round-trip test above and must reject arbitrary fake signatures.
 }
 
 #[test]
@@ -377,9 +383,10 @@ fn envelope_detection_and_magic_boundaries_are_exact() {
         detect_tx_format(b"KSPT\x01tail"),
         DetectedFormat::KsptCompact
     );
-    assert_eq!(detect_tx_format(b"KSPT\x03"), DetectedFormat::Unknown);
+    assert_eq!(detect_tx_format(b"KSPT\x00"), DetectedFormat::Unknown);
     assert_eq!(detect_tx_format(b"KSPT"), DetectedFormat::Unknown);
     assert_eq!(detect_tx_format(b"KSPT\x02"), DetectedFormat::Unknown);
+    assert_eq!(detect_tx_format(b"KSPT\x04"), DetectedFormat::Unknown);
     assert_eq!(detect_tx_format(b"PSKB"), DetectedFormat::PsktPskb);
     assert_eq!(detect_tx_format(b"PSKT"), DetectedFormat::PsktSingle);
     assert_eq!(detect_tx_format(b"PSKX\x03"), DetectedFormat::Unknown);
@@ -544,7 +551,7 @@ fn canonical_pskt_wire_is_byte_idempotent_and_every_truncated_prefix_is_rejected
         let prefix = &canonical[..end];
         let decoded_capacity = prefix.len().saturating_sub(4).div_ceil(2).max(1);
         let mut prefix_scratch = vec![0u8; decoded_capacity];
-        let mut prefix_tx = Transaction::new();
+        let mut prefix_tx = Transaction::try_new().expect("transaction test allocation");
         let mut prefix_parsed = PsktParsed::empty();
         assert!(
             parse_pskt(
@@ -559,7 +566,7 @@ fn canonical_pskt_wire_is_byte_idempotent_and_every_truncated_prefix_is_rejected
     }
 
     let mut reparsed_scratch = vec![0u8; (canonical.len() - 4) / 2];
-    let mut reparsed_tx = Transaction::new();
+    let mut reparsed_tx = Transaction::try_new().expect("transaction test allocation");
     let mut reparsed = PsktParsed::empty();
     parse_pskt(
         &canonical,
@@ -576,4 +583,35 @@ fn canonical_pskt_wire_is_byte_idempotent_and_every_truncated_prefix_is_rejected
     )
     .expect("canonical PSKT reserializes");
     assert_eq!(second, canonical);
+}
+
+#[test]
+fn consensus_committed_globals_round_trip_from_transaction_model_not_opaque_preservation() {
+    let json = transaction_json(
+        &format!(
+            ",\"subnetworkId\":\"{}\",\"gas\":\"99\",\"txPayload\":\"deadbeef\"",
+            "7a".repeat(20)
+        ),
+        "",
+        "",
+    );
+    let (mut tx, parsed, scratch) = parse_json(PSKT_MAGIC, &json).expect("parse consensus globals");
+
+    // Mutating the transaction model must mutate serialized consensus semantics;
+    // the serializer must not splice the original opaque JSON values back in.
+    tx.subnetwork_id = [0x33; 20];
+    tx.gas = 123;
+    tx.set_payload(&[0xab, 0xcd])
+        .expect("payload within limits");
+
+    let emitted = serialize_json(&tx, &parsed, &scratch, TxInputFormat::PsktSingle)
+        .expect("serialize consensus globals");
+    assert!(contains_subslice(
+        &emitted,
+        format!("\"subnetworkId\":\"{}\"", "33".repeat(20)).as_bytes(),
+    ));
+    assert!(contains_subslice(&emitted, b"\"gas\":\"123\""));
+    assert!(contains_subslice(&emitted, b"\"txPayload\":\"abcd\""));
+    assert!(!contains_subslice(&emitted, b"\"gas\":\"99\""));
+    assert!(!contains_subslice(&emitted, b"\"txPayload\":\"deadbeef\""));
 }

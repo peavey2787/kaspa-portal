@@ -67,8 +67,8 @@ fn covenant_signing_key(
     pubkey_pos: u8,
 ) -> Result<[u8; 32], AntiKleptoVerifyError> {
     let candidates = candidate_keys_for_input(tx, input_index)?;
-    candidates.keys[..candidates.len]
-        .get(usize::from(pubkey_pos))
-        .copied()
+    (0..candidates.len)
+        .find(|&index| candidates.positions[index] == pubkey_pos)
+        .map(|index| candidates.keys[index])
         .ok_or(AntiKleptoVerifyError::InvalidPublicKey)
 }

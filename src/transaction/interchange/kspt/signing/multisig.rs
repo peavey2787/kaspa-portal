@@ -72,6 +72,11 @@ fn account_positions(context: &SigningContext, multisig: &MultisigInfo) -> [Opti
     positions
 }
 
+struct MultisigPosition<'a> {
+    positions: &'a [Option<u8>; 8],
+    pubkey_position: usize,
+}
+
 fn sign_multisig_input(
     tx: &mut Transaction,
     input_index: usize,
@@ -97,12 +102,12 @@ fn sign_multisig_input(
     for pubkey_position in 0..multisig.n as usize {
         added += sign_multisig_position(
             tx,
+            input_index,
             multisig,
             context,
-            MultisigPositionRequest {
-                input_index,
-                sighash_type,
-                signing_entropy,
+            sighash_type,
+            signing_entropy,
+            MultisigPosition {
                 positions: &positions,
                 pubkey_position,
             },
@@ -111,43 +116,43 @@ fn sign_multisig_input(
     Ok(added)
 }
 
-struct MultisigPositionRequest<'a> {
-    input_index: usize,
-    sighash_type: SigHashType,
-    signing_entropy: Option<&'a [u8; 32]>,
-    positions: &'a [Option<u8>; 8],
-    pubkey_position: usize,
-}
-
 fn sign_multisig_position(
     tx: &mut Transaction,
+    input_index: usize,
     multisig: &MultisigInfo,
     context: &mut SigningContext,
-    request: MultisigPositionRequest<'_>,
+    sighash_type: SigHashType,
+    signing_entropy: Option<&[u8; 32]>,
+    target_position: MultisigPosition<'_>,
 ) -> Result<usize, PsktError> {
-    let position = request.pubkey_position as u8;
-    if has_pubkey_position(&tx.inputs[request.input_index], position) {
+    let pubkey_position = target_position.pubkey_position;
+    let position = pubkey_position as u8;
+    if has_pubkey_position(&tx.inputs[input_index], position) {
         return Ok(0);
     }
-    let target = &multisig.pubkeys[request.pubkey_position];
+    let target = &multisig.pubkeys[pubkey_position];
     for seed_index in 0..context.seed_count() {
-        let Some(mut material) =
-            multisig_material(context, request.positions, seed_index, position, target)
-        else {
+        let Some(mut material) = multisig_material(
+            context,
+            target_position.positions,
+            seed_index,
+            position,
+            target,
+        ) else {
             continue;
         };
         let signature = super::sign_input_with_optional_entropy(
             tx,
-            request.input_index,
+            input_index,
             &material.private_key,
-            request.sighash_type,
-            request.signing_entropy,
+            sighash_type,
+            signing_entropy,
         )?;
         zeroize_bytes(&mut material.private_key);
         let added = append_signature(
-            &mut tx.inputs[request.input_index],
+            &mut tx.inputs[input_index],
             signature,
-            request.sighash_type.to_byte(),
+            sighash_type.to_byte(),
             position,
             material.compressed_public_key,
         );
@@ -172,154 +177,11 @@ fn multisig_material(
     }
 }
 
-/// Sign one supported input with mnemonic/account material. This is used by
-/// firmware to provide truthful per-input progress for large transactions.
-pub fn sign_multisig_account_sets_input_with_entropy(
-    tx: &mut Transaction,
-    input_index: usize,
-    accounts: &[([u8; 65], bool)],
-    ms45_accounts: &[([u8; 65], bool)],
-    sighash_type: SigHashType,
-    active_account_idx: Option<usize>,
-    signing_entropy: &[u8; 32],
-) -> Result<usize, PsktError> {
-    validate_base_transaction(tx)?;
-    super::p2pk::ensure_input_index(tx, input_index)?;
-    let mut context = SigningContext::from_account_sets(accounts, ms45_accounts);
-    let (script_type, multisig) = analyze_input_script(tx, input_index);
-    sign_classified_account_input(
-        tx,
-        &mut context,
-        ClassifiedAccountRequest {
-            input_index,
-            sighash_type,
-            active_account_idx,
-            signing_entropy,
-            script_type,
-            multisig: multisig.as_ref(),
-        },
-    )
-}
+mod accounts;
 
-pub fn sign_multisig_accounts_input_with_entropy(
-    tx: &mut Transaction,
-    input_index: usize,
-    accounts: &[([u8; 65], bool)],
-    sighash_type: SigHashType,
-    active_account_idx: Option<usize>,
-    signing_entropy: &[u8; 32],
-) -> Result<usize, PsktError> {
-    validate_base_transaction(tx)
-        .and_then(|()| super::p2pk::ensure_input_index(tx, input_index))
-        .and_then(|()| {
-            sign_account_context_input(
-                tx,
-                input_index,
-                accounts,
-                sighash_type,
-                active_account_idx,
-                signing_entropy,
-            )
-        })
-}
-
-fn sign_account_context_input(
-    tx: &mut Transaction,
-    input_index: usize,
-    accounts: &[([u8; 65], bool)],
-    sighash_type: SigHashType,
-    active_account_idx: Option<usize>,
-    signing_entropy: &[u8; 32],
-) -> Result<usize, PsktError> {
-    let mut context = SigningContext::from_account_raw(accounts);
-    let (script_type, multisig) = analyze_input_script(tx, input_index);
-    sign_classified_account_input(
-        tx,
-        &mut context,
-        ClassifiedAccountRequest {
-            input_index,
-            sighash_type,
-            active_account_idx,
-            signing_entropy,
-            script_type,
-            multisig: multisig.as_ref(),
-        },
-    )
-}
-
-struct ClassifiedAccountRequest<'a> {
-    input_index: usize,
-    sighash_type: SigHashType,
-    active_account_idx: Option<usize>,
-    signing_entropy: &'a [u8; 32],
-    script_type: ScriptType,
-    multisig: Option<&'a MultisigInfo>,
-}
-
-fn sign_classified_account_input(
-    tx: &mut Transaction,
-    context: &mut SigningContext,
-    request: ClassifiedAccountRequest<'_>,
-) -> Result<usize, PsktError> {
-    if request.script_type == ScriptType::P2PK {
-        return sign_p2pk_input(
-            tx,
-            request.input_index,
-            context,
-            request.sighash_type,
-            Some(request.signing_entropy),
-        );
-    }
-    sign_non_p2pk_account_input(tx, context, request)
-}
-
-fn sign_non_p2pk_account_input(
-    tx: &mut Transaction,
-    context: &mut SigningContext,
-    request: ClassifiedAccountRequest<'_>,
-) -> Result<usize, PsktError> {
-    if let Some(info) = request.multisig {
-        return sign_multisig_input(
-            tx,
-            request.input_index,
-            info,
-            context,
-            request.sighash_type,
-            Some(request.signing_entropy),
-        );
-    }
-    sign_covenant_account_input(
-        tx,
-        request.input_index,
-        context,
-        request.sighash_type,
-        request.active_account_idx,
-        request.signing_entropy,
-        request.script_type,
-    )
-}
-
-fn sign_covenant_account_input(
-    tx: &mut Transaction,
-    input_index: usize,
-    context: &mut SigningContext,
-    sighash_type: SigHashType,
-    active_account_idx: Option<usize>,
-    signing_entropy: &[u8; 32],
-    script_type: ScriptType,
-) -> Result<usize, PsktError> {
-    if script_type != ScriptType::P2SH {
-        return Ok(0);
-    }
-    sign_covenant_input(
-        tx,
-        input_index,
-        context,
-        sighash_type,
-        active_account_idx,
-        Some(signing_entropy),
-    )
-}
+pub use accounts::{
+    sign_multisig_account_sets_input_with_entropy, sign_multisig_accounts_input_with_entropy,
+};
 
 /// Sign every supported input with the loaded seed set.
 fn sign_transaction_with_context(

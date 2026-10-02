@@ -4,10 +4,9 @@ use crate::transaction::interchange::pskt::shared::TxInputFormat;
 
 use super::PskError;
 
-pub const PSKB_MAGIC: &[u8; 4] = b"PSKB";
-pub const PSKT_MAGIC: &[u8; 4] = b"PSKT";
-pub const KSPT_MAGIC: &[u8; 4] = b"KSPT";
-const KSPT_VERSION: u8 = 0x01;
+pub const PSKB_MAGIC: &[u8; 4] = crate::transaction::interchange::pskt::model::PSKB_MAGIC;
+pub const PSKT_MAGIC: &[u8; 4] = crate::transaction::interchange::pskt::model::PSKT_MAGIC;
+pub const KSPT_MAGIC: &[u8; 4] = &crate::transaction::interchange::kspt::format::KSPT_MAGIC;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetectedFormat {
@@ -31,7 +30,9 @@ impl DetectedFormat {
 
 #[must_use]
 pub fn detect_tx_format(data: &[u8]) -> DetectedFormat {
-    if data.starts_with(KSPT_MAGIC) && data.get(4) == Some(&KSPT_VERSION) {
+    if data.starts_with(KSPT_MAGIC)
+        && data.get(4) == Some(&crate::transaction::interchange::kspt::format::KSPT_VERSION_CURRENT)
+    {
         DetectedFormat::KsptCompact
     } else if data.starts_with(PSKB_MAGIC) {
         DetectedFormat::PsktPskb

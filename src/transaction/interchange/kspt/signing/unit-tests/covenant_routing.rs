@@ -10,18 +10,23 @@ fn append_candidate(script: &mut Vec<u8>, value: u8, checksig: u8) {
 }
 
 #[test]
-fn covenant_scanner_keeps_exact_first_eight_candidates_in_wire_order() {
+fn covenant_scanner_keeps_eight_candidates_in_wire_order_and_rejects_overflow() {
     let mut script = Vec::new();
-    for value in 0x10u8..=0x18 {
+    for value in 0x10u8..=0x17 {
         append_candidate(&mut script, value, 0xac);
     }
 
-    let candidates = scan_candidate_keys(&script).expect("nine-candidate scan");
+    let candidates = scan_candidate_keys(&script).expect("eight-candidate scan");
     assert_eq!(candidates.len, 8);
     for (index, value) in (0x10u8..=0x17).enumerate() {
         assert_eq!(candidates.keys[index], [value; 32], "candidate {index}");
     }
-    assert!(!candidates.keys[..candidates.len].contains(&[0x18; 32]));
+
+    append_candidate(&mut script, 0x18, 0xac);
+    assert!(matches!(
+        scan_candidate_keys(&script),
+        Err(PsktError::InvalidModel)
+    ));
 }
 
 #[test]
@@ -51,7 +56,7 @@ fn covenant_scanner_observes_exact_checksig_offsets() {
     let mut one_opcode_gap = vec![0x20];
     one_opcode_gap.extend_from_slice(&key);
     one_opcode_gap.extend_from_slice(&[0x00, 0xad]);
-    assert_eq!(scan_candidate_keys(&one_opcode_gap).unwrap().keys[0], key);
+    assert_eq!(scan_candidate_keys(&one_opcode_gap).unwrap().len, 0);
 
     let mut two_opcode_gap = vec![0x20];
     two_opcode_gap.extend_from_slice(&key);

@@ -15,7 +15,48 @@ pub(super) struct CapturedField<'a> {
     pub(super) end: u32,
 }
 
-/// Record a field range together with its logical owner.
+/// Record an unknown field while rejecting a duplicate field name in the same
+/// logical object scope. The host parser rejects duplicate JSON keys during
+/// materialization; doing this at capture time keeps Vault acceptance identical
+/// for extension fields that are not represented in the fixed transaction model.
+pub(super) fn capture_unknown_keyed(
+    parsed: &mut PsktParsed,
+    scope: PsktUnknownScope,
+    source: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<(), PskError> {
+    fn key_at(source: &[u8], start: usize, end: usize) -> Result<&[u8], PskError> {
+        let range = source.get(start..end).ok_or(PskError::JsonTooLarge)?;
+        let first = range
+            .iter()
+            .position(|byte| !matches!(*byte, b' ' | b'\t' | b'\r' | b'\n'))
+            .ok_or(PskError::UnexpectedToken)?;
+        if range.get(first) != Some(&b'"') {
+            return Err(PskError::UnexpectedToken);
+        }
+        let key_start = first + 1;
+        let quote = range
+            .get(key_start..)
+            .and_then(|bytes| bytes.iter().position(|byte| *byte == b'"'))
+            .ok_or(PskError::UnexpectedToken)?;
+        Ok(&range[key_start..key_start + quote])
+    }
+
+    let incoming = key_at(source, start, end)?;
+    for index in 0..parsed.unknowns_count as usize {
+        if parsed.unknown_scopes[index] != scope {
+            continue;
+        }
+        let (prior_start, prior_end) = parsed.unknowns[index];
+        let prior = key_at(source, prior_start as usize, prior_end as usize)?;
+        if prior == incoming {
+            return Err(PskError::DuplicateField);
+        }
+    }
+    capture_unknown(parsed, scope, start, end)
+}
+
 pub(super) fn capture_unknown(
     parsed: &mut PsktParsed,
     scope: PsktUnknownScope,

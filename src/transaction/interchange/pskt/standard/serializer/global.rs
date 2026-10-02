@@ -24,6 +24,7 @@ pub(super) fn emit_global(
 ) -> Result<(), PskError> {
     let scope = PsktUnknownScope::global();
     emit_global_version(writer, tx)?;
+    emit_global_consensus_fields(writer, tx)?;
     emit_global_locktime(writer, tx, parsed, scope)?;
     emit_global_modifiability(writer, parsed, scope)?;
     emit_global_counts(writer, tx)?;
@@ -35,6 +36,18 @@ pub(super) fn emit_global(
 fn emit_global_version(writer: &mut HexWriter<'_>, tx: &Transaction) -> Result<(), PskError> {
     writer.lit(b"{\"version\":0,\"txVersion\":")?;
     writer.u64(tx.version as u64)
+}
+
+fn emit_global_consensus_fields(
+    writer: &mut HexWriter<'_>,
+    tx: &Transaction,
+) -> Result<(), PskError> {
+    writer.lit(b",\"subnetworkId\":")?;
+    writer.hex_string_field(&tx.subnetwork_id)?;
+    writer.lit(b",\"gas\":")?;
+    writer.u64_string(tx.gas)?;
+    writer.lit(b",\"txPayload\":")?;
+    writer.hex_string_field(&tx.payload)
 }
 
 fn emit_global_locktime(

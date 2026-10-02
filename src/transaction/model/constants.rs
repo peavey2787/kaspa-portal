@@ -14,10 +14,15 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 /// Initial input allocation used for ordinary transactions. This is a capacity
-/// hint, not a transaction limit; the input vector grows as needed.
+/// hint; the ceiling is the transaction's [`TransactionLimits::max_inputs`].
 pub const DEFAULT_INPUT_CAPACITY: usize = 8;
 
+/// Most inputs the KSPT v1 wire format can describe (its input count is a
+/// `u16`). Signers with less memory pass a lower [`TransactionLimits`].
+pub const MAX_INPUTS: usize = u16::MAX as usize;
+
 /// Maximum supported outputs (bumped from 4 to 8 for beacon-style multi-output TXs).
+/// RAM cost: +1.2 KB in Transaction struct (heap-allocated via Box).
 /// The signed TX size check (1024-byte buffer) uses actual counts,
 /// so normal TXs are unaffected.
 pub const MAX_OUTPUTS: usize = 8;
@@ -27,11 +32,35 @@ pub const MAX_SCRIPT_SIZE: usize = 512;
 
 /// Maximum redeem script size (covenant scripts can exceed 255 bytes).
 /// SPK arrays stay at MAX_SCRIPT_SIZE. Only the P2SH redeem buffer
-/// uses this larger ceiling.
+/// uses this larger ceiling. RAM cost: +6 KB (8 inputs x 768 extra).
 pub const MAX_REDEEM_SIZE: usize = 1024;
 
-/// Maximum application payload representable by the KSPT v1 `u16` length field.
+/// Largest application payload the KSPT v1 `u16` length field can carry.
+/// Signers with less memory pass a lower [`TransactionLimits`].
 pub const MAX_PAYLOAD_SIZE: usize = u16::MAX as usize;
+
+/// Per-transaction resource ceilings. The defaults are the KSPT v1 format
+/// limits; an embedded signer constructs transactions with its own, lower
+/// limits so a wire document can never make it allocate past its memory.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TransactionLimits {
+    pub max_inputs: usize,
+    pub max_payload_bytes: usize,
+}
+
+impl TransactionLimits {
+    /// The KSPT v1 wire-format ceilings.
+    pub const FORMAT: Self = Self {
+        max_inputs: MAX_INPUTS,
+        max_payload_bytes: MAX_PAYLOAD_SIZE,
+    };
+}
+
+impl Default for TransactionLimits {
+    fn default() -> Self {
+        Self::FORMAT
+    }
+}
 
 /// Hash de 32 bytes (Blake2b / transaction ID)
 pub type Hash256 = [u8; 32];

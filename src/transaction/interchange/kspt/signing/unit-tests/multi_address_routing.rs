@@ -108,6 +108,40 @@ fn account_input_route_distinguishes_receive_change_stealth_and_nonmatch() {
 }
 
 #[test]
+fn standard_input_derivation_hint_signs_beyond_legacy_scan_and_must_match_script() {
+    let seed = [0x31u8; 64];
+    let account = derive_account_key(&seed).expect("account");
+    let child = derive_address_key(&account, 500).expect("far receive child");
+    let target = child.public_key_x_only().expect("far receive public key");
+    let entropy = [0x64u8; 32];
+
+    let mut hinted = transaction();
+    set_p2pk(&mut hinted, &target);
+    hinted.inputs[0].has_derivation_hint = true;
+    hinted.inputs[0].derivation_branch = 0;
+    hinted.inputs[0].derivation_index = 500;
+    assert_eq!(
+        sign_account_input_with_entropy(&mut hinted, 0, &account, SigHashType::All, &entropy),
+        Ok(true),
+    );
+    assert_eq!(
+        hinted.inputs[0].sigs[0].pubkey_compressed,
+        child.public_key_compressed().unwrap()
+    );
+
+    let mut wrong_hint = transaction();
+    set_p2pk(&mut wrong_hint, &target);
+    wrong_hint.inputs[0].has_derivation_hint = true;
+    wrong_hint.inputs[0].derivation_branch = 0;
+    wrong_hint.inputs[0].derivation_index = 499;
+    assert_eq!(
+        sign_account_input_with_entropy(&mut wrong_hint, 0, &account, SigHashType::All, &entropy),
+        Ok(false),
+    );
+    assert_eq!(wrong_hint.inputs[0].sig_count, 0);
+}
+
+#[test]
 fn multi_address_standard_match_wins_even_when_stealth_metadata_is_present() {
     let seed = [0x31u8; 64];
     let account = derive_account_key(&seed).expect("account");

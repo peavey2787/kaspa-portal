@@ -13,6 +13,10 @@ pub(crate) const STEALTH_TRAILER_MARKER: u8 = b'S';
 pub(crate) const COVENANT_TRAILER_MARKER: u8 = b'C';
 pub(crate) const NETWORK_TRAILER_MARKER: u8 = b'N';
 pub(crate) const DERIVATION_TRAILER_MARKER: u8 = b'D';
+/// Input address-derivation hint: index(u8)+branch(u8)+address_index(u32 LE).
+pub(crate) const INPUT_DERIVATION_TRAILER_MARKER: u8 = b'A';
+/// Covenant execution selectors: index(u8)+supplied_mask(u16 LE)+true_mask(u16 LE).
+pub(crate) const COVENANT_EXECUTION_TRAILER_MARKER: u8 = b'E';
 /// Coordinated-multisig v1 derivation records. Each record carries
 /// index(u8)+cosigner(u32 LE)+chain(u32 LE)+address_index(u32 LE).
 pub(crate) const MS45_INPUT_TRAILER_MARKER: u8 = b'I';

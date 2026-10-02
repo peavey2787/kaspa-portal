@@ -19,7 +19,7 @@ use super::{
     signatures::{IncomingPartialSig, InputSig},
 };
 
-/// Untrusted coordinated-multisig derivation hint carried by PSKT/KSPT v1.
+/// Untrusted coordinated-multisig derivation hint carried by PSKT/KSPT v4.
 /// It identifies the address path beneath `m/45'/111111'/account'` as
 /// `/cosigner/chain/index`. The signing path must still prove the derived
 /// public key is present in the redeem script before signing.
@@ -82,8 +82,18 @@ pub struct TransactionInput {
     /// see the same PSKT they sent, plus our additions. Empty for KSPT flow.
     pub incoming_partial_sigs: [IncomingPartialSig; MAX_SIGS_PER_INPUT],
     pub incoming_partial_sigs_count: u8,
+    /// Untrusted standard-account receive/change path hint carried by KSPT v4.
+    /// The signer must derive this exact child and verify its x-only public key
+    /// matches the input script before using it.
+    pub has_derivation_hint: bool,
+    pub derivation_branch: u8,
+    pub derivation_index: u32,
     /// 45' address path extracted from `bip32Derivations`, if present.
     pub ms45_hint: Ms45Hint,
+    /// Explicit witness selector assignment proving the covenant execution branch.
+    pub covenant_execution_present: bool,
+    pub covenant_execution_mask: u16,
+    pub covenant_execution_true_mask: u16,
 }
 
 impl TransactionInput {
@@ -110,7 +120,13 @@ impl TransactionInput {
             redeem_script_offset: 0,
             incoming_partial_sigs: [IncomingPartialSig::empty(); MAX_SIGS_PER_INPUT],
             incoming_partial_sigs_count: 0,
+            has_derivation_hint: false,
+            derivation_branch: 0,
+            derivation_index: 0,
             ms45_hint: Ms45Hint::none(),
+            covenant_execution_present: false,
+            covenant_execution_mask: 0,
+            covenant_execution_true_mask: 0,
         }
     }
 }

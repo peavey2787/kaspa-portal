@@ -26,7 +26,7 @@ pub(super) const SECP256K1_ORDER: [u8; 32] = [
 ];
 
 /// Hardened derivation flag bit (0x80000000)
-pub(super) const HARDENED_BIT: u32 = 0x8000_0000;
+pub(crate) const HARDENED_BIT: u32 = 0x8000_0000;
 
 // ─── Kaspa derivation paths ───────────────────────────────────────────
 

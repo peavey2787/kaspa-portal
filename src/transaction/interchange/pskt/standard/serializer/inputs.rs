@@ -44,7 +44,7 @@ fn emit_input(
     emit_input_identity(writer, input, parsed, index)?;
     emit_input_signing(writer, input, parsed, scope)?;
     emit_input_scripts(writer, tx, input, parsed, scope, index)?;
-    emit_input_preserved(writer, parsed, scope)?;
+    emit_input_preserved(writer, input, parsed, scope)?;
     writer.lit(b"}")?;
     Ok(())
 }
@@ -129,14 +129,46 @@ fn emit_input_bip32_derivations(
 
 fn emit_input_preserved(
     writer: &mut HexWriter<'_>,
+    input: &TransactionInput,
+    parsed: &PsktParsed,
+    scope: PsktUnknownScope,
+) -> Result<(), PskError> {
+    emit_final_script_sig(writer, parsed, scope)?;
+    emit_covenant_execution(writer, input)?;
+    emit_input_proprietaries(writer, parsed, scope)?;
+    emit_additional_fields(writer, parsed, scope, INPUT_CAPTURED_FIELDS)
+}
+
+fn emit_final_script_sig(
+    writer: &mut HexWriter<'_>,
     parsed: &PsktParsed,
     scope: PsktUnknownScope,
 ) -> Result<(), PskError> {
     writer.lit(b",\"finalScriptSig\":")?;
-    emit_value_or_default(writer, parsed, scope, b"finalScriptSig", b"null")?;
+    emit_value_or_default(writer, parsed, scope, b"finalScriptSig", b"null")
+}
+
+fn emit_covenant_execution(
+    writer: &mut HexWriter<'_>,
+    input: &TransactionInput,
+) -> Result<(), PskError> {
+    if !input.covenant_execution_present {
+        return Ok(());
+    }
+    writer.lit(b",\"covenantExecution\":{\"suppliedMask\":")?;
+    writer.u64(u64::from(input.covenant_execution_mask))?;
+    writer.lit(b",\"suppliedTrueMask\":")?;
+    writer.u64(u64::from(input.covenant_execution_true_mask))?;
+    writer.byte(b'}')
+}
+
+fn emit_input_proprietaries(
+    writer: &mut HexWriter<'_>,
+    parsed: &PsktParsed,
+    scope: PsktUnknownScope,
+) -> Result<(), PskError> {
     writer.lit(b",\"proprietaries\":")?;
-    emit_value_or_default(writer, parsed, scope, b"proprietaries", b"{}")?;
-    emit_additional_fields(writer, parsed, scope, INPUT_CAPTURED_FIELDS)
+    emit_value_or_default(writer, parsed, scope, b"proprietaries", b"{}")
 }
 
 fn input_utxo_scope(input_index: usize) -> Result<PsktUnknownScope, PskError> {

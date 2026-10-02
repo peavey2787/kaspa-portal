@@ -35,13 +35,15 @@ pub(super) fn sign_input_with_optional_entropy(
 }
 
 pub use anti_klepto::{
-    finalize_account_set_signatures, finalize_account_signatures, finalize_raw_key_signatures,
-    initial_signature_counts, nonce_commitment_records, proof_records, validate_host_commitment,
-    verify_host_transcript, AntiKleptoVerifyError,
+    finalize_account_set_signatures, finalize_account_set_signatures_with_checkpoint,
+    finalize_account_signatures, finalize_account_signatures_with_checkpoint,
+    finalize_raw_key_signatures, initial_signature_counts, nonce_commitment_records, proof_records,
+    validate_host_commitment, verify_host_transcript, AntiKleptoVerifyError,
 };
 pub use multi_address::{
-    sign_account_input_with_entropy, sign_transaction_account_multi_addr_with_entropy,
-    sign_transaction_multi_addr, sign_transaction_multi_addr_with_entropy,
+    sign_account_input_with_entropy, sign_account_input_with_entropy_checkpointed,
+    sign_transaction_account_multi_addr_with_entropy, sign_transaction_multi_addr,
+    sign_transaction_multi_addr_with_entropy,
 };
 pub use multisig::{
     sign_multisig_account_sets_input_with_entropy, sign_multisig_accounts_input_with_entropy,

@@ -28,9 +28,11 @@ mod paths;
 mod scalar;
 
 pub use address_lookup::{
-    find_address_index_for_pubkey, AddrPubkeyTable, ADDR_SCAN_DEPTH, SIGN_MATCH_DEPTH,
+    find_address_index_for_pubkey, find_address_index_for_pubkey_with_checkpoint, AddrPubkeyTable,
+    ADDR_SCAN_DEPTH, SIGN_MATCH_DEPTH,
 };
 pub use child::{derive_child, derive_child_pub, master_key_from_seed};
+pub(crate) use constants::HARDENED_BIT;
 pub use constants::{CACHED_ADDR_COUNT, KASPA_MAINNET_PATH, KASPA_TESTNET_PATH};
 pub use error::Bip32Error;
 pub use extended_private::{compressed_pubkey_from_raw_key, pubkey_from_raw_key, ExtendedPrivKey};
@@ -43,7 +45,7 @@ pub use paths::{
 #[cfg(test)]
 use crate::wallet::derivation::hmac::hmac_sha512;
 #[cfg(test)]
-use constants::{BITCOIN_SEED, HARDENED_BIT, SECP256K1_ORDER};
+use constants::{BITCOIN_SEED, SECP256K1_ORDER};
 #[cfg(test)]
 use k256::{elliptic_curve::sec1::ToEncodedPoint, SecretKey};
 #[cfg(test)]
