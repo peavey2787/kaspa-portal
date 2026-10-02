@@ -16,11 +16,11 @@
 // ─── Constants ───────────────────────────────────────────────────────
 
 /// BIP32 key for master key HMAC
-pub(super) const BITCOIN_SEED: &[u8] = b"Bitcoin seed";
+pub(crate) const BITCOIN_SEED: &[u8] = b"Bitcoin seed";
 
 /// secp256k1 curve order (n)
 /// n = FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
-pub(super) const SECP256K1_ORDER: [u8; 32] = [
+pub(crate) const SECP256K1_ORDER: [u8; 32] = [
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
     0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
 ];

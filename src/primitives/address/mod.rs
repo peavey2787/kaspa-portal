@@ -302,7 +302,7 @@ fn create_checksum(prefix: &str, payload: &[u8]) -> u64 {
     polymod(values) ^ 1
 }
 
-fn polymod(values: impl Iterator<Item = u8>) -> u64 {
+pub(crate) fn polymod(values: impl Iterator<Item = u8>) -> u64 {
     let mut checksum = 1u64;
     for value in values {
         let top = checksum >> 35;

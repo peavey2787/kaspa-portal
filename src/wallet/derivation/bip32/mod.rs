@@ -20,12 +20,12 @@
 
 mod address_lookup;
 mod child;
-mod constants;
+pub(crate) mod constants;
 mod error;
 mod extended_private;
 mod extended_public;
 mod paths;
-mod scalar;
+pub(crate) mod scalar;
 
 pub use address_lookup::{
     find_address_index_for_pubkey, find_address_index_for_pubkey_with_checkpoint, AddrPubkeyTable,
@@ -45,9 +45,7 @@ pub use paths::{
 #[cfg(test)]
 use crate::wallet::derivation::hmac::hmac_sha512;
 #[cfg(test)]
-use constants::{BITCOIN_SEED, SECP256K1_ORDER};
-#[cfg(test)]
-use k256::{elliptic_curve::sec1::ToEncodedPoint, SecretKey};
+use constants::SECP256K1_ORDER;
 #[cfg(test)]
 use scalar::{is_less_than_order, is_zero, scalar_add_mod_n};
 

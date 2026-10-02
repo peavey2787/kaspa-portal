@@ -14,7 +14,7 @@ mod status;
 #[cfg(test)]
 mod validation;
 
-pub use integration::run_kspt_tests;
+pub use crate::self_test::kspt::run_kspt_tests;
 
 #[cfg(test)]
 mod property;

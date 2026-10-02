@@ -39,6 +39,8 @@ pub mod primitives;
 pub mod privacy;
 #[cfg(feature = "std")]
 pub mod randomness;
+#[cfg(any(test, feature = "self-test"))]
+pub mod self_test;
 pub mod transaction;
 pub mod wallet;
 

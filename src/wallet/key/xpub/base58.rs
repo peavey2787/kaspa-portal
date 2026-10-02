@@ -26,7 +26,7 @@ const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghij
 ///
 /// Algorithm: repeatedly divmod by 58 on the big-endian integer,
 /// then reverse. Leading zero bytes become '1' characters.
-pub(super) fn base58_encode(data: &[u8], out: &mut [u8]) -> usize {
+pub(crate) fn base58_encode(data: &[u8], out: &mut [u8]) -> usize {
     let leading_zeros = data.iter().take_while(|byte| **byte == 0).count();
     let mut buf = [0u8; 128];
     let len = data.len().min(buf.len());
@@ -71,7 +71,7 @@ pub(super) fn base58_encode(data: &[u8], out: &mut [u8]) -> usize {
 }
 
 /// SHA256 double hash (SHA256d): SHA256(SHA256(data))
-pub(super) fn sha256d(data: &[u8]) -> [u8; 32] {
+pub(crate) fn sha256d(data: &[u8]) -> [u8; 32] {
     let first = {
         let mut h = Sha256::new();
         h.update(data);
@@ -85,7 +85,7 @@ pub(super) fn sha256d(data: &[u8]) -> [u8; 32] {
 
 /// Base58Check encode: data + 4-byte SHA256d checksum → base58 string.
 /// Returns the number of chars written to `out`.
-pub(super) fn base58check_encode(data: &[u8], out: &mut [u8]) -> usize {
+pub(crate) fn base58check_encode(data: &[u8], out: &mut [u8]) -> usize {
     // Compute checksum
     let checksum = sha256d(data);
 

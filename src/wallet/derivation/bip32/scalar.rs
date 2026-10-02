@@ -2,7 +2,7 @@
 
 use super::constants::SECP256K1_ORDER;
 
-pub(super) fn is_zero(value: &[u8; 32]) -> bool {
+pub(crate) fn is_zero(value: &[u8; 32]) -> bool {
     let mut accumulator = 0u8;
     for byte in value {
         accumulator |= *byte;
@@ -11,7 +11,7 @@ pub(super) fn is_zero(value: &[u8; 32]) -> bool {
 }
 
 /// Return true when `value < secp256k1_order` without data-dependent exits.
-pub(super) fn is_less_than_order(value: &[u8; 32]) -> bool {
+pub(crate) fn is_less_than_order(value: &[u8; 32]) -> bool {
     let (_, borrow) = subtract(value, &SECP256K1_ORDER);
     borrow == 1
 }
@@ -26,7 +26,7 @@ pub(super) fn is_valid_secret_scalar(value: &[u8; 32]) -> bool {
 
 /// Compute `(left + right) mod n` with fixed-iteration arithmetic and a
 /// mask-based conditional reduction. No branch depends on secret scalar data.
-pub(super) fn scalar_add_mod_n(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+pub(crate) fn scalar_add_mod_n(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
     let mut sum = [0u8; 32];
     let mut carry = 0u16;
     for index in (0..32).rev() {

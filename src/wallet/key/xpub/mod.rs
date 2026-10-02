@@ -15,7 +15,7 @@
 
 // Stable Kaspa extended-key facade.
 
-mod base58;
+pub(crate) mod base58;
 mod constants;
 mod fingerprint;
 mod kpub;
