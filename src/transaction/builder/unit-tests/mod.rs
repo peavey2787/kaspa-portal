@@ -1120,3 +1120,72 @@ fn amount_planning_boundaries_are_exact() {
         310_000
     );
 }
+
+#[test]
+fn payload_fee_converges_where_tiny_change_storage_mass_dominates() {
+    use super::standard::storage_mass_fee_with_payload;
+
+    // Sending 0.2 KAS from one 0.4256 KAS UTXO at 1 sompi/gram: each fee step
+    // shrinks the change and raises its storage mass; 16 passes used to give
+    // up ("did not converge") just short of the storage-dust boundary.
+    let total = 42_558_152u64;
+    let fee = storage_mass_fee_with_payload(
+        &[utxo(0xc1, 0, total)],
+        total,
+        20_000_000,
+        0,
+        0,
+        &[34, 34],
+        1,
+    )
+    .expect("fee converges");
+    assert!(fee <= total - 20_000_000);
+}
+
+#[test]
+fn payload_send_adds_an_input_instead_of_paying_tiny_change_storage_mass() {
+    use super::standard::{create_send_with_payload_from_utxos, prepare_send};
+
+    let wallet = watch_wallet();
+    let destination = crate::primitives::address::encode_p2pk_address(&[0x84; 32], "kaspa");
+    let amount = 20_000_000;
+    let prepared = prepare_send(&destination, amount, 0).expect("prepared send");
+    // Largest-first, one input covers the amount but leaves ~0.22 KAS of
+    // change whose storage mass costs more than a second input does.
+    let utxos = vec![
+        utxo(0xc2, 0, 42_558_152),
+        utxo(0xc3, 1, 40_000_000),
+        utxo(0xc4, 2, 30_000_000),
+    ];
+    let wire =
+        create_send_with_payload_from_utxos(&wallet, &prepared, amount, 0, &[0x5a; 400], utxos, 1)
+            .expect("payload send plans");
+    let doc = decode_pskb_wire(&wire);
+    let inputs = doc[0]["inputs"].as_array().unwrap();
+    let outputs = doc[0]["outputs"].as_array().unwrap();
+    assert!(inputs.len() >= 2, "selection should grow the change");
+    let input_total: u64 = inputs
+        .iter()
+        .map(|input| {
+            input["utxoEntry"]["amount"]
+                .as_str()
+                .and_then(|amount| amount.parse::<u64>().ok())
+                .expect("input amount")
+        })
+        .sum();
+    let output_total: u64 = outputs
+        .iter()
+        .map(|output| {
+            output["amount"]
+                .as_str()
+                .and_then(|amount| amount.parse::<u64>().ok())
+                .expect("output amount")
+        })
+        .sum();
+    let fee = input_total - output_total;
+    // The one-input plan would pay ~0.126 KAS (or burn ~0.226 KAS).
+    assert!(
+        fee < 5_000_000,
+        "fee {fee} should be far below the tiny-change penalty"
+    );
+}

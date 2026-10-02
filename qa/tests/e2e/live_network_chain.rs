@@ -103,7 +103,10 @@ async fn rust_live_standard_network_chain() {
         .blocks_since(&BlockHash::new(anchor_hash))
         .await
         .expect("live GetBlocks backfill");
-    assert!(!newer.is_empty(), "GetBlocks returned no blocks past the anchor");
+    assert!(
+        !newer.is_empty(),
+        "GetBlocks returned no blocks past the anchor"
+    );
     assert!(newer.iter().all(|block| block.block_hash.len() == 64));
     assert!(newer.iter().all(|block| !block.transactions.is_empty()));
     assert!(newer

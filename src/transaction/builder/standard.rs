@@ -13,6 +13,10 @@ use crate::{
 const DEFAULT_PLANNER_FEE_RATE: u64 = 110;
 const MINIMUM_PLANNER_FEE: u64 = 300_000;
 
+#[path = "standard/payload.rs"]
+mod payload;
+pub(super) use payload::create_send_with_payload_from_utxos;
+
 pub async fn create_send(
     wallet: &WalletData,
     destination: &str,
@@ -67,73 +71,6 @@ pub async fn create_send_with_payload(
         utxos,
         fee_rate,
     )
-}
-
-fn create_send_with_payload_from_utxos(
-    wallet: &WalletData,
-    prepared: &PreparedSend,
-    amount: u64,
-    requested_fee: u64,
-    payload: &[u8],
-    utxos: Vec<UtxoEntry>,
-    fee_rate: u64,
-) -> Result<String, String> {
-    const MAX_FEE_SELECTION_PASSES: usize = 12;
-    let mut fee = MINIMUM_PLANNER_FEE.max(requested_fee);
-    let potential_change_script_length = wallet
-        .change_addresses
-        .get(wallet.next_change_index)
-        .map(|address| crate::primitives::address::address_to_script_pubkey(address))
-        .transpose()?
-        .map(|script| script.len());
-
-    for _ in 0..MAX_FEE_SELECTION_PASSES {
-        let required = amounts::checked_required(amount, fee)?;
-        let selected = select_automatic_with_limit(utxos.clone(), required, 8)?;
-        let selected_total = crate::transaction::builder::selection::checked_total(&selected)?;
-
-        let mut output_script_lengths = vec![prepared.output.script_public_key.len()];
-        if let Some(change_script_length) = potential_change_script_length {
-            output_script_lengths.push(change_script_length);
-        }
-
-        let required_fee = storage_mass_fee_with_payload(
-            &selected,
-            selected_total,
-            amount,
-            requested_fee,
-            payload.len(),
-            &output_script_lengths,
-            fee_rate,
-        )?;
-        if required_fee > fee {
-            fee = required_fee;
-            continue;
-        }
-
-        let mut plan = plan_payment(wallet, selected, vec![prepared.output.clone()], fee)?;
-        plan.payload = payload.to_vec();
-        let exact_script_lengths = plan
-            .outputs
-            .iter()
-            .map(|output| output.script_public_key.len())
-            .collect::<Vec<_>>();
-        let (non_contextual_fee, _, _) = crate::transaction::mass::estimate_non_contextual_fee(
-            plan.inputs.len(),
-            &exact_script_lengths,
-            plan.payload.len(),
-            fee_rate,
-        )?;
-        if non_contextual_fee > fee {
-            fee = non_contextual_fee
-                .max(requested_fee)
-                .max(MINIMUM_PLANNER_FEE);
-            continue;
-        }
-        return encode_plan(&plan);
-    }
-
-    Err("payload-aware fee/UTXO selection did not converge".into())
 }
 
 pub async fn create_send_limited(
@@ -320,7 +257,10 @@ pub(super) fn storage_mass_fee_with_payload(
     output_script_lengths: &[usize],
     fee_rate: u64,
 ) -> Result<u64, String> {
-    const MAX_FEE_PASSES: usize = 16;
+    // Each pass lowers the change (raising its storage mass) until the fee
+    // stops rising or the change turns into storage-dust; near that boundary
+    // the steps shrink, so allow a generous (cheap, arithmetic-only) bound.
+    const MAX_FEE_PASSES: usize = 256;
 
     let inputs = selected
         .iter()

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.1
+
+- Payload sends (`create_send_with_payload`) no longer fail with "payload-aware
+  storage-mass fee calculation did not converge". KIP-9 storage mass grows as
+  the change output shrinks, so the fee fixed point approaches the
+  storage-dust boundary in ever smaller steps; the 16-pass bound gave up just
+  short of it for many ordinary wallets (e.g. 0.2 KAS out of a 0.43 KAS UTXO).
+- Payload sends now evaluate every largest-first input prefix within the
+  input limit and keep the cheapest complete plan, instead of the smallest
+  covering one: an extra input that grows the change is far cheaper than a
+  tiny change's storage-mass fee (or a storage-dust change burned as fee).
+
 ## 1.2.0
 
 - Added `ChainApi::blocks_since` / `KaspaChain.blocksSince`: wRPC `GetBlocks`
