@@ -10,3 +10,17 @@ fn private_swap_script_is_canonical_and_has_no_hashlock_or_checksigfromstack() {
     assert!(!script.contains(&OP_BLAKE2B));
     assert!(!script.contains(&OP_CHECKSIGFROMSTACK));
 }
+
+#[test]
+fn private_swap_rejects_invalid_configuration_boundaries() {
+    let owner = [1u8; 32];
+    let claimer = [2u8; 32];
+    let valid_destination = [3u8; 35];
+    let salt = [4u8; 16];
+
+    assert!(build_private_swap_script(&owner, &claimer, &valid_destination, 0, &salt).is_err());
+    assert!(build_private_swap_script(&owner, &claimer, &valid_destination, 1, &[0; 16]).is_err());
+    assert!(build_private_swap_script(&owner, &claimer, &[0; 2], 1, &salt).is_err());
+    assert!(build_private_swap_script(&owner, &claimer, &[0; 74], 1, &salt).is_err());
+    assert!(build_private_swap_script(&owner, &owner, &valid_destination, 1, &salt).is_err());
+}

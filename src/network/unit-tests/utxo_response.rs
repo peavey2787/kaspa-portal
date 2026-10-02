@@ -92,6 +92,21 @@ fn one_entry_response(entry: &[u8]) -> Vec<u8> {
     wrap_entries(&entries)
 }
 
+fn repeated_entry_response(entry: &[u8], count: u32) -> Vec<u8> {
+    let mut entries = count.to_le_bytes().to_vec();
+    for _ in 0..count {
+        entries.extend_from_slice(&bytes_field(entry));
+    }
+    wrap_entries(&entries)
+}
+
+#[test]
+fn utxo_response_preserves_every_entry_in_multi_entry_reply() {
+    let response = repeated_entry_response(&encoded_entry(0, 37, 1, None), 5);
+    let entries = utxo::decode(&response).expect("multi-entry UTXO response should decode");
+    assert_eq!(entries.len(), 5);
+}
+
 #[test]
 fn utxo_response_covers_empty_count_limit_optional_and_outpoint_boundaries() {
     assert!(utxo::decode(&wrap_entries(&[])).unwrap().is_empty());

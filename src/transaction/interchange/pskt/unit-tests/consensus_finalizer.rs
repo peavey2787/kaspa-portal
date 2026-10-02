@@ -408,3 +408,60 @@ fn persistent_vault_binding_is_applied_only_when_required_and_never_overwrites()
         Some((0, [0xab; 32]))
     );
 }
+
+#[test]
+fn input_covenant_id_increases_kip9_storage_plurality() {
+    use super::super::consensus::finalize_to_consensus;
+
+    let output = json!({
+        "amount": "100000000",
+        "scriptPublicKey": format!("000020{}ac", "55".repeat(32))
+    });
+
+    let mut plain_input = p2pk_input();
+    plain_input["utxoEntry"]["amount"] = json!("1000000000");
+    let plain_wire = encoded_pskb(json!({
+        "global": {"txVersion": 0},
+        "inputs": [plain_input],
+        "outputs": [output.clone()]
+    }));
+    let plain = finalize_to_consensus(&plain_wire).expect("plain storage mass");
+    assert_eq!(plain.storage_mass, 9_000);
+
+    let mut covenant_input = p2pk_input();
+    covenant_input["utxoEntry"]["amount"] = json!("1000000000");
+    covenant_input["utxoEntry"]["covenantId"] = json!("ab".repeat(32));
+    let covenant_wire = encoded_pskb(json!({
+        "global": {"txVersion": 0},
+        "inputs": [covenant_input],
+        "outputs": [output]
+    }));
+    let covenant = finalize_to_consensus(&covenant_wire).expect("covenant storage mass");
+    assert_eq!(covenant.storage_mass, 6_000);
+}
+
+#[test]
+fn finalized_transaction_commits_kip9_storage_mass_from_pskt_utxos() {
+    use super::super::consensus::finalize_to_consensus;
+
+    let mut input = p2pk_input();
+    input["utxoEntry"]["amount"] = json!("1000000000");
+    let wire = encoded_pskb(json!({
+        "global": {"txVersion": 0},
+        "inputs": [input],
+        "outputs": [
+            {
+                "amount": "100000000",
+                "scriptPublicKey": format!("000020{}ac", "55".repeat(32))
+            },
+            {
+                "amount": "899600000",
+                "scriptPublicKey": format!("0000aa20{}87", "66".repeat(32))
+            }
+        ]
+    }));
+
+    let finalized = finalize_to_consensus(&wire).expect("storage-mass finalization");
+    assert_eq!(finalized.storage_mass, 10_111);
+    assert_eq!(finalized.into_consensus_transaction().storage_mass, 10_111);
+}
