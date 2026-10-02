@@ -16,7 +16,7 @@ mod preserved;
 mod writer;
 
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope, TxInputFormat};
-use crate::transaction::model::{Transaction, MAX_INPUTS};
+use crate::transaction::model::Transaction;
 
 use super::preservation::validate_preservation_metadata;
 use super::{validate_monetary_shape, PskError, PSKB_MAGIC, PSKT_MAGIC};
@@ -39,7 +39,7 @@ fn validate_serialization_shape(
     parsed: &PsktParsed,
     scratch: &[u8],
 ) -> Result<(), PskError> {
-    if tx.num_inputs > MAX_INPUTS {
+    if tx.num_inputs > tx.limits.max_inputs {
         return Err(PskError::TooManyInputs);
     }
     if tx.inputs.get(..tx.num_inputs).is_none() {

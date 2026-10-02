@@ -279,3 +279,39 @@ fn script_integer_encoding_and_eight_byte_boundary_are_exact() {
         (2, ScriptItem::Integer(0)),
     );
 }
+
+#[test]
+fn allowance_builders_cover_absent_optional_locktimes() {
+    let local = crate::contract::covenant::script::build_allowance_script(
+        &[0x51; 32],
+        &[0x52; 32],
+        50_000_000,
+        0,
+        0,
+    );
+    assert_eq!(
+        extract_csv_sequence(&local).expect("local allowance CSV"),
+        None
+    );
+    assert_eq!(
+        extract_cltv_locktime(&local).expect("local allowance CLTV"),
+        None
+    );
+
+    let global = crate::contract::covenant::script::build_global_allowance_script(
+        &[0x53; 32],
+        &[0x54; 32],
+        50_000_000,
+        0,
+        0,
+        &[0x55; 8],
+    );
+    assert_eq!(
+        extract_csv_sequence(&global).expect("global allowance CSV"),
+        None
+    );
+    assert_eq!(
+        extract_cltv_locktime(&global).expect("global allowance CLTV"),
+        None
+    );
+}
