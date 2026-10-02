@@ -276,6 +276,13 @@ The Rust and browser runners support `--read-only` for diagnostics when funded t
 
 See [docs/E2E_CAPABILITIES.md](docs/E2E_CAPABILITIES.md) for the capability map and E2E policy.
 
+## Attribution
+
+Parts of the signing core are derived from
+[KasSigner](https://github.com/InKasWeRust/KasSigner) (GPL-3.0, KasSigner
+Project / InKasWeRust) by way of its fork KasKold. See
+[docs/ATTRIBUTION.md](docs/ATTRIBUTION.md).
+
 ## Security
 
 Read [docs/SECURITY.md](docs/SECURITY.md) before using wallet secrets, signing, browser persistence, the randomness beacon, or the VRF in production.
