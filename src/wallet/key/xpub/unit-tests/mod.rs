@@ -396,3 +396,28 @@ fn multisig_account_parts_export_canonical_kpub() {
     let decoded = parse_kpub_parts(&encoded[..length]).expect("round-trip 45' parts");
     assert_eq!(decoded, parts);
 }
+
+#[test]
+fn multisig_account_parts_nonzero_child_number_is_hardened() {
+    let parts = derive_multisig_account_parts(&[0x6eu8; 64], 9).expect("45' account 9 parts");
+    assert_eq!(parts.child_num, 0x8000_0009u32.to_be_bytes());
+}
+
+#[test]
+fn payload_parser_requires_version_and_compressed_prefix_independently() {
+    let mut payload = [0u8; XPUB_PAYLOAD_LEN];
+    payload[..4].copy_from_slice(&ACCOUNT_KEY_VERSION);
+    payload[45] = 0x02;
+    assert!(kpub::parts_from_payload(&payload).is_some());
+
+    let mut bad_version = payload;
+    bad_version[0] ^= 0x01;
+    assert!(kpub::parts_from_payload(&bad_version).is_none());
+
+    let mut bad_prefix = payload;
+    bad_prefix[45] = 0x04;
+    assert!(kpub::parts_from_payload(&bad_prefix).is_none());
+
+    payload[45] = 0x03;
+    assert!(kpub::parts_from_payload(&payload).is_some());
+}

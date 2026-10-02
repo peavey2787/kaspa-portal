@@ -41,7 +41,7 @@ pub struct KpubParts {
     pub pubkey: [u8; 33],
 }
 
-fn parts_from_payload(payload: &[u8; XPUB_PAYLOAD_LEN]) -> Option<KpubParts> {
+pub(super) fn parts_from_payload(payload: &[u8; XPUB_PAYLOAD_LEN]) -> Option<KpubParts> {
     if payload[..4] != ACCOUNT_KEY_VERSION || !matches!(payload[45], 0x02 | 0x03) {
         return None;
     }

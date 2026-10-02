@@ -66,14 +66,24 @@ pub fn encrypt(
     let nonce_bytes: &[u8; 12] = rng_bytes[32..44].try_into().unwrap();
     let cipher = Aes256Gcm::new(GenericArray::from_slice(&aes_key));
     let nonce = GenericArray::from_slice(nonce_bytes);
-    let mut ct_buf = alloc::vec![0u8; plaintext.len()];
-    ct_buf.copy_from_slice(plaintext);
+    let mut ct_buf = alloc::vec::Vec::new();
+    ct_buf
+        .try_reserve_exact(plaintext.len())
+        .map_err(|_| "allocation failed")?;
+    ct_buf.extend_from_slice(plaintext);
     let tag = cipher
         .encrypt_in_place_detached(nonce, b"", &mut ct_buf)
         .map_err(|_| "encryption failed")?;
 
     // 6. Wire format: eph_pub(33) + nonce(12) + ciphertext(N) + tag(16)
-    let mut out = alloc::vec::Vec::with_capacity(33 + 12 + ct_buf.len() + 16);
+    let out_capacity = 33usize
+        .checked_add(12)
+        .and_then(|n| n.checked_add(ct_buf.len()))
+        .and_then(|n| n.checked_add(16))
+        .ok_or("allocation failed")?;
+    let mut out = alloc::vec::Vec::new();
+    out.try_reserve_exact(out_capacity)
+        .map_err(|_| "allocation failed")?;
     out.extend_from_slice(eph_pub_bytes);
     out.extend_from_slice(nonce_bytes);
     out.extend_from_slice(&ct_buf);
@@ -103,11 +113,8 @@ pub fn decrypt(
     use k256::EncodedPoint;
     let eph_encoded =
         EncodedPoint::from_bytes(eph_pub_bytes).map_err(|_| "bad ephemeral pubkey")?;
-    let eph_point_opt = AffinePoint::from_encoded_point(&eph_encoded);
-    if (!eph_point_opt.is_some()).into() {
-        return Err("invalid ephemeral point");
-    }
-    let eph_point: AffinePoint = eph_point_opt.expect("checked is_some");
+    let eph_point: AffinePoint = Option::from(AffinePoint::from_encoded_point(&eph_encoded))
+        .ok_or("invalid ephemeral point")?;
 
     // 3. ECDH: shared = priv * eph_pub
     let sk = SecretKey::from_slice(private_key).map_err(|_| "bad private key")?;
@@ -128,8 +135,10 @@ pub fn decrypt(
     let cipher = Aes256Gcm::new(GenericArray::from_slice(&aes_key));
     let nonce = GenericArray::from_slice(nonce_bytes);
     let tag = GenericArray::from_slice(&encrypted[ct_len..]);
-    let mut buf = alloc::vec![0u8; ct_len];
-    buf.copy_from_slice(&encrypted[..ct_len]);
+    let mut buf = alloc::vec::Vec::new();
+    buf.try_reserve_exact(ct_len)
+        .map_err(|_| "allocation failed")?;
+    buf.extend_from_slice(&encrypted[..ct_len]);
     cipher
         .decrypt_in_place_detached(nonce, b"", &mut buf, tag)
         .map_err(|_| "decryption failed")?;
@@ -146,12 +155,7 @@ fn lift_x(x_bytes: &[u8; 32]) -> Option<AffinePoint> {
     use k256::elliptic_curve::sec1::FromEncodedPoint;
     use k256::EncodedPoint;
     let encoded = EncodedPoint::from_bytes(compressed).ok()?;
-    let point = AffinePoint::from_encoded_point(&encoded);
-    if point.is_some().into() {
-        Some(point.expect("verified is_some"))
-    } else {
-        None
-    }
+    Option::from(AffinePoint::from_encoded_point(&encoded))
 }
 
 #[cfg(test)]

@@ -84,19 +84,43 @@ pub fn schnorr_sign_with_aux_rand(
     })
 }
 
+#[inline(never)]
+fn parse_verifying_key(pubkey_x: &[u8; 32]) -> Result<VerifyingKey, SchnorrError> {
+    VerifyingKey::from_bytes(pubkey_x).map_err(|_| SchnorrError::InvalidSignature)
+}
+
+#[inline(never)]
+fn parse_signature(signature: &SchnorrSignature) -> Result<K256Signature, SchnorrError> {
+    K256Signature::try_from(signature.bytes.as_slice()).map_err(|_| SchnorrError::InvalidSignature)
+}
+
+#[inline(never)]
+fn verify_parsed_signature(
+    verifying_key: &VerifyingKey,
+    message: &[u8; 32],
+    signature: &K256Signature,
+) -> Result<(), SchnorrError> {
+    // Keep RustCrypto's audited curve-verification routine as an upstream call
+    // instead of letting firmware LTO inline its working set into this frame.
+    type VerifyRaw = fn(&VerifyingKey, &[u8], &K256Signature) -> Result<(), k256::schnorr::Error>;
+    let verify: VerifyRaw = core::hint::black_box(VerifyingKey::verify_raw);
+    verify(verifying_key, message, signature).map_err(|_| SchnorrError::InvalidSignature)
+}
+
 /// Verify a BIP340 signature over an already-computed 32-byte message hash.
+///
+/// The stages stay out of line on purpose: embedded signers build with LTO,
+/// and folding key parsing, signature parsing and curve verification into one
+/// frame can exceed a constrained device's stack budget.
+#[inline(never)]
 pub fn schnorr_verify(
     pubkey_x: &[u8; 32],
     message: &[u8; 32],
     signature: &SchnorrSignature,
 ) -> Result<(), SchnorrError> {
-    let verifying_key =
-        VerifyingKey::from_bytes(pubkey_x).map_err(|_| SchnorrError::InvalidSignature)?;
-    let parsed = K256Signature::try_from(signature.bytes.as_slice())
-        .map_err(|_| SchnorrError::InvalidSignature)?;
-    verifying_key
-        .verify_raw(message, &parsed)
-        .map_err(|_| SchnorrError::InvalidSignature)
+    let verifying_key = parse_verifying_key(pubkey_x)?;
+    let parsed = parse_signature(signature)?;
+    verify_parsed_signature(&verifying_key, message, &parsed)
 }
 
 /// Expected public values for a published BIP340 signing known-answer vector.

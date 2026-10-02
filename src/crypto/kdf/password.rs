@@ -24,7 +24,7 @@ pub const WORKSPACE_BLOCK_BYTES: usize = core::mem::size_of::<PasswordKdfBlock>(
 pub const WORKSPACE_BLOCK_ALIGN: usize = core::mem::align_of::<PasswordKdfBlock>();
 
 // Fixed v1 policy. Runtime allocation failure never downgrades these parameters.
-pub const V1_MEMORY_KIB: u32 = 2_048;
+pub const V1_MEMORY_KIB: u32 = 8_192;
 pub const V1_TIME_COST: u32 = 3;
 pub const V1_PARALLELISM: u32 = 1;
 
@@ -35,6 +35,7 @@ pub enum PasswordKdfPurpose {
     PortableBackup,
     PersistentWallet,
     EncryptedTransport,
+    DeviceBoundBackup,
 }
 
 impl PasswordKdfPurpose {
@@ -43,6 +44,7 @@ impl PasswordKdfPurpose {
             Self::PortableBackup => b"KaspaPortal/password-kdf/portable-backup/v1",
             Self::PersistentWallet => b"KaspaPortal/password-kdf/persistent-wallet/v1",
             Self::EncryptedTransport => b"KaspaPortal/password-kdf/encrypted-transport/v1",
+            Self::DeviceBoundBackup => b"KaspaPortal/password-kdf/device-bound-backup/v1",
         }
     }
 }
@@ -299,6 +301,14 @@ pub fn zeroize_workspace(workspace: &mut [PasswordKdfBlock]) {
     }
 }
 
+struct DeriveCoreRequest<'a> {
+    purpose: PasswordKdfPurpose,
+    password: &'a [u8],
+    salt: &'a [u8; SALT_SIZE],
+    parameters: PasswordKdfParams,
+    workspace: &'a mut [PasswordKdfBlock],
+}
+
 fn derive_core(
     purpose: PasswordKdfPurpose,
     password: &[u8],
@@ -306,25 +316,47 @@ fn derive_core(
     parameters: PasswordKdfParams,
     workspace: &mut [PasswordKdfBlock],
 ) -> Result<[u8; KEY_SIZE], PasswordKdfError> {
-    let params = build_params(parameters)?;
-    if workspace.len() != params.block_count() {
-        zeroize_workspace(workspace);
+    let mut request = DeriveCoreRequest {
+        purpose,
+        password,
+        salt,
+        parameters,
+        workspace,
+    };
+    derive_core_single_arg(&mut request)
+}
+
+/// Keep the Argon2 frame behind a single explicit input pointer.
+///
+/// Xtensa's windowed LLVM backend mis-realigns the stack (LLVM #208946) when a
+/// function combines >32-byte-aligned locals with arguments passed on the
+/// stack. Argon2's `Block` is 64-byte aligned and LTO can inline its fill loop
+/// here; the one-pointer ABI keeps every explicit input in registers. Keep this
+/// shape until the pinned Xtensa LLVM carries the fix and the hardware
+/// regression passes.
+#[inline(never)]
+fn derive_core_single_arg(
+    request: &mut DeriveCoreRequest<'_>,
+) -> Result<[u8; KEY_SIZE], PasswordKdfError> {
+    let params = build_params(request.parameters)?;
+    if request.workspace.len() != params.block_count() {
+        zeroize_workspace(request.workspace);
         return Err(PasswordKdfError::AllocationFailed);
     }
     let mut password_copy = [0u8; MAX_PASSWORD_SIZE];
-    password_copy[..password.len()].copy_from_slice(password);
-    let mut effective_salt = derive_effective_salt(purpose, salt);
+    password_copy[..request.password.len()].copy_from_slice(request.password);
+    let mut effective_salt = derive_effective_salt(request.purpose, request.salt);
     let mut output = [0u8; KEY_SIZE];
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let result = argon.hash_password_into_with_memory(
-        &password_copy[..password.len()],
+        &password_copy[..request.password.len()],
         &effective_salt,
         &mut output,
-        &mut *workspace,
+        &mut *request.workspace,
     );
     password_copy.zeroize();
     effective_salt.zeroize();
-    zeroize_workspace(workspace);
+    zeroize_workspace(request.workspace);
     if result.is_err() {
         output.zeroize();
         Err(PasswordKdfError::DerivationFailed)

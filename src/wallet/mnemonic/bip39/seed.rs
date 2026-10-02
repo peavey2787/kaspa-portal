@@ -3,6 +3,7 @@
 use super::{Mnemonic12, Mnemonic24, Seed};
 use crate::wallet::derivation::hmac::{hmac_sha512, zeroize_buf};
 use crate::wallet::mnemonic::wordlist::WORDLIST;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // ─── Seed derivation (PBKDF2-HMAC-SHA512) ─────────────────────────────
 
@@ -10,6 +11,7 @@ const BIP39_PBKDF2_ROUNDS: u16 = 2048;
 
 /// Resumable BIP39 PBKDF2-HMAC-SHA512 derivation for cooperative embedded loops.
 /// Sensitive phrase and PBKDF2 state is zeroized when the work object is dropped.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SeedDerivation {
     phrase_buf: [u8; 256],
     phrase_len: usize,
@@ -53,8 +55,16 @@ impl SeedDerivation {
         if self.finished {
             return None;
         }
-        let mut budget = round_budget;
-        if budget > 0 && self.rounds_complete == 0 {
+
+        // Construct a fixed upper bound before doing any cryptographic work.
+        // The loop range is therefore finite even if a mutation corrupts the
+        // internal progress assignment, preventing mutation tests from hanging.
+        let target_round = self
+            .rounds_complete
+            .saturating_add(round_budget)
+            .min(BIP39_PBKDF2_ROUNDS);
+
+        if self.rounds_complete == 0 && target_round > 0 {
             let mut salt_with_index = [0u8; 260];
             salt_with_index[..self.salt_len].copy_from_slice(&self.salt_buf[..self.salt_len]);
             salt_with_index[self.salt_len..self.salt_len + 4].copy_from_slice(&1u32.to_be_bytes());
@@ -64,20 +74,24 @@ impl SeedDerivation {
             );
             self.result = self.u_prev;
             self.rounds_complete = 1;
-            budget -= 1;
             zeroize_buf(&mut salt_with_index);
             zeroize_buf(&mut self.salt_buf);
             self.salt_len = 0;
         }
-        while budget > 0 && self.rounds_complete < BIP39_PBKDF2_ROUNDS {
+
+        // The range is captured from the precomputed target. A faulty progress
+        // mutation can produce a wrong result, but cannot turn this call into an
+        // unbounded loop.
+        let first_round = self.rounds_complete;
+        for completed_round in first_round..target_round {
             let u_next = hmac_sha512(&self.phrase_buf[..self.phrase_len], &self.u_prev);
             for (result, next) in self.result.iter_mut().zip(u_next.iter()) {
                 *result ^= *next;
             }
             self.u_prev = u_next;
-            self.rounds_complete += 1;
-            budget -= 1;
+            self.rounds_complete = completed_round.saturating_add(1);
         }
+
         if self.rounds_complete != BIP39_PBKDF2_ROUNDS {
             return None;
         }
@@ -100,19 +114,24 @@ impl SeedDerivation {
     }
 
     fn wipe(&mut self) {
-        zeroize_buf(&mut self.phrase_buf);
-        zeroize_buf(&mut self.salt_buf);
-        zeroize_buf(&mut self.u_prev);
-        zeroize_buf(&mut self.result);
-        self.phrase_len = 0;
-        self.salt_len = 0;
-        self.rounds_complete = 0;
+        self.phrase_buf.zeroize();
+        self.salt_buf.zeroize();
+        self.u_prev.zeroize();
+        self.result.zeroize();
+        self.phrase_len.zeroize();
+        self.salt_len.zeroize();
+        self.rounds_complete.zeroize();
     }
-}
 
-impl Drop for SeedDerivation {
-    fn drop(&mut self) {
-        self.wipe();
+    #[cfg(test)]
+    pub(crate) fn sensitive_state_is_zeroized(&self) -> bool {
+        self.phrase_buf.iter().all(|byte| *byte == 0)
+            && self.salt_buf.iter().all(|byte| *byte == 0)
+            && self.u_prev.iter().all(|byte| *byte == 0)
+            && self.result.iter().all(|byte| *byte == 0)
+            && self.phrase_len == 0
+            && self.salt_len == 0
+            && self.rounds_complete == 0
     }
 }
 

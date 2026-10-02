@@ -698,3 +698,12 @@ fn resumable_account_derivation_rejects_incomplete_finish() {
     let work = AccountKeyDerivation::new(&seed).expect("resumable start");
     assert!(matches!(work.finish(), Err(Bip32Error::InvalidKey)));
 }
+
+#[test]
+fn multisig_account_nonzero_index_is_hardened_by_addition() {
+    let seed = [0x6du8; 64];
+    let derived = derive_multisig_account_key(&seed, 7).expect("45' account 7");
+    let expected_path = [0x8000_002d, 0x8001_b207, 0x8000_0007];
+    let expected = derive_path(&seed, &expected_path).expect("explicit 45' path");
+    assert_eq!(derived.to_raw(), expected.to_raw());
+}

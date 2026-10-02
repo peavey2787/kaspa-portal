@@ -21,6 +21,15 @@ Portal instead of carrying its own copy.
   selectors (`contract::covenant::branch`) instead of scanning every pushed key.
 - Watchdog-friendly `*_with_checkpoint` variants of address lookup, account
   signing and anti-klepto finalization for constrained hardware.
+- Password KDF v1 profile strengthened to Argon2id 8 MiB / t=3 / p=1, with a
+  `DeviceBoundBackup` purpose; known answers come from the reference C
+  implementation. The Argon2 frame keeps a single-pointer ABI to avoid an
+  Xtensa LLVM stack-realignment bug (LLVM #208946).
+- ECIES allocates fallibly and never panics on malformed points; Schnorr
+  verification is split into out-of-line stages to bound embedded stack use.
+- BIP39 seed stretching has a precomputed loop bound and zeroizes on drop.
+- Totality tests feed every externally reachable parser truncated input and
+  noise of every length up to 600 bytes.
 - Standard PSKT parser/serializer replaced by the hardened implementation with
   a split schema module, u32 offsets, and fallible storage.
 

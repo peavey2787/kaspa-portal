@@ -282,3 +282,21 @@ fn resumable_seed_derivation_matches_normal_seed() {
     stepped.zeroize();
     normal.zeroize();
 }
+
+#[test]
+fn resumable_seed_progress_exact_boundaries_and_completion_wipe() {
+    let mnemonic = mnemonic_from_entropy_12(&[0x61u8; 16]);
+    let mut work = SeedDerivation::from_mnemonic_12(&mnemonic, "progress-boundary");
+
+    assert!(work.advance(1).is_none());
+    assert_eq!(work.progress_percent(), 1);
+    assert!(work.advance(1023).is_none());
+    assert_eq!(work.progress_percent(), 50);
+    assert!(work.advance(1023).is_none());
+    assert_eq!(work.progress_percent(), 99);
+    let mut seed = work.advance(1).expect("round 2048 completes exactly");
+    assert_eq!(work.progress_percent(), 100);
+    assert!(work.sensitive_state_is_zeroized());
+    assert!(work.advance(1).is_none());
+    seed.zeroize();
+}
