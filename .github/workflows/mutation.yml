@@ -1,0 +1,48 @@
+name: mutation
+
+# Security-critical mutation gate (see qa/scripts/check_mutation.py): every
+# viable mutant across crypto, keys, derivation, sighash, signing, signature
+# verification and every serializer/parser must be caught by the test suite.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants --version 27.1.0 --locked
+      - name: Run mutation shard
+        run: python3 qa/scripts/check_mutation.py run --shard ${{ matrix.shard }}/16 --output target/qa/mutation
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mutation-shard-${{ matrix.shard }}
+          path: target/qa/mutation/mutants.out/outcomes.json
+
+  gate:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: mutation-shard-*
+          path: outcomes
+      - name: Enforce mutation gate
+        run: python3 qa/scripts/check_mutation.py check outcomes/*/outcomes.json

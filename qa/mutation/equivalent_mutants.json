@@ -1,0 +1,4 @@
+{
+  "policy": "Every viable mutant in .cargo/mutants.toml must be caught. A mutant may be listed here only when it is provably equivalent after a refactor was attempted; the entry lapses when source_sha256 no longer matches.",
+  "equivalent_mutants": []
+}

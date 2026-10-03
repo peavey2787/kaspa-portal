@@ -67,6 +67,8 @@ browser = [
 # `browser` plus Portal's wasm-bindgen JavaScript API.
 wasm = ["browser"]
 secret-export = []
+# Argon2 benchmark derivation for signer boot diagnostics (KDF cost tuning).
+kdf-benchmark = []
 
 [dependencies]
 sha2 = { version = "0.10", default-features = false }

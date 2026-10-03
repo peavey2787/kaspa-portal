@@ -1,0 +1,42 @@
+# Security-critical mutation profile. `qa/scripts/check_mutation.py` enforces
+# the score gate: every viable mutant in this set must be caught, none may time
+# out, and an uncaught mutant is accepted only through a reviewed entry in
+# `qa/mutation/equivalent_mutants.json`.
+minimum_test_timeout = 60
+additional_cargo_args = ["--locked"]
+output = "target/qa/mutation"
+examine_globs = [
+  # Cryptography and key material.
+  "src/crypto/**/*.rs",
+  "src/primitives/bytes.rs",
+  "src/primitives/address/**/*.rs",
+  "src/wallet/key/**/*.rs",
+  "src/wallet/derivation/**/*.rs",
+  "src/wallet/mnemonic/**/*.rs",
+  "src/wallet/multisig/**/*.rs",
+  "src/privacy/stealth/**/*.rs",
+  # Consensus math and signing.
+  "src/transaction/sighash/**/*.rs",
+  "src/transaction/signing/**/*.rs",
+  "src/transaction/signature_verification/**/*.rs",
+  "src/transaction/mass.rs",
+  "src/transaction/consensus/**/*.rs",
+  "src/transaction/policy/**/*.rs",
+  "src/transaction/builder/planning/amounts.rs",
+  "src/contract/covenant/branch.rs",
+  "src/contract/script/**/*.rs",
+  # Serializers and parsers.
+  "src/transaction/interchange/kspt/**/*.rs",
+  "src/transaction/interchange/pskt/**/*.rs",
+  "src/transaction/interchange/qr/**/*.rs",
+  "src/transaction/broadcast/encoder.rs",
+  "src/primitives/qr_payload.rs",
+  "src/network/codec/**/*.rs",
+  "src/network/wrpc/**/*.rs",
+]
+exclude_globs = [
+  "**/unit-tests/**",
+  "**/tests/**",
+  "**/wordlist.rs",
+]
+exclude_re = ["impl Debug", "fmt\\(", "message\\("]

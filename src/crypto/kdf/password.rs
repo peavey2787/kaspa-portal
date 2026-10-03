@@ -188,7 +188,7 @@ fn validate_current_inputs(
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "kdf-benchmark"))]
 fn validate_benchmark_inputs(
     password: &[u8],
     parameters: PasswordKdfParams,
@@ -199,7 +199,7 @@ fn validate_benchmark_inputs(
     validate_benchmark_parallel_cost(parameters)
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "kdf-benchmark"))]
 fn validate_benchmark_password(password: &[u8]) -> Result<(), PasswordKdfError> {
     let valid = (!password.is_empty()) & (password.len() <= MAX_PASSWORD_SIZE);
     if !valid {
@@ -208,7 +208,7 @@ fn validate_benchmark_password(password: &[u8]) -> Result<(), PasswordKdfError> 
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "kdf-benchmark"))]
 fn validate_benchmark_identity(parameters: PasswordKdfParams) -> Result<(), PasswordKdfError> {
     let supported = (parameters.profile_version == PROFILE_VERSION_1)
         & (parameters.argon_version == ARGON2_VERSION_13);
@@ -218,7 +218,7 @@ fn validate_benchmark_identity(parameters: PasswordKdfParams) -> Result<(), Pass
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "kdf-benchmark"))]
 fn validate_benchmark_memory(parameters: PasswordKdfParams) -> Result<(), PasswordKdfError> {
     if parameters.m_cost_kib < 1_024 {
         return Err(PasswordKdfError::UnsupportedParameters);
@@ -226,7 +226,7 @@ fn validate_benchmark_memory(parameters: PasswordKdfParams) -> Result<(), Passwo
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "kdf-benchmark"))]
 fn validate_benchmark_parallel_cost(parameters: PasswordKdfParams) -> Result<(), PasswordKdfError> {
     let valid = (parameters.t_cost > 0) & (parameters.p_cost > 0);
     if !valid {
@@ -255,7 +255,7 @@ fn derive_effective_salt(purpose: PasswordKdfPurpose, salt: &[u8; SALT_SIZE]) ->
     hasher.finalize().into()
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "kdf-benchmark"))]
 pub fn derive_benchmark_key_32(
     purpose: PasswordKdfPurpose,
     password: &[u8],
@@ -266,7 +266,7 @@ pub fn derive_benchmark_key_32(
     derive_heap_backed(purpose, password, salt, parameters)
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "kdf-benchmark"))]
 pub fn derive_benchmark_key_32_with_workspace(
     purpose: PasswordKdfPurpose,
     password: &[u8],
