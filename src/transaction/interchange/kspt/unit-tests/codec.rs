@@ -119,8 +119,9 @@ fn compact_parser_rejects_non_v1_versions() {
 #[test]
 fn compact_parser_does_not_preallocate_untrusted_v1_input_count() {
     // libFuzzer/ASan regression: this v1 corpus entry declares 2,046,820,367
-    // inputs and zero outputs. The count exceeds the format limit, so it is
-    // refused before any input storage is reserved.
+    // inputs and zero outputs under an unsupported transaction version. It is
+    // refused while reading the global header, before any input storage is
+    // reserved.
     let crash = [
         75, 83, 80, 84, 1, 0, 176, 167, 15, 0, 0, 122, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0,
         3, 75, 54, 54, 54, 54, 54, 0, 83, 80, 84, 3, 83, 80, 0,
@@ -128,7 +129,7 @@ fn compact_parser_does_not_preallocate_untrusted_v1_input_count() {
     let mut parsed = Transaction::try_new().expect("transaction storage");
     assert_eq!(
         parse_compact_kspt(&crash, &mut parsed),
-        Err(PsktError::TooManyInputs)
+        Err(PsktError::UnsupportedTransactionVersion)
     );
     assert_eq!(
         parsed.inputs.len(),
@@ -675,21 +676,6 @@ fn compact_v1_serializer_refuses_derivation_hint_without_network_binding() {
 }
 
 #[test]
-fn compact_trailer_progress_is_strict() {
-    use super::super::codec::require_trailer_progress;
-
-    assert_eq!(require_trailer_progress(2, 1), Ok(()));
-    assert_eq!(
-        require_trailer_progress(1, 1),
-        Err(PsktError::InvalidTrailer)
-    );
-    assert_eq!(
-        require_trailer_progress(1, 2),
-        Err(PsktError::InvalidTrailer)
-    );
-}
-
-#[test]
 fn compact_v1_hd45_input_and_change_hints_round_trip_and_reject_duplicates() {
     use crate::transaction::model::Ms45Hint;
     let mut tx = transaction();
@@ -740,5 +726,79 @@ fn compact_v1_rejects_invalid_hd45_chain_without_trusting_the_hint() {
     assert_eq!(
         parse_compact_kspt(&wire, &mut parsed),
         Err(PsktError::InvalidTrailer)
+    );
+}
+
+#[test]
+fn every_grammar_error_maps_to_a_stable_kspt_error() {
+    use super::super::wire::WireError as W;
+    use PsktError as P;
+
+    for (wire, expected) in [
+        (W::BufferTooShort, P::BufferTooShort),
+        (W::CountOverflow, P::BufferTooShort),
+        (W::OutputBufferTooSmall, P::OutputBufferTooSmall),
+        (W::InvalidMagic, P::InvalidMagic),
+        (W::UnsupportedVersion, P::UnsupportedVersion),
+        (W::InvalidFlags, P::InvalidFlags),
+        (W::ScriptTooLong, P::ScriptTooLong),
+        (W::RedeemTooLong, P::ScriptTooLong),
+        (W::TooManySignatures, P::TooManySignatures),
+        (W::DuplicateSignaturePosition, P::InvalidSignatureState),
+        (W::InvalidSigHashType, P::InvalidSigHashType),
+        (W::InvalidNetwork, P::InvalidTrailer),
+        (W::MissingNetwork, P::InvalidTrailer),
+        (W::InvalidTrailer, P::InvalidTrailer),
+        (W::TrailingData, P::TrailingData),
+        (W::TooManyInputs, P::TooManyInputs),
+        (W::TooManyOutputs, P::TooManyOutputs),
+        (W::PayloadTooLong, P::PayloadTooLong),
+        (
+            W::UnsupportedTransactionVersion,
+            P::UnsupportedTransactionVersion,
+        ),
+    ] {
+        assert_eq!(P::from(wire), expected, "{wire:?}");
+    }
+}
+
+#[test]
+fn compact_codec_rejects_unsupported_transaction_versions_both_ways() {
+    let max = crate::transaction::interchange::pskt::schema::MAX_SUPPORTED_TX_VERSION;
+    let mut tx = transaction();
+    tx.network = crate::primitives::address::KaspaNetwork::Mainnet;
+    tx.version = max;
+    let mut wire = serialize_compact_kspt_vec(&tx).expect("newest supported version encodes");
+    tx.version = max + 1;
+    assert_eq!(
+        serialize_compact_kspt_vec(&tx),
+        Err(PsktError::UnsupportedTransactionVersion)
+    );
+    // Global version field directly follows magic, envelope version and flags.
+    wire[6..8].copy_from_slice(&(max + 1).to_le_bytes());
+    let mut parsed = Transaction::try_new().expect("transaction storage");
+    assert_eq!(
+        parse_compact_kspt(&wire, &mut parsed),
+        Err(PsktError::UnsupportedTransactionVersion)
+    );
+}
+
+#[test]
+fn compact_parser_keeps_portal_sighash_all_policy_above_the_grammar() {
+    let mut tx = transaction();
+    tx.network = crate::primitives::address::KaspaNetwork::Mainnet;
+    add_single_signature(&mut tx, 0, [0x77; 64]);
+    let mut wire = serialize_compact_kspt_vec(&tx).expect("signed compact KSPT");
+    let sighash_at = wire
+        .windows(66)
+        .position(|window| window[1] == 0x01 && window[2..] == tx.inputs[0].sigs[0].signature)
+        .expect("signature record")
+        + 1;
+    // SIGHASH_NONE is valid grammar but outside Portal's signing policy.
+    wire[sighash_at] = 0x02;
+    let mut parsed = Transaction::try_new().expect("transaction storage");
+    assert_eq!(
+        parse_compact_kspt(&wire, &mut parsed),
+        Err(PsktError::InvalidSigHashType)
     );
 }

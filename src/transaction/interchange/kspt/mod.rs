@@ -7,6 +7,7 @@ mod kssn;
 mod script;
 mod signing;
 mod validation;
+pub mod wire;
 
 pub use codec::{parse_compact_kspt, serialize_compact_kspt, serialize_compact_kspt_vec};
 pub use error::PsktError;

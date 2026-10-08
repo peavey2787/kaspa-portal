@@ -183,17 +183,17 @@ exit /b 0
 python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>&1
 if not errorlevel 1 (
     call :run python %1
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 py -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>&1
 if not errorlevel 1 (
     call :run py -3 %1
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 python3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>&1
 if not errorlevel 1 (
     call :run python3 %1
-    exit /b %ERRORLEVEL%
+    exit /b
 )
 echo ERROR: Python 3.8 or newer is required to run Kaspa Portal QA.
 exit /b 1

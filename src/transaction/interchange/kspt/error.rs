@@ -49,4 +49,31 @@ pub enum PsktError {
     OutputsExceedInputs,
     /// Transaction storage could not be allocated.
     StorageExhausted,
+    /// The transaction version is newer than this codec supports.
+    UnsupportedTransactionVersion,
+}
+
+impl From<super::wire::WireError> for PsktError {
+    fn from(error: super::wire::WireError) -> Self {
+        use super::wire::WireError;
+        match error {
+            WireError::BufferTooShort | WireError::CountOverflow => Self::BufferTooShort,
+            WireError::OutputBufferTooSmall => Self::OutputBufferTooSmall,
+            WireError::InvalidMagic => Self::InvalidMagic,
+            WireError::UnsupportedVersion => Self::UnsupportedVersion,
+            WireError::InvalidFlags => Self::InvalidFlags,
+            WireError::ScriptTooLong | WireError::RedeemTooLong => Self::ScriptTooLong,
+            WireError::TooManySignatures => Self::TooManySignatures,
+            WireError::DuplicateSignaturePosition => Self::InvalidSignatureState,
+            WireError::InvalidSigHashType => Self::InvalidSigHashType,
+            WireError::InvalidNetwork | WireError::MissingNetwork | WireError::InvalidTrailer => {
+                Self::InvalidTrailer
+            }
+            WireError::TrailingData => Self::TrailingData,
+            WireError::TooManyInputs => Self::TooManyInputs,
+            WireError::TooManyOutputs => Self::TooManyOutputs,
+            WireError::PayloadTooLong => Self::PayloadTooLong,
+            WireError::UnsupportedTransactionVersion => Self::UnsupportedTransactionVersion,
+        }
+    }
 }

@@ -1,12 +1,13 @@
 /// Magic bytes for compact KSPT transaction envelopes.
-pub(crate) const KSPT_MAGIC: [u8; 4] = *b"KSPT";
+pub const KSPT_MAGIC: [u8; 4] = *b"KSPT";
 /// Magic bytes for KSSN signature responses.
 pub(crate) const KSSN_MAGIC: [u8; 4] = *b"KSSN";
 
 pub const KSPT_VERSION_CURRENT: u8 = 0x01;
 pub const KSSN_VERSION_CURRENT: u8 = 0x01;
 
-pub(crate) const FLAG_SIGNED_OR_COMPLETE: u8 = 0x01;
+/// Header flag declaring every input fully signed.
+pub const FLAG_SIGNED_OR_COMPLETE: u8 = 0x01;
 pub(crate) const PARTIAL_SIGNED_ALLOWED_FLAGS: u8 = FLAG_SIGNED_OR_COMPLETE;
 
 pub(crate) const STEALTH_TRAILER_MARKER: u8 = b'S';

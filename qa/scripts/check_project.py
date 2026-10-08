@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re, sys
+import re, subprocess, sys
 sys.dont_write_bytecode = True
 from manifest import read_package
 ROOT=Path(__file__).resolve().parents[2]
 errors=[]
 
 def fail(msg): errors.append(msg)
+
+def _git_ignored():
+    """Ignored paths never ship, so repository-surface checks skip them."""
+    listing = subprocess.run(
+        ['git', 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z'],
+        cwd=ROOT, capture_output=True, check=True, text=True,
+    ).stdout
+    return tuple(entry.rstrip('/') for entry in listing.split('\0') if entry)
+
+IGNORED=_git_ignored()
+
+def shipped(path):
+    rel=path.relative_to(ROOT).as_posix()
+    return not any(rel == ignored or rel.startswith(ignored + '/') for ignored in IGNORED)
 manifest={'package': read_package(ROOT/'Cargo.toml')}
 if manifest.get('package',{}).get('name')!='kaspa-portal': fail('root package must be kaspa-portal')
 if manifest.get('package',{}).get('version')!='1.4.0': fail('root package must be version 1.4.0')
@@ -138,7 +152,7 @@ if not (ROOT/'docs').is_dir():
 for needed_doc in ['docs/ARCHITECTURE.md', 'docs/SECURITY.md', 'docs/PUBLIC_API.md', 'docs/E2E_CAPABILITIES.md']:
     if not (ROOT/needed_doc).is_file():
         fail(f'missing public documentation: {needed_doc}')
-for markdown in ROOT.rglob('*.md'):
+for markdown in filter(shipped, ROOT.rglob('*.md')):
     rel=markdown.relative_to(ROOT).as_posix()
     if rel != 'README.md' and not rel.startswith('docs/'):
         fail(f'Markdown file must live under docs/: {rel}')
@@ -432,7 +446,7 @@ for aggregate, owners in list(explicit_test_targets.items()):
             )
 
 # Repository hygiene and public-surface checks.
-for path in ROOT.rglob('*'):
+for path in filter(shipped, ROOT.rglob('*')):
     rel=path.relative_to(ROOT).as_posix()
     if path.is_dir() and path.name in {'__pycache__', '.pytest_cache', '.idea', 'target'}:
         fail(f'generated/local directory must not ship: {rel}')
