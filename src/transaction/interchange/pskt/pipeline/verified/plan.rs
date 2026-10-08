@@ -2,10 +2,11 @@
 
 use super::{
     compact, parse_multisig_redeem, VerifiedCovenantRoute, VerifiedInput, VerifiedOutput,
-    VerifiedSignature, VerifiedTransaction, VerifiedWitnessPlan,
+    VerifiedSignature, VerifiedTransaction, VerifiedWitnessItem, VerifiedWitnessPlan,
 };
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
+use crate::contract::covenant::execution::WitnessItem;
 
 pub(crate) fn from_compact(
     transaction: compact::Transaction,
@@ -129,68 +130,26 @@ pub(crate) fn covenant_witness_plan(
     index: usize,
     input: &compact::Input,
 ) -> Result<VerifiedWitnessPlan, String> {
-    let (supplied_mask, supplied_true_mask) = input
-        .covenant_execution
-        .ok_or_else(|| format!("input[{index}] covenant is missing covenantExecution"))?;
-    let branches = crate::contract::covenant::branch::resolve_covenant_branches(&input.redeem)
-        .map_err(|error| format!("input[{index}] invalid covenant branch structure: {error:?}"))?;
-    validate_covenant_selector_plan(index, &branches, supplied_mask, supplied_true_mask)?;
-    let signature = exactly_one_signature(index, &input.signatures)?;
-    validate_covenant_signature(
-        index,
-        &branches,
-        signature,
-        supplied_mask,
-        supplied_true_mask,
-    )?;
+    let (supplied_mask, supplied_true_mask, path) = compact::covenant_path(index, input)?;
+    compact::require_path_signatures(index, input, &path)?;
+    let witness = path
+        .iter()
+        .map(|item| match item {
+            WitnessItem::Selector(value) => Ok(VerifiedWitnessItem::Selector(*value)),
+            WitnessItem::Signature { position } => input
+                .signatures
+                .iter()
+                .find(|signature| signature.position == *position)
+                .map(|signature| VerifiedWitnessItem::Signature(copy_signature(signature)))
+                .ok_or_else(|| format!("input[{index}] covenant path signature is missing")),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(VerifiedWitnessPlan::Covenant {
-        signature: copy_signature(signature),
+        witness,
         redeem_script: input.redeem.clone(),
         supplied_mask,
         supplied_true_mask,
     })
-}
-
-pub(crate) fn validate_covenant_selector_plan(
-    index: usize,
-    branches: &crate::contract::covenant::branch::BranchResolution,
-    supplied_mask: u16,
-    supplied_true_mask: u16,
-) -> Result<(), String> {
-    if supplied_true_mask & !supplied_mask != 0 || supplied_mask != branches.selector_mask() {
-        return Err(format!(
-            "input[{index}] covenantExecution is not a complete selector assignment"
-        ));
-    }
-    if branches.selector_mask() != 0b1 {
-        return Err(format!(
-            "input[{index}] covenant selector topology requires a typed specialized witness plan"
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_covenant_signature(
-    index: usize,
-    branches: &crate::contract::covenant::branch::BranchResolution,
-    signature: &compact::Signature,
-    supplied_mask: u16,
-    supplied_true_mask: u16,
-) -> Result<(), String> {
-    let binding = branches
-        .key_at(signature.position)
-        .map_err(|_| format!("input[{index}] covenant signature position is not branch-bound"))?;
-    if !binding.matches_selectors(supplied_mask, supplied_true_mask) {
-        return Err(format!(
-            "input[{index}] covenant signature is outside the authorized execution branch"
-        ));
-    }
-    if binding.decision_mask & 1 == 0 {
-        return Err(format!(
-            "input[{index}] covenant signer is not protected by the outer selector"
-        ));
-    }
-    Ok(())
 }
 
 pub(crate) fn exactly_one_signature(

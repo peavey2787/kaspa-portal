@@ -37,12 +37,12 @@ pub enum VerifiedWitnessPlan {
         signatures: Vec<VerifiedSignature>,
         redeem_script: Vec<u8>,
     },
-    /// Generic branch-aware covenant witness. Consumer finalization deliberately
-    /// supports one canonical outer selector only. More complex/specialized
-    /// covenants must define a typed execution plan before they can cross this
-    /// boundary; host routing hints are never consulted after authorization.
+    /// Branch-aware covenant witness: the exact selectors and signatures the
+    /// path chosen by `covenantExecution` consumes, in consumption order. A
+    /// keyless path carries selectors only. Host routing hints are never
+    /// consulted after authorization.
     Covenant {
-        signature: VerifiedSignature,
+        witness: Vec<VerifiedWitnessItem>,
         redeem_script: Vec<u8>,
         supplied_mask: u16,
         supplied_true_mask: u16,
@@ -56,6 +56,13 @@ pub enum VerifiedWitnessPlan {
         supplied_mask: u16,
         supplied_true_mask: u16,
     },
+}
+
+/// One witness item of a verified covenant path, in consumption order.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum VerifiedWitnessItem {
+    Selector(bool),
+    Signature(VerifiedSignature),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

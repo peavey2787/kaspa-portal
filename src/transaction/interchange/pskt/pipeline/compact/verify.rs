@@ -1,8 +1,10 @@
 //! Cryptographic completeness and BIP340 verification of compact KSPT signatures.
 
+use crate::contract::covenant::execution::{trace_witness, ExecutionError, WitnessItem};
+
 use super::{
-    covenant_active_positions, multisig_xonly, require_sighash_all, sighash_all, Input,
-    K256Signature, Signature, Transaction, VerifyingKey,
+    multisig_xonly, require_sighash_all, sighash_all, Input, K256Signature, Signature, Transaction,
+    VerifyingKey,
 };
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
@@ -45,6 +47,11 @@ pub(crate) fn canonical_p2pk(input: &Input) -> bool {
         && input.script.get(33) == Some(&0xac)
 }
 
+/// A generic covenant is complete when it carries exactly the signatures the
+/// path chosen by `covenantExecution` consumes; a keyless path needs none.
+/// Every signature is verified against its branch-bound key, the selector
+/// assignment is complete, and the sighash commits to the outputs, so the
+/// choice of branch cannot redirect funds.
 pub(crate) fn generic_covenant_required(
     index: usize,
     input: &Input,
@@ -52,25 +59,66 @@ pub(crate) fn generic_covenant_required(
     let Some((mask, truth)) = input.covenant_execution else {
         return Ok(None);
     };
-    let branches = crate::contract::covenant::branch::resolve_covenant_branches(&input.redeem)
-        .map_err(|error| format!("input[{index}] invalid covenant branch structure: {error:?}"))?;
-    if mask != branches.selector_mask() || truth & !mask != 0 || branches.selector_mask() != 0b1 {
-        return Ok(None);
-    }
-    let active = covenant_active_positions(&branches, mask, truth);
-    if active.len() != 1 || input.signatures.len() != 1 {
-        return Ok(None);
-    }
-    let Some(signature) = input.signatures.first() else {
-        return Ok(None);
+    let path = match trace_witness(&input.redeem, mask, truth) {
+        Ok(path) => path,
+        Err(ExecutionError::IncompleteSelectors | ExecutionError::UnsupportedSignatureCheck) => {
+            return Ok(None)
+        }
+        Err(error) => {
+            return Err(format!(
+                "input[{index}] covenantExecution path is invalid: {error:?}"
+            ))
+        }
     };
-    if signature.position != active[0] {
-        return Ok(None);
+    Ok(require_path_signatures(index, input, &path)
+        .is_ok()
+        .then(|| path_positions(&path).len()))
+}
+
+/// The complete selector assignment and the witness items its path consumes.
+pub(crate) fn covenant_path(
+    index: usize,
+    input: &Input,
+) -> Result<(u16, u16, Vec<WitnessItem>), String> {
+    let (mask, truth) = input
+        .covenant_execution
+        .ok_or_else(|| format!("input[{index}] covenant is missing covenantExecution"))?;
+    let path = trace_witness(&input.redeem, mask, truth)
+        .map_err(|error| format!("input[{index}] covenantExecution path is invalid: {error:?}"))?;
+    Ok((mask, truth, path))
+}
+
+fn path_positions(path: &[WitnessItem]) -> Vec<u8> {
+    let mut positions = path
+        .iter()
+        .filter_map(|item| match item {
+            WitnessItem::Signature { position } => Some(*position),
+            WitnessItem::Selector(_) => None,
+        })
+        .collect::<Vec<_>>();
+    positions.sort_unstable();
+    positions
+}
+
+/// The input carries exactly the path's signatures, each once.
+pub(crate) fn require_path_signatures(
+    index: usize,
+    input: &Input,
+    path: &[WitnessItem],
+) -> Result<(), String> {
+    let mut supplied = input
+        .signatures
+        .iter()
+        .map(|signature| signature.position)
+        .collect::<Vec<_>>();
+    supplied.sort_unstable();
+    if supplied == path_positions(path) {
+        Ok(())
+    } else {
+        Err(format!(
+            "input[{index}] signatures do not match the covenantExecution path"
+        ))
     }
-    let Ok(binding) = branches.key_at(active[0]) else {
-        return Ok(None);
-    };
-    Ok((binding.decision_mask & 0b1 != 0).then_some(1))
 }
 
 pub(crate) fn verify_all_signatures(transaction: &Transaction) -> Result<(), String> {
@@ -116,44 +164,20 @@ pub(crate) fn generic_covenant_signature_count(
     input: &Input,
     input_index: usize,
 ) -> Result<usize, String> {
-    let (mask, truth) = input
-        .covenant_execution
-        .ok_or_else(|| format!("input[{input_index}] covenant is missing covenantExecution"))?;
-    let branches = crate::contract::covenant::branch::resolve_covenant_branches(&input.redeem)
-        .map_err(|error| {
-            format!("input[{input_index}] invalid covenant branch structure: {error:?}")
-        })?;
-    validate_generic_covenant_count_binding(input, input_index, &branches, mask, truth)?;
+    validate_generic_covenant_count_binding(input, input_index)?;
     Ok(input.signatures.len())
 }
 
 pub(crate) fn validate_generic_covenant_count_binding(
     input: &Input,
     input_index: usize,
-    branches: &crate::contract::covenant::branch::BranchResolution,
-    mask: u16,
-    truth: u16,
 ) -> Result<(), String> {
-    if truth & !mask != 0 || mask != branches.selector_mask() {
-        return Err(format!(
-            "input[{input_index}] covenantExecution is not a complete selector assignment"
-        ));
-    }
-    if branches.selector_mask() != 0b1 {
-        return Err(format!(
-            "input[{input_index}] generic covenant selector topology requires a typed specialized witness plan"
-        ));
-    }
-    let active = covenant_active_positions(branches, mask, truth);
-    if active.len() != 1 {
-        return Err(format!(
-            "input[{input_index}] generic covenant must have exactly one active signer"
-        ));
-    }
+    let (_, _, path) = covenant_path(input_index, input)?;
+    let allowed = path_positions(&path);
     if input
         .signatures
         .iter()
-        .any(|signature| signature.position != active[0])
+        .any(|signature| !allowed.contains(&signature.position))
     {
         return Err(format!(
             "input[{input_index}] contains a signature outside the active covenant branch"

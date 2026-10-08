@@ -264,20 +264,3 @@ pub(crate) fn multisig_xonly(redeem: &[u8], position: u8) -> Option<[u8; 32]> {
     })?;
     public_key.try_into().ok()
 }
-
-pub(crate) fn covenant_active_positions(
-    branches: &crate::contract::covenant::branch::BranchResolution,
-    supplied_mask: u16,
-    supplied_true_mask: u16,
-) -> Vec<u8> {
-    (0..branches.len())
-        .filter_map(|position| {
-            let position = u8::try_from(position).ok()?;
-            branches
-                .key_at(position)
-                .ok()?
-                .matches_selectors(supplied_mask, supplied_true_mask)
-                .then_some(position)
-        })
-        .collect()
-}

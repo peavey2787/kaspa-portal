@@ -279,7 +279,7 @@ pub fn resolve_covenant_branches(script: &[u8]) -> Result<BranchResolution, Bran
     parser.finish()
 }
 
-fn pushdata_lengths(
+pub(super) fn pushdata_lengths(
     script: &[u8],
     offset: usize,
     opcode: u8,
@@ -313,7 +313,7 @@ fn pushdata_lengths(
     }
 }
 
-fn advance_push(
+pub(super) fn advance_push(
     script: &[u8],
     offset: usize,
     header: usize,
