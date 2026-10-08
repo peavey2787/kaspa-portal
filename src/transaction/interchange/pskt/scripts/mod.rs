@@ -15,11 +15,12 @@ mod p2pk;
 #[cfg(feature = "std")]
 mod router;
 
+pub(crate) use common::push_data_item;
 #[cfg(feature = "std")]
 pub(crate) use common::push_data_sigscript;
 pub use common::push_redeem_script;
 #[cfg(feature = "std")]
-pub(crate) use common::{first_schnorr_signature, push_data_item, push_int_sigscript};
+pub(crate) use common::{first_schnorr_signature, push_int_sigscript};
 #[cfg(feature = "std")]
 pub(crate) use contracts::*;
 #[cfg(feature = "std")]

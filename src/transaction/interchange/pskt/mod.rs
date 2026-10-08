@@ -15,6 +15,7 @@ mod error;
 pub(crate) mod exact_json;
 mod kspt_bridge;
 mod model;
+pub mod pipeline;
 pub mod pskb;
 mod review;
 pub(crate) mod scripts;

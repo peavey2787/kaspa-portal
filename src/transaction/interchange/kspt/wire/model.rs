@@ -35,6 +35,21 @@ impl Limits {
         }
     }
 
+    /// Most inputs accepted.
+    pub const fn max_inputs(self) -> u32 {
+        self.max_inputs
+    }
+
+    /// Most outputs accepted.
+    pub const fn max_outputs(self) -> u8 {
+        self.max_outputs
+    }
+
+    /// Largest payload accepted, in bytes.
+    pub const fn max_payload(self) -> usize {
+        self.max_payload
+    }
+
     /// The widest limits the grammar itself permits.
     pub const fn grammar() -> Self {
         Self::new(u32::MAX, MAX_OUTPUTS, u16::MAX as usize)
