@@ -142,3 +142,16 @@ fn script_builder_rejects_unknown_address_versions() {
         .unwrap_err()
         .contains("Unknown version"));
 }
+
+#[test]
+fn decode_address_accepts_only_p2pk_and_p2sh_versions() {
+    for version in 0u8..=255 {
+        let address = encode_address_bytes(&[0x42; 32], version, "kaspa");
+        let decoded = decode_address(&address);
+        if matches!(version, 0x00 | 0x08) {
+            assert_eq!(decoded, Ok((version, [0x42; 32])));
+        } else {
+            assert!(decoded.is_err(), "version {version:#x} must be rejected");
+        }
+    }
+}

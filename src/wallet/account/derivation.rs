@@ -33,19 +33,19 @@ pub struct WalletData {
 // ─── Extended public key ───
 
 use crate::wallet::key::account::{
-    decode_account_key_text, encode_account_key_text, validate_account_key_payload,
-    ACCOUNT_KEY_PAYLOAD_LEN, ACCOUNT_KEY_TEXT_LEN,
+    encode_account_key_text, validate_account_key_payload, ACCOUNT_KEY_PAYLOAD_LEN,
+    ACCOUNT_KEY_TEXT_LEN,
 };
-use crate::wallet::key::bip32_xpub::decode_bip32_xpub;
 
-pub(crate) fn decode_kpub_text(kpub_text: &str) -> Result<[u8; ACCOUNT_KEY_PAYLOAD_LEN], String> {
+/// Decode `kpub1:` text, a Base58Check `kpub`, or an account-level BIP32
+/// `xpub` to the canonical account-key payload.
+pub fn decode_kpub_text(kpub_text: &str) -> Result<[u8; ACCOUNT_KEY_PAYLOAD_LEN], String> {
     let mut payload = [0u8; ACCOUNT_KEY_PAYLOAD_LEN];
-    if decode_account_key_text(kpub_text.as_bytes(), &mut payload).is_some()
-        || decode_bip32_xpub(kpub_text.as_bytes(), &mut payload).is_ok()
-    {
-        return Ok(payload);
-    }
-    Err("Account key must be canonical kpub1 text or an account-level BIP32 xpub".to_string())
+    crate::wallet::key::xpub::decode_kpub_or_xpub(kpub_text.as_bytes(), &mut payload)
+        .map(|_| payload)
+        .map_err(|_| {
+            "Account key must be canonical kpub1 text or an account-level BIP32 xpub".to_string()
+        })
 }
 
 fn canonical_kpub_text(payload: &[u8; ACCOUNT_KEY_PAYLOAD_LEN]) -> Result<String, String> {
@@ -57,21 +57,21 @@ fn canonical_kpub_text(payload: &[u8; ACCOUNT_KEY_PAYLOAD_LEN]) -> Result<String
         .map_err(|_| "Canonical account-key text is not UTF-8".to_string())
 }
 
-pub(crate) struct ExtPubKey {
-    pub(crate) key: PublicKey,
-    pub(crate) chain_code: [u8; 32],
-    pub(crate) depth: u8,
+pub struct ExtPubKey {
+    pub key: PublicKey,
+    pub chain_code: [u8; 32],
+    pub depth: u8,
 }
 
 impl ExtPubKey {
     /// Parse the canonical `kpub1:` account-key text format.
-    pub(crate) fn from_kpub(kpub_text: &str) -> Result<Self, String> {
+    pub fn from_kpub(kpub_text: &str) -> Result<Self, String> {
         let payload = decode_kpub_text(kpub_text)?;
         Self::from_raw_payload(&payload)
     }
 
     /// Parse the 78-byte account-key payload used by the binary QR envelope.
-    fn from_raw_payload(payload: &[u8]) -> Result<Self, String> {
+    pub fn from_raw_payload(payload: &[u8]) -> Result<Self, String> {
         if !validate_account_key_payload(payload) {
             return Err(format!(
                 "Raw account-key payload is not canonical ({} bytes)",
@@ -94,7 +94,7 @@ impl ExtPubKey {
     }
 
     /// Derive a non-hardened child key from the compressed parent key and child index.
-    pub(crate) fn derive_child(&self, index: u32) -> Result<Self, String> {
+    pub fn derive_child(&self, index: u32) -> Result<Self, String> {
         if index >= 0x80000000 {
             return Err("Cannot derive hardened child from public key".into());
         }
@@ -139,7 +139,7 @@ impl ExtPubKey {
     }
 
     /// Get the x-only (Schnorr) public key bytes (32 bytes)
-    fn x_only_bytes(&self) -> [u8; 32] {
+    pub fn x_only_bytes(&self) -> [u8; 32] {
         let point = self.key.to_encoded_point(true);
         let compressed = point.as_bytes(); // 33 bytes: [prefix][x]
         let mut x = [0u8; 32];

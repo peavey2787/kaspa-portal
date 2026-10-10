@@ -145,6 +145,26 @@ fn kaspa_cli_account_xpub_imports_and_normalizes_to_canonical_text() {
 }
 
 #[test]
+fn base58_kpub_imports_to_the_same_wallet_as_canonical_text() {
+    use crate::wallet::account::derivation::{decode_kpub_text, import_kpub};
+
+    let payload = decode_kpub_text(&canonical_account_text()).expect("canonical account text");
+    let mut encoded = [0u8; 128];
+    let length = crate::wallet::key::xpub::base58::base58check_encode(&payload, &mut encoded);
+    let base58 = core::str::from_utf8(&encoded[..length])
+        .expect("ASCII")
+        .to_string();
+    assert!(base58.starts_with("kpub"));
+
+    assert_eq!(decode_kpub_text(&base58), Ok(payload));
+    let from_base58 = import_kpub(&base58, "kaspa").expect("base58 kpub import");
+    let from_text = import_kpub(&canonical_account_text(), "kaspa").expect("text import");
+    assert_eq!(from_base58.kpub, from_text.kpub);
+    assert_eq!(from_base58.receive_addresses, from_text.receive_addresses);
+    assert_eq!(from_base58.change_addresses, from_text.change_addresses);
+}
+
+#[test]
 fn kpub_import_rejects_malformed_text_payloads_and_hardened_children() {
     use crate::wallet::account::derivation::{import_kpub, import_kpub_raw, ExtPubKey};
 

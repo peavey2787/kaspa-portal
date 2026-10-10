@@ -157,6 +157,12 @@ pub fn encode_address_str<'a>(
 
 pub fn decode_address(addr: &str) -> Result<(u8, [u8; 32]), String> {
     let decoded = decode_address_bytes(addr)?;
+    if !matches!(decoded.version, 0x00 | 0x08) {
+        return Err(format!(
+            "Unsupported address version: {:#x}",
+            decoded.version
+        ));
+    }
     if decoded.payload.len() != 32 {
         return Err(format!(
             "Address payload length {} is not supported by this decoder",
