@@ -33,7 +33,7 @@ pub use verified::{
     VerifiedCovenantRoute, VerifiedInput, VerifiedOutput, VerifiedSignature, VerifiedTransaction,
     VerifiedWitnessPlan,
 };
-pub(crate) use wire::parse_derivation;
+pub(crate) use wire::{decode_lower_hex, parse_derivation};
 pub use wire::{MAX_PSKT_JSON_BYTES, MAX_PSKT_WIRE_HEX_CHARS};
 
 /// Translate a PSKT/PSKB into the compact KSPT the signer reviews.
@@ -56,6 +56,14 @@ pub fn merge_signed_kspt(
 }
 
 /// Whether every input carries enough cryptographically valid signatures.
+/// The network a signer response's trailer binds it to, read with the same
+/// canonical parser the merge uses.
+pub fn signed_kspt_network(signed_kspt: &[u8], limits: Limits) -> Result<KaspaNetwork, String> {
+    let network = compact::parse(signed_kspt, limits)?.network;
+    KaspaNetwork::from_wire(network)
+        .ok_or_else(|| format!("signed KSPT names unsupported network {network}"))
+}
+
 /// Relay `pskt_hex` to compact KSPT, let `sign` add signatures to the parsed
 /// transaction, then merge them back through the verified pipeline. Returns
 /// the merged PSKT hex; whether every input must be signed is the caller's call.

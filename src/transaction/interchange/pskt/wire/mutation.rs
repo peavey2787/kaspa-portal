@@ -46,8 +46,10 @@ pub fn set_tx_lane(
     if detect_format_hex(wire_hex) != PsktFormat::Pskb {
         return Err("set_tx_lane: not a PSKB wire".into());
     }
-    let subnetwork_id = hex::decode(subnetwork_id_hex)
-        .map_err(|e| format!("set_tx_lane: subnetwork hex: {}", e))?;
+    let subnetwork_id = crate::transaction::interchange::pskt::pipeline::decode_lower_hex(
+        subnetwork_id_hex,
+        "set_tx_lane: subnetwork_id",
+    )?;
     if subnetwork_id.len() != 20 {
         return Err(format!(
             "set_tx_lane: subnetwork_id must be 20 bytes, got {}",

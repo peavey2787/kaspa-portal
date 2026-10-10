@@ -196,7 +196,7 @@ fn transaction_lane_and_payload_mutation_reject_invalid_envelopes_and_subnetwork
     }]));
     assert!(set_tx_lane(&wire, "zz", 0, 0, &[])
         .unwrap_err()
-        .contains("subnetwork hex"));
+        .contains("lowercase hexadecimal"));
     assert!(set_tx_lane(&wire, &"11".repeat(19), 0, 0, &[])
         .unwrap_err()
         .contains("must be 20 bytes"));
@@ -211,6 +211,19 @@ fn transaction_lane_and_payload_mutation_reject_invalid_envelopes_and_subnetwork
     assert!(set_tx_lane(&missing_global, &"11".repeat(20), 0, 0, &[])
         .unwrap_err()
         .contains("missing global"));
+}
+
+#[test]
+fn transaction_lane_rejects_uppercase_subnetworks_and_oversized_payloads() {
+    let wire = pskb_wire(serde_json::json!([{"global": {}, "inputs": [], "outputs": []}]));
+    assert_eq!(
+        set_tx_lane(&wire, &"AA".repeat(20), 0, 0, &[]).unwrap_err(),
+        "set_tx_lane: subnetwork_id must be even-length lowercase hexadecimal"
+    );
+    let oversized = vec![0u8; crate::transaction::model::MAX_PAYLOAD_SIZE + 1];
+    assert!(set_tx_lane(&wire, &"00".repeat(20), 0, 0, &oversized)
+        .unwrap_err()
+        .contains("exceeds KSPT v1 limit"));
 }
 
 fn pskb_wire(document: Value) -> String {
