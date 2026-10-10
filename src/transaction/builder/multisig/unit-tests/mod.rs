@@ -6,6 +6,7 @@ use crate::{
 
 const KPUB_A: &str = "kpub1:038f332e03405ab68380000000f0453f0894cc8c84ebf6e6208e0c7916e9ddbd14919f9bbb92b0690b4e353392020327c7136972883eab5a7722ec3d4302f888804ecce61658ae962a2c56bb7571";
 const KPUB_B: &str = "kpub1:038f332e03a7457270800000002908be01d75735944f29befbdbcd173ab00df2d44c6d5ab51a839413fda90cbf035b986b584de244f5d6a1939192f676a9f2992a63b0f43cdc452dcb40d9dd7081";
+const KPUB_C: &str = "kpub1:038f332e037a262d628000000037234957045cdffdb77c3fdcb25649de3326bd8eb6459276a96ba0b14b99cf05034cf53938d64f4a3d4554e18e9ec0d113b251be5b974386807e95a58530e837e1";
 
 fn descriptor_text() -> String {
     format!("multi_hd45(1,{KPUB_A},{KPUB_B})")
@@ -123,7 +124,7 @@ fn hd45_preparation_selection_and_derivation_maps_are_covered() {
     let wire = encode_from_utxos(
         &explicit,
         &prepared,
-        vec![utxo(&source, 0x22, 1, 20_001_000)],
+        vec![utxo(&source, 0x22, 1, 21_000_000)],
     )
     .expect("explicit multisig PSKB");
     assert!(!wire.is_empty());
@@ -133,6 +134,23 @@ fn hd45_preparation_selection_and_derivation_maps_are_covered() {
     assert!(validate_amounts(&invalid).is_err());
     invalid.amount = 1;
     assert!(validate_amounts(&invalid).is_err());
+}
+
+#[test]
+fn multisig_exact_standard_fee_boundary_is_spendable() {
+    let text = descriptor_text();
+    let descriptor = descriptor();
+    let source = source_address(&descriptor, 0, 0);
+    let req = request(&text, &source, MultisigSelection::Automatic);
+    let prepared = prepare_request(&req).expect("prepared multisig");
+    let fee = multisig_standard_fee(&prepared, 1, req.fee).expect("standard fee");
+    let exact_total =
+        crate::transaction::builder::planning::amounts::checked_required(req.amount, fee)
+            .expect("exact required total");
+
+    let wire = encode_from_utxos(&req, &prepared, vec![utxo(&source, 0x23, 0, exact_total)])
+        .expect("exact amount plus standard fee must be spendable");
+    assert!(!wire.is_empty());
 }
 
 #[test]
@@ -169,8 +187,25 @@ fn branch_helpers_cover_both_chains_usage_and_first_free_indexes() {
     assert_eq!(first_free(&summary.receive_used), 1);
     assert_eq!(first_free(&summary.change_used), 0);
     assert_eq!(first_free(&[true, true]), 2);
-    let json = encode_branch_summary(summary, 0, 3).expect("summary json");
+    let json = encode_branch_summary(summary, 0, 3, "kaspa:next-receive", "kaspa:next-change")
+        .expect("summary json");
     assert!(json.contains("\"balance_sompi\":\"30\""));
+    assert!(json.contains("\"next_receive_address\":\"kaspa:next-receive\""));
+    assert!(json.contains("\"next_change_address\":\"kaspa:next-change\""));
+
+    let empty_scan = finalize_branch_scan(&descriptor, 0, 3, "kaspa", &addresses, Vec::new())
+        .expect("empty branch scan");
+    let empty_scan: serde_json::Value = serde_json::from_str(&empty_scan).expect("scan json");
+    assert_eq!(empty_scan["balance_sompi"], "0");
+    assert_eq!(empty_scan["utxo_count"], 0);
+    assert!(empty_scan["next_receive_address"]
+        .as_str()
+        .unwrap()
+        .starts_with("kaspa:"));
+    assert!(empty_scan["next_change_address"]
+        .as_str()
+        .unwrap()
+        .starts_with("kaspa:"));
 
     let change = change_branch_addresses(&descriptor, 0, 3, "kaspa").expect("change branch");
     assert_eq!(first_unused_change_index(&change, &[], 3), Ok(0));
@@ -220,6 +255,7 @@ fn branch_scan_and_change_index_reaches_injected_transport_after_validation() {
 
 #[test]
 fn consolidation_helpers_cover_limits_resolution_inputs_and_change() {
+    let client = fail_network_client();
     let descriptor = descriptor();
     let source0 = source_address(&descriptor, 0, 0);
     let source1 = source_address(&descriptor, 0, 1);
@@ -268,43 +304,19 @@ fn consolidation_helpers_cover_limits_resolution_inputs_and_change() {
 
     let mut outputs = vec![PlannedOutput::new(1_000_000, vec![0x51])];
     assert!(ready(append_consolidation_change(
-        change_request(
-            &descriptor,
-            &source0,
-            "kaspa",
-            0,
-            2,
-            &fail_network_client(),
-            20_000_000
-        ),
+        change_request(&descriptor, &source0, "kaspa", 0, 2, &client, 20_000_000),
         &mut outputs,
     ))
     .is_ok());
     assert_eq!(outputs.len(), 2);
     assert!(ready(append_consolidation_change(
-        change_request(
-            &descriptor,
-            &source0,
-            "kaspa",
-            0,
-            2,
-            &fail_network_client(),
-            0
-        ),
+        change_request(&descriptor, &source0, "kaspa", 0, 2, &client, 0),
         &mut outputs,
     ))
     .is_ok());
     assert_eq!(outputs.len(), 2);
     assert!(ready(append_consolidation_change(
-        change_request(
-            &descriptor,
-            &source0,
-            "kaspa",
-            0,
-            2,
-            &fail_network_client(),
-            1
-        ),
+        change_request(&descriptor, &source0, "kaspa", 0, 2, &client, 1),
         &mut outputs,
     ))
     .is_ok());
@@ -321,16 +333,8 @@ fn consolidation_helpers_cover_limits_resolution_inputs_and_change() {
     let encoded = ready(finish_consolidation(
         prepared,
         &available,
-        &consolidation_request(
-            &descriptor_text(),
-            &sources_json,
-            &source0,
-            20_000_000,
-            1_000,
-            0,
-            2,
-        ),
-        &fail_network_client(),
+        &consolidation_request(&descriptor_text(), "[]", &source0, 20_000_000, 1_000, 0, 2),
+        &client,
     ))
     .expect("finished consolidation");
     assert!(!encoded.is_empty());
@@ -338,10 +342,10 @@ fn consolidation_helpers_cover_limits_resolution_inputs_and_change() {
 
 #[test]
 fn public_async_multisig_boundaries_fail_closed_before_or_at_native_transport() {
+    let client = fail_network_client();
     let text = descriptor_text();
     let descriptor = descriptor();
     let source = source_address(&descriptor, 0, 0);
-    let client = fail_network_client();
     let mut tx_request = request(&text, &source, MultisigSelection::Automatic);
     #[cfg(not(target_arch = "wasm32"))]
     assert!(ready(create(&client, tx_request))
@@ -371,34 +375,34 @@ fn public_async_multisig_boundaries_fail_closed_before_or_at_native_transport() 
 
 #[test]
 fn static_multisig_change_policy_and_prefix_fallback_are_covered() {
+    let client = fail_network_client();
     let static_text = format!("multi(1,{},{})", "11".repeat(32), "22".repeat(32));
     let descriptor = MultisigDescriptor::parse(&static_text).expect("static descriptor");
     let keys = descriptor.public_keys_at(0, 0, 0).expect("static keys");
     let redeem = build_redeem_script(1, &keys).expect("redeem");
     let source =
         crate::contract::script::p2sh::script_to_address(&redeem, "kaspa").expect("source");
-    let client = fail_network_client();
-    let mut request_value = request(&static_text, &source, MultisigSelection::Automatic);
+    let mut static_request = request(&static_text, &source, MultisigSelection::Automatic);
     let source_path = crate::wallet::multisig::resolve_address_path(&descriptor, &source, 0)
         .expect("static path");
-    request_value.change_index_hint = u32::MAX;
+    static_request.change_index_hint = u32::MAX;
     assert_eq!(
         ready(transaction_change_index(
             &client,
             &descriptor,
             &source_path,
-            &request_value
+            &static_request
         )),
         Ok(0)
     );
-    assert!(prepare_request(&request_value).is_ok());
-    request_value.change_address =
+    assert!(prepare_request(&static_request).is_ok());
+    static_request.change_address =
         "kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e";
-    let error = match prepare_request(&request_value) {
+    let error = match prepare_request(&static_request) {
         Ok(_) => panic!("static multisig change mismatch must fail"),
         Err(error) => error,
     };
-    assert!(error.contains("multisig change"));
+    assert!(error.contains("Static multisig change"));
     assert_eq!(address_prefix("without-prefix"), "kaspa");
     assert_eq!(address_prefix("kaspatest:value"), "kaspatest");
 }
@@ -465,6 +469,7 @@ fn new_hd45_branch_error_paths_cover_overflow_invalid_address_and_zero_depth() {
 
 #[test]
 fn consolidation_finish_rejects_bad_destination_and_unresolved_material() {
+    let client = fail_network_client();
     let descriptor = descriptor();
     let source = source_address(&descriptor, 0, 0);
     let item = MultisigConsolidationSource {
@@ -484,14 +489,14 @@ fn consolidation_finish_rejects_bad_destination_and_unresolved_material() {
         &available,
         &consolidation_request(
             &descriptor_text(),
-            &sources_json,
+            "[]",
             "not-an-address",
             20_000_000,
             1_000,
             0,
-            2,
+            2
         ),
-        &fail_network_client(),
+        &client,
     ))
     .is_err());
 
@@ -578,6 +583,7 @@ fn hd45_branch_scan_covers_descriptor_parse_depth_cap_and_derivation_failures() 
 
 #[test]
 fn consolidation_covers_parse_source_and_change_derivation_failures() {
+    let client = fail_network_client();
     let descriptor = descriptor();
     let source = source_address(&descriptor, 0, 0);
     let sources_json = format!(
@@ -601,7 +607,7 @@ fn consolidation_covers_parse_source_and_change_derivation_failures() {
             "kaspa",
             u32::MAX,
             0,
-            &fail_network_client(),
+            &client,
             20_000_000,
         ),
         &mut outputs,
@@ -609,4 +615,199 @@ fn consolidation_covers_parse_source_and_change_derivation_failures() {
     .unwrap_err();
     assert!(!error.is_empty());
     assert!(outputs.is_empty());
+}
+
+#[test]
+fn mutation_boundaries_cover_change_index_material_maps_and_change_output() {
+    let client = fail_network_client();
+    let text = descriptor_text();
+    let descriptor = descriptor();
+    let source = source_address(&descriptor, 0, 0);
+    let mut req = request(&text, &source, MultisigSelection::Automatic);
+    req.change_index_hint = 3;
+    let source_path = resolve_address_path(&descriptor, &source, 0).expect("source path");
+
+    assert_eq!(
+        ready(transaction_change_index(
+            &client,
+            &descriptor,
+            &source_path,
+            &req
+        )),
+        Ok(3)
+    );
+    let (change_script, derivations) =
+        prepare_hd45_change(&descriptor, &source_path, &source, 3).expect("hd45 change");
+    assert!(change_script.len() > 1);
+    assert!(derivations.is_object() || derivations.is_array());
+    assert_ne!(derivations, serde_json::Value::Null);
+
+    let prepared = prepare_request(&req).expect("prepared");
+    let mut plan = UnsignedTransactionPlan {
+        tx_version: 0,
+        inputs: vec![crate::transaction::builder::model::PlannedInput::p2pk(
+            utxo(&source, 0x77, 0, 30_000_000),
+        )],
+        outputs: vec![
+            PlannedOutput::new(20_000_000, vec![0x51]),
+            PlannedOutput::new(9_999_000, vec![0x52]),
+        ],
+        payload: Vec::new(),
+    };
+    attach_derivation_maps(&mut plan, &prepared);
+    assert_eq!(
+        plan.inputs[0].bip32_derivations,
+        Some(prepared.source_derivations.clone())
+    );
+    assert_eq!(
+        plan.outputs[1].bip32_derivations,
+        Some(prepared.change_derivations.clone())
+    );
+    assert!(multisig_change_output(&mut plan.outputs[..1]).is_none());
+    assert!(multisig_change_output(&mut plan.outputs).is_some());
+
+    assert_eq!(consolidation_change(50_000_000, 20_001_000), Ok(29_999_000));
+    assert!(consolidation_change(1, 2).is_err());
+}
+
+#[test]
+fn consolidation_fee_rejects_each_signing_shape_mismatch_independently() {
+    let descriptor = descriptor();
+    let source0 = source_address(&descriptor, 0, 0);
+    let source1 = source_address(&descriptor, 0, 1);
+    let sources = vec![
+        MultisigConsolidationSource {
+            address: source0.clone(),
+            tx_id: "81".repeat(32),
+            index: 0,
+        },
+        MultisigConsolidationSource {
+            address: source1.clone(),
+            tx_id: "82".repeat(32),
+            index: 1,
+        },
+    ];
+    let resolved =
+        resolve_consolidation_sources(&descriptor, &sources, 0).expect("resolved sources");
+    let available = vec![
+        utxo(&source0, 0x81, 0, 30_000_000),
+        utxo(&source1, 0x82, 1, 30_000_000),
+    ];
+    let (inputs, _) = build_consolidation_inputs(&sources, &available, &resolved).expect("inputs");
+    let destination = crate::primitives::address::encode_p2pk_address(&[0x83; 32], "kaspa");
+
+    let mut sigop_mismatch = inputs.clone();
+    sigop_mismatch[1].sig_op_count = sigop_mismatch[1].sig_op_count.saturating_add(1);
+    assert_eq!(
+        consolidation_standard_fee(&descriptor, &sigop_mismatch, &destination, 0).unwrap_err(),
+        "Multisig consolidation inputs have inconsistent signing shape",
+    );
+
+    let mut redeem_len_mismatch = inputs;
+    redeem_len_mismatch[1]
+        .redeem_script
+        .as_mut()
+        .expect("redeem script")
+        .push(0x00);
+    assert_eq!(
+        consolidation_standard_fee(&descriptor, &redeem_len_mismatch, &destination, 0).unwrap_err(),
+        "Multisig consolidation inputs have inconsistent signing shape",
+    );
+}
+
+#[test]
+fn consolidation_finish_always_encodes_destination_and_change_outputs() {
+    let client = fail_network_client();
+    let descriptor = descriptor();
+    let source = source_address(&descriptor, 0, 0);
+    let destination = crate::primitives::address::encode_p2pk_address(&[0x84; 32], "kaspa");
+    let sources_json = format!(
+        "[{{\"address\":\"{}\",\"tx_id\":\"{}\",\"index\":0}}]",
+        source,
+        "84".repeat(32),
+    );
+    let prepared = prepare_consolidation(&descriptor_text(), &sources_json, 0)
+        .expect("prepared consolidation");
+    let available = vec![utxo(&source, 0x84, 0, 50_000_000)];
+    let wire = ready(finish_consolidation(
+        prepared,
+        &available,
+        &consolidation_request(&descriptor_text(), "[]", &destination, 20_000_000, 0, 0, 0),
+        &client,
+    ))
+    .expect("consolidation wire");
+
+    let envelope = hex::decode(wire).expect("outer PSKB hex");
+    assert_eq!(&envelope[..4], b"PSKB");
+    let json_hex = core::str::from_utf8(&envelope[4..]).expect("PSKB JSON hex");
+    let document: serde_json::Value =
+        serde_json::from_slice(&hex::decode(json_hex).expect("PSKB JSON bytes"))
+            .expect("PSKB JSON");
+    let outputs = document[0]["outputs"].as_array().expect("outputs");
+    assert_eq!(outputs.len(), 2);
+    assert_eq!(outputs[0]["amount"], serde_json::json!("20000000"));
+}
+
+#[test]
+fn toccata_multisig_fee_uses_final_signed_shape() {
+    let text = format!("multi_hd45(2,{KPUB_A},{KPUB_B})");
+    let descriptor = MultisigDescriptor::parse(&text).expect("2-of-2 descriptor");
+    let source = source_address(&descriptor, 0, 0);
+    let req = request(&text, &source, MultisigSelection::Automatic);
+    let prepared = prepare_request(&req).expect("prepared 2-of-2");
+
+    assert_eq!(prepared.minimum_signatures, 2);
+    assert_eq!(prepared.sig_op_count, 2);
+    assert_eq!(prepared.redeem_script.len(), 69);
+    assert_eq!(multisig_signature_script_len(2, 69), Ok(202));
+    assert_eq!(multisig_standard_fee(&prepared, 1, 0), Ok(319_400));
+    assert_eq!(multisig_standard_fee(&prepared, 1, 400_000), Ok(400_000));
+
+    // Regression: the 2-of-3 HD45 consolidation shape observed on testnet-10
+    // has compute mass 4217. A requested 400_000-sompi fee must therefore be
+    // raised to the node-standard minimum of 421_700 rather than broadcast.
+    let text = format!("multi_hd45(2,{KPUB_A},{KPUB_B},{KPUB_C})");
+    let descriptor = MultisigDescriptor::parse(&text).expect("2-of-3 descriptor");
+    let source = source_address(&descriptor, 0, 0);
+    let destination = crate::primitives::address::encode_p2pk_address(&[0x57; 32], "kaspa");
+    let mut req = request(&text, &source, MultisigSelection::Automatic);
+    req.destination_address = &destination;
+    let prepared = prepare_request(&req).expect("prepared 2-of-3 P2PK destination");
+    assert_eq!(prepared.minimum_signatures, 2);
+    assert_eq!(prepared.sig_op_count, 3);
+    assert_eq!(prepared.redeem_script.len(), 102);
+    assert_eq!(prepared.destination_script.len(), 34);
+    assert_eq!(prepared.change_script.len(), 35);
+    assert_eq!(multisig_signature_script_len(2, 102), Ok(236));
+    assert_eq!(multisig_standard_fee(&prepared, 1, 400_000), Ok(421_700));
+
+    // A P2SH destination is one byte larger and adds one script byte worth of
+    // compute mass, so the otherwise-identical shape is 4228 rather than 4217.
+    let p2sh_req = request(&text, &source, MultisigSelection::Automatic);
+    let p2sh_prepared = prepare_request(&p2sh_req).expect("prepared 2-of-3 P2SH destination");
+    assert_eq!(p2sh_prepared.destination_script.len(), 35);
+    assert_eq!(
+        multisig_standard_fee(&p2sh_prepared, 1, 400_000),
+        Ok(422_800)
+    );
+
+    let sources_json = format!(
+        "[{{\"address\":\"{}\",\"tx_id\":\"{}\",\"index\":0}}]",
+        source,
+        "93".repeat(32),
+    );
+    let sources = parse_consolidation_sources(&sources_json).expect("2-of-3 sources");
+    let resolved =
+        resolve_consolidation_sources(&descriptor, &sources, 0).expect("resolved 2-of-3 sources");
+    let available = vec![utxo(&source, 0x93, 0, 1_000_000_000)];
+    let (inputs, _) = build_consolidation_inputs(&sources, &available, &resolved)
+        .expect("2-of-3 consolidation inputs");
+    assert_eq!(
+        consolidation_standard_fee(&descriptor, &inputs, &destination, 400_000),
+        Ok(421_700),
+    );
+    assert_eq!(
+        consolidation_standard_fee(&descriptor, &inputs, &source, 400_000),
+        Ok(422_800),
+    );
 }

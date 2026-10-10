@@ -3,7 +3,7 @@ use crate::{
     transaction::builder::{
         model::{PlannedOutput, UnsignedTransactionPlan},
         planning::{amounts, plan_multisig},
-        selection::{select_automatic, select_explicit},
+        selection::{select_explicit, sort_largest_first},
     },
     transaction::interchange::pskt::pskb,
     wallet::multisig::{
@@ -70,6 +70,7 @@ pub struct MultisigTransactionRequest<'a> {
 pub(crate) struct PreparedMultisig {
     pub(crate) redeem_script: Vec<u8>,
     pub(crate) sig_op_count: u8,
+    pub(crate) minimum_signatures: u8,
     pub(crate) destination_script: Vec<u8>,
     pub(crate) change_script: Vec<u8>,
     pub(crate) source_derivations: serde_json::Value,
@@ -142,6 +143,7 @@ fn prepare_request_at_change(
     Ok(PreparedMultisig {
         redeem_script,
         sig_op_count,
+        minimum_signatures: descriptor.threshold(),
         destination_script: crate::primitives::address::address_to_script_pubkey(
             request.destination_address,
         )?,
@@ -243,12 +245,19 @@ pub(crate) fn encode_from_utxos(
     prepared: &PreparedMultisig,
     utxos: Vec<crate::chain::utxo::UtxoEntry>,
 ) -> Result<String, String> {
-    let selected = select_multisig_utxos(request, utxos)?;
+    let selected = select_multisig_utxos(request, prepared, utxos)?;
+    let fee = multisig_standard_fee(prepared, selected.len(), request.fee)?;
+    let selected_total = crate::transaction::builder::selection::checked_total(&selected)?;
+    if selected_total < amounts::checked_required(request.amount, fee)? {
+        return Err(format!(
+            "Selected multisig UTXOs do not cover the Toccata standard fee ({fee} sompi); select additional UTXOs",
+        ));
+    }
     let destination = PlannedOutput::new(request.amount, prepared.destination_script.clone());
     let (mut plan, _) = plan_multisig(
         selected,
         destination,
-        request.fee,
+        fee,
         prepared.change_script.clone(),
         &prepared.redeem_script,
         prepared.sig_op_count,
@@ -257,18 +266,103 @@ pub(crate) fn encode_from_utxos(
     pskb::encode_plan(&plan)
 }
 
+fn multisig_standard_fee(
+    prepared: &PreparedMultisig,
+    input_count: usize,
+    requested_fee: u64,
+) -> Result<u64, String> {
+    multisig_standard_fee_for_shape(
+        MultisigSigningShape {
+            minimum_signatures: prepared.minimum_signatures,
+            redeem_script_len: prepared.redeem_script.len(),
+            sig_op_count: prepared.sig_op_count,
+        },
+        input_count,
+        &[
+            prepared.destination_script.len(),
+            prepared.change_script.len(),
+        ],
+        requested_fee,
+    )
+}
+
+/// Signing shape every input of one multisig spend shares.
+#[derive(Clone, Copy)]
+pub(super) struct MultisigSigningShape {
+    pub(super) minimum_signatures: u8,
+    pub(super) redeem_script_len: usize,
+    pub(super) sig_op_count: u8,
+}
+
+/// Node-standard fee for the final signed multisig transaction: the threshold
+/// signatures plus redeem script in every input, priced at the minimum
+/// standard fee rate, and never below the caller's requested fee.
+pub(super) fn multisig_standard_fee_for_shape(
+    shape: MultisigSigningShape,
+    input_count: usize,
+    output_script_lengths: &[usize],
+    requested_fee: u64,
+) -> Result<u64, String> {
+    let input_shape = crate::transaction::mass::SignedInputShape {
+        signature_script_len: multisig_signature_script_len(
+            shape.minimum_signatures,
+            shape.redeem_script_len,
+        )?,
+        sig_op_count: shape.sig_op_count,
+    };
+    let (standard_fee, _, _) = crate::transaction::mass::estimate_non_contextual_fee_for_shape(
+        input_shape,
+        input_count,
+        output_script_lengths,
+        0,
+        crate::transaction::mass::MIN_STANDARD_FEE_RATE_SOMPI_PER_GRAM,
+    )?;
+    Ok(requested_fee.max(standard_fee))
+}
+
+/// `threshold` 65-byte signature pushes, then the redeem-script push.
+fn multisig_signature_script_len(threshold: u8, redeem_len: usize) -> Result<u64, String> {
+    let redeem_len =
+        u64::try_from(redeem_len).map_err(|_| "redeem script length exceeds u64".to_string())?;
+    let push_prefix = match redeem_len {
+        0..=75 => 1,
+        76..=255 => 2,
+        _ => 3,
+    };
+    u64::from(threshold)
+        .checked_mul(66)
+        .and_then(|value| value.checked_add(push_prefix))
+        .and_then(|value| value.checked_add(redeem_len))
+        .ok_or_else(|| "Multisig signature script exceeds supported range".to_string())
+}
+
 fn select_multisig_utxos(
     request: &MultisigTransactionRequest<'_>,
-    utxos: Vec<crate::chain::utxo::UtxoEntry>,
+    prepared: &PreparedMultisig,
+    mut utxos: Vec<crate::chain::utxo::UtxoEntry>,
 ) -> Result<Vec<crate::chain::utxo::UtxoEntry>, String> {
     if utxos.is_empty() {
         return Err("No UTXOs found for multisig address".into());
     }
     match request.selection {
-        MultisigSelection::Automatic => select_automatic(
-            utxos,
-            amounts::checked_required(request.amount, request.fee)?,
-        ),
+        MultisigSelection::Automatic => {
+            // Each added input raises the standard fee, so re-price after
+            // every selection step.
+            sort_largest_first(&mut utxos);
+            let mut selected = Vec::new();
+            let mut total = 0u64;
+            for utxo in utxos {
+                total = total
+                    .checked_add(utxo.amount)
+                    .ok_or_else(|| "UTXO total exceeds supported monetary range".to_string())?;
+                selected.push(utxo);
+                let fee = multisig_standard_fee(prepared, selected.len(), request.fee)?;
+                if total >= amounts::checked_required(request.amount, fee)? {
+                    return Ok(selected);
+                }
+            }
+            Err("Insufficient multisig funds after applying the Toccata standard fee".into())
+        }
         MultisigSelection::Explicit(indices) => select_explicit(utxos, indices),
     }
 }

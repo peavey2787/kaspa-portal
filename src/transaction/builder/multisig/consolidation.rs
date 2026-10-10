@@ -11,8 +11,8 @@ use crate::{
 };
 
 use super::{
-    address_prefix, branch::next_change_index, MultisigConsolidationRequest,
-    MULTISIG_BRANCH_SCAN_DEPTH,
+    address_prefix, branch::next_change_index, multisig_standard_fee_for_shape,
+    MultisigConsolidationRequest, MultisigSigningShape, MULTISIG_BRANCH_SCAN_DEPTH,
 };
 
 #[derive(Clone, serde::Deserialize)]
@@ -70,13 +70,19 @@ pub(super) async fn finish_consolidation(
 ) -> Result<String, String> {
     let (inputs, total) =
         build_consolidation_inputs(&prepared.sources, available, &prepared.resolved)?;
-    let required = required_total(request.amount, request.fee)?;
+    let fee = consolidation_standard_fee(
+        &prepared.descriptor,
+        &inputs,
+        request.destination_address,
+        request.fee,
+    )?;
+    let required = required_total(request.amount, fee)?;
     require_selected_total(total, required)?;
     let outputs = consolidation_outputs(
         &prepared.descriptor,
         &prepared.sources[0].address,
         request,
-        total - required,
+        consolidation_change(total, required)?,
         client,
     )
     .await?;
@@ -86,6 +92,51 @@ pub(super) async fn finish_consolidation(
         outputs,
         payload: Vec::new(),
     })
+}
+
+/// Node-standard fee for the signed consolidation: every input shares one
+/// signing shape, and the change returns to a P2SH multisig address.
+pub(super) fn consolidation_standard_fee(
+    descriptor: &MultisigDescriptor,
+    inputs: &[PlannedInput],
+    destination_address: &str,
+    requested_fee: u64,
+) -> Result<u64, String> {
+    const P2SH_SCRIPT_PUBLIC_KEY_LEN: usize = 35;
+
+    let first = inputs
+        .first()
+        .ok_or_else(|| "Multisig consolidation has no inputs".to_string())?;
+    let redeem_script_len = first
+        .redeem_script
+        .as_ref()
+        .map(Vec::len)
+        .ok_or_else(|| "Multisig consolidation input is missing redeem script".to_string())?;
+    let sig_op_count = first.sig_op_count;
+    if inputs.iter().any(|input| {
+        input.sig_op_count != sig_op_count
+            || input.redeem_script.as_ref().map(Vec::len) != Some(redeem_script_len)
+    }) {
+        return Err("Multisig consolidation inputs have inconsistent signing shape".to_string());
+    }
+    let destination_script_len =
+        crate::primitives::address::address_to_script_pubkey(destination_address)?.len();
+    multisig_standard_fee_for_shape(
+        MultisigSigningShape {
+            minimum_signatures: descriptor.threshold(),
+            redeem_script_len,
+            sig_op_count,
+        },
+        inputs.len(),
+        &[destination_script_len, P2SH_SCRIPT_PUBLIC_KEY_LEN],
+        requested_fee,
+    )
+}
+
+pub(super) fn consolidation_change(total: u64, required: u64) -> Result<u64, String> {
+    total
+        .checked_sub(required)
+        .ok_or_else(|| "selected multisig total is below required total".to_string())
 }
 
 async fn consolidation_outputs(

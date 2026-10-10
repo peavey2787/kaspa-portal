@@ -505,6 +505,7 @@ fn multisig_planning_covers_automatic_explicit_empty_and_dust_change_paths() {
     let prepared = PreparedMultisig {
         redeem_script: vec![0x51, 0xae],
         sig_op_count: 1,
+        minimum_signatures: 1,
         destination_script: vec![0x20, 0x01, 0xac],
         change_script: vec![0x20, 0x02, 0xac],
         source_derivations: serde_json::json!({}),
@@ -527,21 +528,40 @@ fn multisig_planning_covers_automatic_explicit_empty_and_dust_change_paths() {
         selection,
     };
 
+    // The Toccata fee floor grows with the fully signed input count. Keep the
+    // automatic fixture large enough that one input is insufficient while two
+    // inputs cover amount + the two-input standard fee.
     let automatic = encode_from_utxos(
         &request(MultisigSelection::Automatic),
         &prepared,
-        vec![utxo(1, 0, 80_000), utxo(2, 1, 80_000)],
+        vec![utxo(1, 0, 200_000), utxo(2, 1, 200_000)],
+    )
+    .expect("automatic multisig selection");
+    assert_eq!(
+        decode_pskb_wire(&automatic)[0]["inputs"]
+            .as_array()
+            .expect("automatic inputs")
+            .len(),
+        2,
     );
-    assert!(automatic.is_ok());
 
     // Explicit indexes are resolved after descending display-order sorting.
+    // A single 250k-sompi input covers the 100k spend plus the one-input
+    // Toccata standard fee for this synthetic 1-of-1 fixture.
     let explicit_indices = [0usize];
     let explicit = encode_from_utxos(
         &request(MultisigSelection::Explicit(&explicit_indices)),
         &prepared,
-        vec![utxo(1, 0, 50_000), utxo(2, 1, 150_000)],
+        vec![utxo(1, 0, 50_000), utxo(2, 1, 250_000)],
+    )
+    .expect("explicit multisig selection");
+    assert_eq!(
+        decode_pskb_wire(&explicit)[0]["inputs"]
+            .as_array()
+            .expect("explicit inputs")
+            .len(),
+        1,
     );
-    assert!(explicit.is_ok());
 
     assert!(encode_from_utxos(
         &request(MultisigSelection::Automatic),

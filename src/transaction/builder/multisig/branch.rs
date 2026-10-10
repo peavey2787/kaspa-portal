@@ -33,9 +33,66 @@ pub(crate) async fn scan_branch_json(
     let addresses = branch_addresses(&descriptor, cosigner, depth, address_prefix)?;
     let query = branch_query(&addresses);
     let utxos = crate::network::queries::utxos::fetch_for_addresses(client, &query).await?;
-    let by_script = branch_address_map(&addresses)?;
+    finalize_branch_scan(
+        &descriptor,
+        cosigner,
+        depth,
+        address_prefix,
+        &addresses,
+        utxos,
+    )
+}
+
+/// Summarize the scanned branches and name the first unused receive and
+/// change addresses, so wallets can display the next address directly.
+pub(super) fn finalize_branch_scan(
+    descriptor: &MultisigDescriptor,
+    cosigner: u32,
+    depth: u32,
+    address_prefix: &str,
+    addresses: &[BranchAddress],
+    utxos: Vec<crate::chain::utxo::UtxoEntry>,
+) -> Result<String, String> {
+    let by_script = branch_address_map(addresses)?;
     let summary = summarize_branch_utxos(utxos, &by_script, depth)?;
-    encode_branch_summary(summary, cosigner, depth)
+    let next_receive_address = next_branch_address(
+        descriptor,
+        cosigner,
+        0,
+        &summary.receive_used,
+        address_prefix,
+    )?;
+    let next_change_address = next_branch_address(
+        descriptor,
+        cosigner,
+        1,
+        &summary.change_used,
+        address_prefix,
+    )?;
+    encode_branch_summary(
+        summary,
+        cosigner,
+        depth,
+        &next_receive_address,
+        &next_change_address,
+    )
+}
+
+fn next_branch_address(
+    descriptor: &MultisigDescriptor,
+    cosigner: u32,
+    chain: u32,
+    used: &[bool],
+    address_prefix: &str,
+) -> Result<String, String> {
+    Ok(branch_address(
+        descriptor,
+        cosigner,
+        chain,
+        first_free(used),
+        address_prefix,
+    )?
+    .2)
 }
 
 fn require_hd45_descriptor(descriptor_text: &str) -> Result<MultisigDescriptor, String> {
@@ -171,13 +228,17 @@ pub(super) fn encode_branch_summary(
     summary: BranchSummary,
     cosigner: u32,
     depth: u32,
+    next_receive_address: &str,
+    next_change_address: &str,
 ) -> Result<String, String> {
     serde_json::to_string(&serde_json::json!({
         "balance_sompi": summary.balance.to_string(),
         "utxo_count": summary.labelled.len(),
         "utxos": summary.labelled,
         "next_receive_index": first_free(&summary.receive_used),
+        "next_receive_address": next_receive_address,
         "next_change_index": first_free(&summary.change_used),
+        "next_change_address": next_change_address,
         "cosigner_index": cosigner,
         "depth": depth,
     }))

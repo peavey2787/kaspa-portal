@@ -122,14 +122,49 @@ fn mass_validity(compute_mass: u64, transient_mass: u64, storage_mass: u64) -> [
     [compute, transient, storage, compute && transient && storage]
 }
 
+/// Final signed shape shared by every input of a planned transaction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct SignedInputShape {
+    pub(crate) signature_script_len: u64,
+    pub(crate) sig_op_count: u8,
+}
+
+impl SignedInputShape {
+    /// One Schnorr signature push spending a P2PK output.
+    pub(crate) const P2PK: Self = Self {
+        signature_script_len: 66,
+        sig_op_count: 1,
+    };
+}
+
 pub(crate) fn estimate_non_contextual_fee(
     input_count: usize,
     output_script_lengths: &[usize],
     payload_len: usize,
     fee_rate_sompi_per_gram: u64,
 ) -> Result<(u64, u64, u64), String> {
-    let estimated_serialized_bytes =
-        estimated_plan_size(input_count, output_script_lengths, payload_len)?;
+    estimate_non_contextual_fee_for_shape(
+        SignedInputShape::P2PK,
+        input_count,
+        output_script_lengths,
+        payload_len,
+        fee_rate_sompi_per_gram,
+    )
+}
+
+pub(crate) fn estimate_non_contextual_fee_for_shape(
+    input_shape: SignedInputShape,
+    input_count: usize,
+    output_script_lengths: &[usize],
+    payload_len: usize,
+    fee_rate_sompi_per_gram: u64,
+) -> Result<(u64, u64, u64), String> {
+    let estimated_serialized_bytes = estimated_plan_size(
+        input_shape.signature_script_len,
+        input_count,
+        output_script_lengths,
+        payload_len,
+    )?;
     let script_mass = output_script_lengths
         .iter()
         .try_fold(0u64, |total, length| {
@@ -147,10 +182,14 @@ pub(crate) fn estimate_non_contextual_fee(
         })?;
     let input_count_u64 =
         u64::try_from(input_count).map_err(|_| "input count exceeds u64".to_string())?;
+    let sig_op_mass = input_count_u64
+        .checked_mul(u64::from(input_shape.sig_op_count))
+        .and_then(|value| value.checked_mul(MASS_PER_SIG_OP))
+        .ok_or_else(|| "signature-operation mass overflow".to_string())?;
     let compute = estimated_serialized_bytes
         .checked_mul(MASS_PER_TX_BYTE)
         .and_then(|value| value.checked_add(script_mass))
-        .and_then(|value| value.checked_add(input_count_u64.saturating_mul(MASS_PER_SIG_OP)))
+        .and_then(|value| value.checked_add(sig_op_mass))
         .ok_or_else(|| "compute mass overflow".to_string())?;
     let transient = estimated_serialized_bytes
         .checked_mul(TRANSIENT_BYTE_TO_MASS_FACTOR)
@@ -234,20 +273,22 @@ fn estimated_serialized_size(transaction: &ConsensusTransaction) -> Result<u64, 
 }
 
 fn estimated_plan_size(
+    signature_script_len: u64,
     input_count: usize,
     output_script_lengths: &[usize],
     payload_len: usize,
 ) -> Result<u64, String> {
     const BASE_TRANSACTION_BYTES: u64 = 2 + 8 + 8 + 8 + 20 + 8 + 32 + 8;
-    const INPUT_BYTES: u64 = 32 + 4 + 8 + 66 + 8;
+    const INPUT_FIXED_BYTES: u64 = 32 + 4 + 8 + 8;
     const OUTPUT_FIXED_BYTES: u64 = 8 + 2 + 8;
 
     let input_count =
         u64::try_from(input_count).map_err(|_| "input count exceeds u64".to_string())?;
     let payload_len =
         u64::try_from(payload_len).map_err(|_| "payload length exceeds u64".to_string())?;
-    let input_bytes = input_count
-        .checked_mul(INPUT_BYTES)
+    let input_bytes = INPUT_FIXED_BYTES
+        .checked_add(signature_script_len)
+        .and_then(|value| value.checked_mul(input_count))
         .ok_or_else(|| "transaction size overflow".to_string())?;
     let mut size = BASE_TRANSACTION_BYTES
         .checked_add(payload_len)

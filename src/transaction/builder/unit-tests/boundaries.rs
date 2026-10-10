@@ -1,4 +1,7 @@
-use crate::transaction::builder::{model::PlannedOutput, planning::amounts::storage_mass_estimate};
+use crate::transaction::builder::{
+    model::PlannedOutput,
+    planning::amounts::{storage_mass_estimate, utxo_plurality},
+};
 
 #[test]
 fn consolidation_rejects_empty_and_singleton_sets_before_sorting() {
@@ -131,4 +134,126 @@ fn storage_mass_fee_converges_for_non_dust_change() {
             .expect("non-dust-change fee"),
         5_884_120
     );
+}
+
+#[test]
+fn automatic_selection_and_amount_helpers_cover_error_and_tie_boundaries() {
+    use crate::transaction::builder::planning::amounts::{checked_required, checked_sum, is_dust};
+
+    assert!(is_dust(0));
+    assert!(is_dust(1));
+    assert!(!is_dust(20_000_000));
+    assert_eq!(checked_required(10, 5), Ok(15));
+    assert!(checked_required(u64::MAX, 1).is_err());
+    assert_eq!(checked_sum([1, 2, 3]), Ok(6));
+    assert!(checked_sum([u64::MAX, 1]).is_err());
+
+    assert!(super::super::selection::select_automatic_with_limit(
+        vec![super::utxo(0x10, 0, 1)],
+        1,
+        0,
+    )
+    .unwrap_err()
+    .contains("at least 1"));
+
+    let exact = super::super::selection::select_automatic_with_limit(
+        vec![super::utxo(0x10, 0, 5), super::utxo(0x11, 1, 10)],
+        10,
+        1,
+    )
+    .expect("largest input exactly satisfies target");
+    assert_eq!(exact.len(), 1);
+    assert_eq!(exact[0].amount, 10);
+
+    assert!(super::super::selection::select_automatic_with_limit(
+        vec![super::utxo(0x10, 0, u64::MAX), super::utxo(0x11, 1, 1)],
+        u64::MAX,
+        2,
+    )
+    .is_ok());
+}
+
+#[test]
+fn selection_display_and_checked_total_cover_ordering_and_overflow() {
+    let mut values = vec![
+        super::utxo(0x22, 2, 10),
+        super::utxo(0x11, 1, 10),
+        super::utxo(0x33, 0, 20),
+    ];
+    super::super::selection::sort_for_display(&mut values);
+    assert_eq!(values[0].amount, 20);
+    assert_eq!(values[1].tx_id, "11".repeat(32));
+    assert_eq!(values[2].tx_id, "22".repeat(32));
+
+    assert_eq!(
+        super::super::selection::checked_total(&values).expect("checked total"),
+        40
+    );
+    assert!(super::super::selection::checked_total(&[
+        super::utxo(0x44, 0, u64::MAX),
+        super::utxo(0x55, 1, 1),
+    ])
+    .is_err());
+
+    let selected = super::super::selection::select_explicit(values.clone(), &[])
+        .expect("empty explicit selection is representable");
+    assert!(selected.is_empty());
+    assert!(super::super::selection::select_explicit(values, &[99]).is_err());
+}
+
+#[test]
+fn storage_mass_boundaries_cover_relaxed_arithmetic_zero_and_overflow_paths() {
+    assert_eq!(storage_mass_estimate(&[], &[]).expect("empty mass"), 0);
+    assert_eq!(
+        storage_mass_estimate(&[(0, 1)], &[(0, 1)]).expect("zero amounts"),
+        0
+    );
+
+    let arithmetic = storage_mass_estimate(
+        &[(100_000_000, 2), (50_000_000, 2)],
+        &[(25_000_000, 2), (25_000_000, 2)],
+    )
+    .expect("arithmetic branch");
+    assert_eq!(arithmetic, 213_336);
+
+    assert!(storage_mass_estimate(&[(1, u64::MAX), (1, 1)], &[]).is_err());
+    assert!(storage_mass_estimate(&[], &[(1, u64::MAX), (1, 1)]).is_err());
+    assert!(storage_mass_estimate(&[(1, u64::MAX)], &[(1, 1)]).is_err());
+}
+
+#[test]
+fn utxo_plurality_counts_covenant_bytes_across_the_storage_unit_boundary() {
+    // 63 fixed bytes + 6 script bytes fit in one 100-byte storage unit.
+    assert_eq!(utxo_plurality(6, false), 1);
+    // A 32-byte covenant id pushes the same UTXO to 101 bytes => two units.
+    assert_eq!(utxo_plurality(6, true), 2);
+}
+
+#[test]
+fn multisig_standard_fee_shape_covers_push_prefix_and_requested_fee_boundaries() {
+    use super::super::multisig::{multisig_standard_fee_for_shape, MultisigSigningShape};
+
+    let fee = |minimum_signatures, redeem_script_len, sig_op_count, inputs, requested| {
+        multisig_standard_fee_for_shape(
+            MultisigSigningShape {
+                minimum_signatures,
+                redeem_script_len,
+                sig_op_count,
+            },
+            inputs,
+            &[34, 34],
+            requested,
+        )
+    };
+    let fee_75 = fee(1, 75, 1, 1, 0).expect("75-byte redeem fee");
+    let fee_76 = fee(1, 76, 1, 1, 0).expect("76-byte redeem fee");
+    let fee_255 = fee(2, 255, 2, 2, 0).expect("255-byte redeem fee");
+    let fee_256 = fee(2, 256, 2, 2, 0).expect("256-byte redeem fee");
+    // Each push-prefix step adds one signature-script byte per input.
+    assert_eq!(fee_76 - fee_75, 2 * 100);
+    assert_eq!(fee_256 - fee_255, 2 * 2 * 100);
+
+    let requested = fee_256.saturating_add(1_000_000);
+    assert_eq!(fee(2, 256, 2, 2, requested), Ok(requested));
+    assert!(fee(u8::MAX, usize::MAX, u8::MAX, usize::MAX, 0).is_err());
 }

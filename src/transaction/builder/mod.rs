@@ -24,7 +24,7 @@ mod standard;
 pub use multisig::{
     create as create_multisig, create_consolidation as create_multisig_consolidation,
     scan_branch as scan_multisig_branch, MultisigConsolidationRequest, MultisigSelection,
-    MultisigTransactionRequest,
+    MultisigTransactionRequest, MULTISIG_BRANCH_SCAN_DEPTH,
 };
 #[cfg(feature = "std")]
 pub use standard::{
