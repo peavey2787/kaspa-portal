@@ -250,6 +250,37 @@ fn attach_derivation(
     encode(format, &root)
 }
 
+/// Insert the only signature of a single-input PSKT whose input is still
+/// unsigned, as produced by an out-of-band signing protocol.
+pub(crate) fn attach_sole_signature(
+    pskt_hex: &str,
+    public_key: &[u8; 33],
+    signature: &[u8; 64],
+) -> Result<String, String> {
+    let (format, mut root) = decode(pskt_hex)?;
+    let inputs = document_mut(&mut root, format)?
+        .get_mut("inputs")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "missing inputs".to_string())?;
+    if inputs.len() != 1 {
+        return Err(format!(
+            "a sole signature needs exactly one input, got {}",
+            inputs.len()
+        ));
+    }
+    let input = inputs[0]
+        .as_object_mut()
+        .ok_or_else(|| "inputs[0] not object".to_string())?;
+    let signatures = object_field_mut(input, "partialSigs")?;
+    if !signatures.is_empty() {
+        return Err("input already carries a signature".to_string());
+    }
+    let mut entry = Map::new();
+    entry.insert("schnorr".to_string(), Value::String(hex::encode(signature)));
+    signatures.insert(hex::encode(public_key), Value::Object(entry));
+    encode(format, &root)
+}
+
 fn object_field_mut<'a>(
     object: &'a mut Map<String, Value>,
     key: &str,

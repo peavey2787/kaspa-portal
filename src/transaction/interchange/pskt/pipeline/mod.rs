@@ -118,6 +118,16 @@ pub fn attach_input_derivation(
     wire::attach_input_derivation(pskt_hex, input_index, derivation)
 }
 
+/// Insert the only signature of a single-input PSKT whose input is still
+/// unsigned (for example a Private Swap claim completed out of band).
+pub fn attach_sole_signature(
+    pskt_hex: &str,
+    public_key: &[u8; 33],
+    signature: &[u8; 64],
+) -> Result<String, String> {
+    wire::attach_sole_signature(pskt_hex, public_key, signature)
+}
+
 /// Record the signer's receive/change derivation for one output.
 pub fn attach_output_derivation(
     pskt_hex: &str,

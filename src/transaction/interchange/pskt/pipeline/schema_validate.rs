@@ -224,7 +224,26 @@ fn validate_global_semantics(
 ) -> Result<(), String> {
     validate_pskt_version(global)?;
     validate_transaction_version(global)?;
+    validate_covenant_branch(global)?;
     validate_declared_counts(global, input_len, output_len)
+}
+
+/// Legacy relay branch hints name one of the signer's specialized covenant
+/// routes; anything else is rejected rather than silently ignored.
+fn validate_covenant_branch(global: &Map<String, Value>) -> Result<(), String> {
+    const ROUTES: [&str; 5] = [
+        "owner",
+        "owner-time",
+        "beneficiary",
+        "savings",
+        "oracle-v1-claim",
+    ];
+    match global.get("covenantBranch") {
+        None | Some(Value::Null) => Ok(()),
+        Some(Value::String(branch)) if ROUTES.contains(&branch.as_str()) => Ok(()),
+        Some(Value::String(branch)) => Err(format!("unsupported global.covenantBranch: {branch}")),
+        Some(_) => Err("global.covenantBranch must be a string or null".to_string()),
+    }
 }
 
 fn validate_pskt_version(global: &Map<String, Value>) -> Result<(), String> {

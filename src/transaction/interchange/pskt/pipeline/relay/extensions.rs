@@ -172,6 +172,11 @@ pub(crate) fn parse_explicit_covenant_binding(
             ))
         }
     };
+    if binding.len() != 2 {
+        return Err(format!(
+            "output[{position}] covenantBinding must contain only authorizingInput and covenantId"
+        ));
+    }
     let authorizing = parse_authorizing_input(binding, position, input_count)?;
     let id = parse_explicit_covenant_id(binding, position)?;
     Ok(Some((authorizing, id)))
