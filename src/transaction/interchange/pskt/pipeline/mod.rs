@@ -33,7 +33,7 @@ pub use verified::{
     VerifiedCovenantRoute, VerifiedInput, VerifiedOutput, VerifiedSignature, VerifiedTransaction,
     VerifiedWitnessPlan,
 };
-pub(crate) use wire::{decode_lower_hex, parse_derivation};
+pub(crate) use wire::{decode_lower_hex, parse_derivation, SIGNER_DERIVATION_FIELD};
 pub use wire::{MAX_PSKT_JSON_BYTES, MAX_PSKT_WIRE_HEX_CHARS};
 
 /// Translate a PSKT/PSKB into the compact KSPT the signer reviews.

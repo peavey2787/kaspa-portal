@@ -246,7 +246,7 @@ fn attach_derivation(
         "index".to_string(),
         Value::String(derivation.index.to_string()),
     );
-    proprietaries.insert("kassignerDerivation".to_string(), Value::Object(hint));
+    proprietaries.insert(SIGNER_DERIVATION_FIELD.to_string(), Value::Object(hint));
     encode(format, &root)
 }
 
@@ -267,11 +267,14 @@ fn object_field_mut<'a>(
         .ok_or_else(|| format!("{key} object normalization failed"))
 }
 
+/// Proprietary field carrying the signer-wallet derivation hint.
+pub(crate) const SIGNER_DERIVATION_FIELD: &str = "kassignerDerivation";
+
 pub(crate) fn parse_derivation(value: &Value) -> Result<Option<(u8, u32)>, String> {
     let map = value
         .as_object()
         .ok_or_else(|| "proprietaries must be an object".to_string())?;
-    let Some(value) = map.get("kassignerDerivation") else {
+    let Some(value) = map.get(SIGNER_DERIVATION_FIELD) else {
         return Ok(None);
     };
     let hint = value

@@ -3,7 +3,8 @@ use crate::alloc_prelude::*;
 use serde_json::{json, Value};
 
 use crate::{
-    transaction::builder::model::PlannedInput, transaction::interchange::pskt::pskb::PskbOutput,
+    transaction::builder::model::PlannedInput,
+    transaction::interchange::pskt::{pipeline, pskb::PskbOutput},
 };
 
 pub fn input_value(input: &PlannedInput) -> Value {
@@ -45,12 +46,14 @@ pub fn output_value(output: &PskbOutput, include_covenant_binding: bool) -> Valu
         }),
         None => Value::Null,
     };
-    let proprietaries = match output.derivation_hint {
-        Some((branch, index)) => json!({
-            "kaspaPortalDerivation": { "branch": branch, "index": index.to_string() }
-        }),
-        None => json!({}),
-    };
+    let mut proprietaries = serde_json::Map::new();
+    if let Some((branch, index)) = output.derivation_hint {
+        proprietaries.insert(
+            pipeline::SIGNER_DERIVATION_FIELD.to_string(),
+            json!({ "branch": branch, "index": index.to_string() }),
+        );
+    }
+    let proprietaries = Value::Object(proprietaries);
 
     if include_covenant_binding {
         json!({

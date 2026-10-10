@@ -59,6 +59,45 @@ fn standard_pskb_relays_to_compact_kspt_with_explicit_native_subnetwork() {
 }
 
 #[test]
+fn change_derivation_hint_survives_the_pipeline_relay() {
+    let plan = UnsignedTransactionPlan::standard(
+        vec![UtxoEntry {
+            tx_id: "55".repeat(32),
+            index: 0,
+            amount: 50_000_000,
+            script_public_key: vec![0x20; 34],
+            block_daa_score: 1,
+            covenant_id: None,
+        }],
+        vec![PlannedOutput::new(49_000_000, vec![0x21; 34]).with_derivation(1, 7)],
+    );
+    let wire_hex = super::encode_plan(&plan).expect("encode");
+    let wire = hex::decode(&wire_hex).expect("outer hex");
+    let body = hex::decode(&wire[4..]).expect("body");
+    let value: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    // The builder writes the hint under the field the pipeline reads.
+    assert_eq!(
+        crate::transaction::interchange::pskt::pipeline::parse_derivation(
+            &value[0]["outputs"][0]["proprietaries"]
+        ),
+        Ok(Some((1, 7)))
+    );
+
+    // The relay carries the hint: the same plan without it relays differently.
+    let relay = |plan: &UnsignedTransactionPlan| {
+        crate::transaction::interchange::pskt::pipeline::encode_pskt(
+            &super::encode_plan(plan).expect("encode"),
+            crate::primitives::address::KaspaNetwork::Testnet,
+            crate::transaction::interchange::kspt::wire::Limits::grammar(),
+        )
+        .expect("relay")
+    };
+    let mut unhinted = plan.clone();
+    unhinted.outputs[0].derivation_hint = None;
+    assert_ne!(relay(&plan), relay(&unhinted));
+}
+
+#[test]
 fn multisig_redeem_script_is_carried_in_the_pskb_input() {
     let plan = UnsignedTransactionPlan::multisig(
         vec![UtxoEntry {
