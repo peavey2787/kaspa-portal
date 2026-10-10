@@ -1,9 +1,8 @@
-use k256::schnorr::SigningKey;
 use serde_json::{json, Value};
 
 use super::super::test_support::{
-    decode, document, encode, find_pubkey_position, parse_derivation, parse_ms45,
-    parse_multisig_redeem, sighash_all_for_pskt, Format, InputFields,
+    decode, document, find_pubkey_position, multisig as cryptographic_multisig, parse_derivation,
+    parse_ms45, parse_multisig_redeem, pskb, sign_first_input, xonly, Format, InputFields,
 };
 use super::{encode_pskt, merge_signed_kspt, Network};
 
@@ -164,12 +163,42 @@ fn canonical_relay_and_merge_cover_multisig_metadata_and_signature_ordering() {
     });
     let original = encode_pskb(original_doc.clone());
 
-    let signed_doc = sign_document(original_doc, &[0x33, 0x11]);
-    let signed_source = encode_pskb(signed_doc);
+    let signed_doc = sign_first_input(original_doc, &[0x33, 0x11]);
+    let signed_source = encode_pskb(signed_doc.clone());
     let signed_kspt = encode_pskt(&signed_source, Network::Mainnet).expect("signed KSPT");
     let merged =
         merge_signed_kspt(&original, &signed_kspt, Network::Mainnet).expect("merge multisig");
     assert!(merge_signed_kspt(&original, b"BAD", Network::Mainnet).is_err());
+
+    // A forged signature in the returned KSPT is refused at merge time.
+    let signature = signed_doc["inputs"][0]["partialSigs"]
+        .as_object()
+        .and_then(|partials| partials.values().next())
+        .and_then(|entry| entry["schnorr"].as_str())
+        .map(|hex_text| hex::decode(hex_text).expect("signature hex"))
+        .expect("first partial signature");
+    let at = signed_kspt
+        .windows(64)
+        .position(|window| window == signature.as_slice())
+        .expect("signature inside KSPT");
+    let mut forged = signed_kspt.clone();
+    forged[at] ^= 0x01;
+    assert!(merge_signed_kspt(&original, &forged, Network::Mainnet).is_err());
+    // So is one already present in the original PSKT.
+    let mut forged_original = signed_doc;
+    let partials = forged_original["inputs"][0]["partialSigs"]
+        .as_object_mut()
+        .expect("partials");
+    let key = partials.keys().next().expect("signer").clone();
+    let mut bad = signature;
+    bad[0] ^= 0x01;
+    partials[&key]["schnorr"] = json!(hex::encode(bad));
+    assert!(merge_signed_kspt(
+        &encode_pskb(forged_original),
+        &signed_kspt,
+        Network::Mainnet
+    )
+    .is_err());
     let (format, root) = super::super::test_support::decode(&merged).expect("decode merged");
     let doc = document(&root, format).expect("merged document");
     assert_eq!(
@@ -180,7 +209,7 @@ fn canonical_relay_and_merge_cover_multisig_metadata_and_signature_ordering() {
     let mut p2pk_doc = base_document(json!({}), None);
     p2pk_doc["inputs"][0]["utxoEntry"]["scriptPublicKey"] =
         json!(format!("000020{}ac", hex::encode(xonly(0x11))));
-    let p2pk_signed = encode_pskb(sign_document(p2pk_doc, &[0x11]));
+    let p2pk_signed = encode_pskb(sign_first_input(p2pk_doc, &[0x11]));
     assert!(!encode_pskt(&p2pk_signed, Network::Mainnet)
         .expect("P2PK signatures")
         .is_empty());
@@ -188,7 +217,7 @@ fn canonical_relay_and_merge_cover_multisig_metadata_and_signature_ordering() {
     let mut covenant_redeem = vec![0x20];
     covenant_redeem.extend_from_slice(&xonly(0x11));
     covenant_redeem.push(0xac);
-    let covenant_signed = encode_pskb(sign_document(
+    let covenant_signed = encode_pskb(sign_first_input(
         base_document(json!({}), Some(&covenant_redeem)),
         &[0x11],
     ));
@@ -216,7 +245,7 @@ fn canonical_merge_covers_generic_covenant_signature_binding() {
         json!({"suppliedMask": "1", "suppliedTrueMask": "1"});
     let original = encode_pskb(original_doc.clone());
 
-    let signed_source = encode_pskb(sign_document(original_doc, &[owner]));
+    let signed_source = encode_pskb(sign_first_input(original_doc, &[owner]));
     let signed_kspt = encode_pskt(&signed_source, Network::Mainnet).expect("signed covenant KSPT");
     let merged = merge_signed_kspt(&original, &signed_kspt, Network::Mainnet)
         .expect("merge generic covenant signature");
@@ -341,41 +370,6 @@ fn relay_persistent_vault_detection_covers_absent_false_true_and_invalid_metadat
         .contains("persistentVault must be boolean"));
 }
 
-fn xonly(marker: u8) -> [u8; 32] {
-    let signing = SigningKey::from_bytes(&[marker; 32]).expect("test signing key");
-    signing.verifying_key().to_bytes().into()
-}
-
-fn cryptographic_multisig(keys: &[u8], threshold: u8) -> Vec<u8> {
-    let mut script = vec![0x50 + threshold];
-    for key in keys {
-        script.push(0x20);
-        script.extend_from_slice(&xonly(*key));
-    }
-    script.push(0x50 + u8::try_from(keys.len()).expect("test multisig key count"));
-    script.push(0xae);
-    script
-}
-
-fn sign_document(mut document: Value, signers: &[u8]) -> Value {
-    let wire = encode_pskb(document.clone());
-    let digest = sighash_all_for_pskt(&wire, Network::Mainnet, 0).expect("test sighash");
-    let partials = document["inputs"][0]["partialSigs"]
-        .as_object_mut()
-        .expect("partialSigs object");
-    for marker in signers {
-        let signing = SigningKey::from_bytes(&[*marker; 32]).expect("test signing key");
-        let signature = signing
-            .sign_raw(&digest, &[0u8; 32])
-            .expect("test signature");
-        partials.insert(
-            format!("02{}", hex::encode(signing.verifying_key().to_bytes())),
-            json!({"schnorr": hex::encode(signature.to_bytes())}),
-        );
-    }
-    document
-}
-
 fn multisig(keys: &[u8], threshold: u8) -> Vec<u8> {
     let mut script = vec![0x50 + threshold];
     for key in keys {
@@ -426,5 +420,5 @@ fn base_document(partials: Value, redeem: Option<&[u8]>) -> Value {
 }
 
 fn encode_pskb(document: Value) -> String {
-    encode(Format::Pskb, &json!([document])).expect("encode PSKB")
+    pskb(&document)
 }

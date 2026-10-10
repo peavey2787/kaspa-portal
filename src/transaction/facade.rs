@@ -162,7 +162,10 @@ impl TransactionApi {
         wire_hex: &str,
         fee_rate_sompi_per_gram: u64,
     ) -> Result<crate::transaction::mass::TransactionAnalysis> {
-        crate::transaction::mass::analyze_pskb(wire_hex, fee_rate_sompi_per_gram)
+        verify_for_broadcast(wire_hex)
+            .and_then(|verified| {
+                crate::transaction::mass::analyze_verified(&verified, fee_rate_sompi_per_gram)
+            })
             .map_err(Error::Transaction)
     }
 
@@ -171,8 +174,8 @@ impl TransactionApi {
     }
 
     pub fn finalize(&self, wire_hex: &str) -> Result<ConsensusTransaction> {
-        pskt::finalize_to_consensus(wire_hex)
-            .map(|transaction| transaction.into_consensus_transaction())
+        verify_for_broadcast(wire_hex)
+            .and_then(|verified| verified.to_consensus())
             .map_err(Error::Transaction)
     }
 
@@ -247,3 +250,13 @@ fn finite_fee_rate(value: f64) -> Option<u64> {
     }
     Some(value.ceil() as u64)
 }
+
+fn verify_for_broadcast(
+    wire_hex: &str,
+) -> core::result::Result<pskt::pipeline::VerifiedTransaction, String> {
+    pskt::pipeline::verify_for_broadcast(wire_hex, kspt::wire::Limits::grammar())
+}
+
+#[cfg(test)]
+#[path = "unit-tests/facade.rs"]
+mod unit_tests;

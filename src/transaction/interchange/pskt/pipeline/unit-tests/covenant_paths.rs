@@ -3,7 +3,7 @@
 use k256::schnorr::SigningKey;
 use serde_json::{json, Value};
 
-use super::super::test_support::{encode, sighash_all_for_pskt, Format};
+use super::super::test_support::{pskb, sighash_all_for_pskt, xonly};
 use super::{finalize_json, Network};
 
 const OP_IF: u8 = 0x63;
@@ -11,11 +11,6 @@ const OP_ELSE: u8 = 0x67;
 const OP_ENDIF: u8 = 0x68;
 const OP_CHECKSIG: u8 = 0xac;
 const OP_CHECKSIGVERIFY: u8 = 0xad;
-
-fn xonly(marker: u8) -> [u8; 32] {
-    let signing = SigningKey::from_bytes(&[marker; 32]).expect("test signing key");
-    signing.verifying_key().to_bytes().into()
-}
 
 fn key(script: &mut Vec<u8>, marker: u8, check: u8) {
     script.push(0x20);
@@ -56,10 +51,6 @@ fn document(redeem: &[u8], mask: u16, truth: u16) -> Value {
         }],
         "outputs": [{"amount": "90000", "scriptPublicKey": "000051", "covenantBinding": null}]
     })
-}
-
-fn pskb(document: &Value) -> String {
-    encode(Format::Pskb, &json!([document])).expect("encode PSKB")
 }
 
 /// Sign with `marker` and return the document plus the 65-byte signature push.
@@ -168,4 +159,108 @@ fn signatures_outside_the_selected_path_or_incomplete_selectors_never_finalize()
     // A path reaching a multisig check has no generic plan.
     let multisig_path = [OP_IF, 0xae, OP_ELSE, 0x51, OP_ENDIF];
     assert!(signature_script(&document(&multisig_path, 1, 1)).is_err());
+}
+
+fn p2sh(redeem: &[u8]) -> Vec<u8> {
+    let hash = blake2b_simd::Params::new().hash_length(32).hash(redeem);
+    let mut script = vec![0xaa, 0x20];
+    script.extend_from_slice(hash.as_bytes());
+    script.push(0x87);
+    script
+}
+
+/// Decode a builder-encoded PSKB into its single PSKT document.
+fn planned_document(wire: &str) -> Value {
+    let (format, root) = super::super::test_support::decode(wire).expect("decode PSKB");
+    super::super::test_support::document(&root, format)
+        .expect("document")
+        .clone()
+}
+
+#[test]
+fn builder_planned_global_allowance_paths_finalize_through_the_verified_pipeline() {
+    use crate::{
+        chain::utxo::UtxoEntry,
+        contract::covenant::build_global_allowance_script,
+        transaction::builder::pskb::{
+            encode_wire, plan_global_thread_withdrawal, GlobalThreadPolicy,
+            GlobalThreadWithdrawalRequest,
+        },
+    };
+
+    let (owner, beneficiary) = (0x61, 0x62);
+    let redeem =
+        build_global_allowance_script(&xonly(owner), &xonly(beneficiary), 5_000_000, 0, 0, &[7; 8]);
+    let covenant_spk = p2sh(&redeem);
+    let thread = UtxoEntry {
+        tx_id: "22".repeat(32),
+        index: 7,
+        amount: 100_000_000,
+        script_public_key: covenant_spk.clone(),
+        block_daa_score: 1,
+        covenant_id: None,
+    };
+    let policy = GlobalThreadPolicy::allowance(0);
+
+    let withdrawal = plan_global_thread_withdrawal(GlobalThreadWithdrawalRequest {
+        thread_utxos: core::slice::from_ref(&thread),
+        covenant_script_public_key: &covenant_spk,
+        destination_script_public_key: &[0x51],
+        redeem_script: &redeem,
+        covenant_id: &[0x24; 32],
+        withdrawal: 2_000_000,
+        fee: 1_000_000,
+        csv_sequence: 0,
+        policy: &policy,
+    })
+    .expect("withdrawal plan");
+    let document = planned_document(&encode_wire(&withdrawal.plan).expect("wire"));
+    let (beneficiary_document, signature) = signed(document, beneficiary);
+    // Beneficiary: signature, then the outer ELSE selector; the inner
+    // continuation branch is computed by the script and needs no selector.
+    let mut expected = signature;
+    expected.push(0x00);
+    assert_eq!(
+        signature_script(&beneficiary_document),
+        Ok(with_redeem(expected, &redeem))
+    );
+
+    // The owner's free reclaim path is the outer IF.
+    let mut owner_document = planned_document(&encode_wire(&withdrawal.plan).expect("wire"));
+    owner_document["inputs"][0]["covenantExecution"] =
+        json!({"suppliedMask": "3", "suppliedTrueMask": "1"});
+    let (signed_owner, owner_signature) = signed(owner_document, owner);
+    let mut expected = owner_signature;
+    expected.push(0x51);
+    assert_eq!(
+        signature_script(&signed_owner),
+        Ok(with_redeem(expected, &redeem))
+    );
+}
+
+#[test]
+fn a_path_needing_two_signatures_is_incomplete_with_one() {
+    use crate::primitives::address::KaspaNetwork;
+
+    // <a> CHECKSIGVERIFY <b> CHECKSIG: both keys sit on the only path.
+    let mut redeem = Vec::new();
+    key(&mut redeem, 0x46, OP_CHECKSIGVERIFY);
+    key(&mut redeem, 0x47, OP_CHECKSIG);
+    let unsigned = document(&redeem, 0, 0);
+    let (one, _) = signed(unsigned.clone(), 0x46);
+    let complete = |document: &Value| {
+        super::super::is_complete(
+            &pskb(document),
+            KaspaNetwork::Mainnet,
+            super::SIGNER_TEST_LIMITS,
+        )
+    };
+    assert_eq!(complete(&one), Ok(false));
+    assert!(signature_script(&one).is_err());
+
+    let both = crate::transaction::interchange::pskt::pipeline::test_support::sign_first_input(
+        unsigned,
+        &[0x46, 0x47],
+    );
+    assert_eq!(complete(&both), Ok(true));
 }

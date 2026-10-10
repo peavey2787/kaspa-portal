@@ -15,12 +15,6 @@ pub(crate) enum ErrorStyle {
     Review,
 }
 
-#[derive(Clone, Copy)]
-enum PskbShapeStyle {
-    Standard,
-    Review,
-}
-
 /// Detect the outer PSKT/PSKB wire envelope without decoding the payload.
 pub fn detect_format_hex(hex_str: &str) -> PsktFormat {
     if hex_str.len() < 8 {
@@ -96,26 +90,17 @@ pub(crate) fn decode_root_for_review(wire_hex: &str) -> Result<(PsktFormat, Valu
     decode_root_with_style(wire_hex, ErrorStyle::Review)
 }
 
-fn validate_single_pskt(
-    root: &Value,
-    format: PsktFormat,
-    style: PskbShapeStyle,
-) -> Result<(), String> {
+fn validate_single_pskt(root: &Value, format: PsktFormat) -> Result<(), String> {
     match format {
         PsktFormat::Pskb => {
-            let entries = root.as_array().ok_or_else(|| match style {
-                PskbShapeStyle::Standard => "PSKB not array".to_string(),
-                PskbShapeStyle::Review => "PSKB body is not an array".to_string(),
-            })?;
+            let entries = root
+                .as_array()
+                .ok_or_else(|| "PSKB body is not an array".to_string())?;
             if entries.len() != 1 {
-                return Err(match style {
-                    PskbShapeStyle::Standard => {
-                        format!("PSKB must have 1 entry, got {}", entries.len())
-                    }
-                    PskbShapeStyle::Review => {
-                        format!("PSKB must wrap exactly 1 PSKT, got {}", entries.len())
-                    }
-                });
+                return Err(format!(
+                    "PSKB must wrap exactly 1 PSKT, got {}",
+                    entries.len()
+                ));
             }
             Ok(())
         }
@@ -124,43 +109,15 @@ fn validate_single_pskt(
     }
 }
 
-fn validated_pskt(
-    root: &Value,
-    format: PsktFormat,
-    style: PskbShapeStyle,
-) -> Result<&Value, String> {
-    validate_single_pskt(root, format, style)?;
-    match format {
-        PsktFormat::Pskb => root
-            .as_array()
-            .and_then(|entries| entries.first())
-            .ok_or_else(|| "validated PSKB entry missing".to_string()),
-        PsktFormat::PsktSingle => Ok(root),
-        PsktFormat::Unknown => Err("Not a PSKT/PSKB payload".into()),
-    }
-}
-
-#[cfg(feature = "std")]
-pub(crate) fn pskt_from_root(root: &Value, format: PsktFormat) -> Result<&Value, String> {
-    validated_pskt(root, format, PskbShapeStyle::Standard)
-}
-
 pub(crate) fn pskt_from_root_for_review(
     root: &Value,
     format: PsktFormat,
 ) -> Result<&Value, String> {
-    validated_pskt(root, format, PskbShapeStyle::Review)
-}
-
-pub(crate) fn pskt_from_root_mut(
-    root: &mut Value,
-    format: PsktFormat,
-) -> Result<&mut Value, String> {
-    validate_single_pskt(root, format, PskbShapeStyle::Standard)?;
+    validate_single_pskt(root, format)?;
     match format {
         PsktFormat::Pskb => root
-            .as_array_mut()
-            .and_then(|entries| entries.first_mut())
+            .as_array()
+            .and_then(|entries| entries.first())
             .ok_or_else(|| "validated PSKB entry missing".to_string()),
         PsktFormat::PsktSingle => Ok(root),
         PsktFormat::Unknown => Err("Not a PSKT/PSKB payload".into()),

@@ -1,8 +1,10 @@
+use k256::schnorr::SigningKey;
 use serde_json::{json, Value};
 
-use super::super::test_support::{encode, sighash_all_for_pskt, Format};
+use super::super::test_support::{
+    multisig, pskb as wrap_pskb, sign_first_input, unsigned_document, xonly,
+};
 use super::{finalize_json, pskt_verified_signature_counts, Network};
-use k256::schnorr::SigningKey;
 
 #[test]
 fn generic_finalizer_covers_p2pk_globals_defaults_and_explicit_covenants() {
@@ -23,7 +25,7 @@ fn generic_finalizer_covers_p2pk_globals_defaults_and_explicit_covenants() {
         "authorizingInput": 0,
         "covenantId": "cd".repeat(32)
     });
-    let document = sign_document(document, &[0x11]);
+    let document = sign_first_input(document, &[0x11]);
     let finalized: Value =
         serde_json::from_str(&finalize_json(&pskb(document)).expect("finalize P2PK"))
             .expect("final JSON");
@@ -44,7 +46,7 @@ fn generic_finalizer_covers_p2pk_globals_defaults_and_explicit_covenants() {
         .as_object_mut()
         .unwrap()
         .remove("sigOpCount");
-    let defaults = sign_document(defaults, &[0x11]);
+    let defaults = sign_first_input(defaults, &[0x11]);
     let value: Value = serde_json::from_str(&finalize_json(&pskb(defaults)).expect("defaults"))
         .expect("default JSON");
     assert_eq!(value["lockTime"], "0");
@@ -62,7 +64,7 @@ fn generic_finalizer_multisig_covers_reachable_push_encodings_with_five_key_cap(
         ((1u8..=5).collect::<Vec<_>>(), 2, 0x4cu16),
     ] {
         let redeem = multisig(&keys, threshold);
-        let document = sign_document(
+        let document = sign_first_input(
             unsigned_document(Some(&redeem), keys[0]),
             &keys[..usize::from(threshold)],
         );
@@ -81,12 +83,12 @@ fn generic_finalizer_multisig_covers_reachable_push_encodings_with_five_key_cap(
     }
 
     let redeem = multisig(&[0x11, 0x22], 2);
-    let insufficient = sign_document(unsigned_document(Some(&redeem), 0x11), &[0x11]);
+    let insufficient = sign_first_input(unsigned_document(Some(&redeem), 0x11), &[0x11]);
     assert!(finalize_json(&pskb(insufficient))
         .unwrap_err()
         .contains("PSKT is not cryptographically complete"));
 
-    let mut extra_unknown = sign_document(unsigned_document(Some(&redeem), 0x11), &[0x11, 0x22]);
+    let mut extra_unknown = sign_first_input(unsigned_document(Some(&redeem), 0x11), &[0x11, 0x22]);
     extra_unknown["inputs"][0]["partialSigs"]
         .as_object_mut()
         .unwrap()
@@ -107,7 +109,7 @@ fn verified_covenant_execution_is_preserved_across_pskt_and_kspt_materialization
         "suppliedMask": "1",
         "suppliedTrueMask": "1"
     });
-    let signed = sign_document(document, &[owner]);
+    let signed = sign_first_input(document, &[owner]);
     let wire = pskb(signed.clone());
 
     // Standard PSKT authorization returns a typed witness plan and serializes
@@ -175,7 +177,7 @@ fn verified_generic_covenant_signature_count_covers_execution_binding() {
         "suppliedMask": "1",
         "suppliedTrueMask": "1"
     });
-    let signed = sign_document(document, &[owner]);
+    let signed = sign_first_input(document, &[owner]);
     let wire = pskb(signed.clone());
     assert_eq!(
         pskt_verified_signature_counts(&wire, Network::Mainnet)
@@ -198,66 +200,6 @@ fn verified_generic_covenant_signature_count_covers_execution_binding() {
     assert!(pskt_verified_signature_counts(&pskb(incomplete), Network::Mainnet).is_err());
 }
 
-fn xonly(marker: u8) -> [u8; 32] {
-    let signing = SigningKey::from_bytes(&[marker; 32]).expect("test signing key");
-    signing.verifying_key().to_bytes().into()
-}
-
-fn unsigned_document(redeem: Option<&[u8]>, signer: u8) -> Value {
-    let input_script = if let Some(redeem) = redeem {
-        let hash = blake2b_simd::Params::new().hash_length(32).hash(redeem);
-        format!("0000aa20{}87", hex::encode(hash.as_bytes()))
-    } else {
-        format!("000020{}ac", hex::encode(xonly(signer)))
-    };
-    json!({
-        "global": {
-            "version": 0,
-            "txVersion": 0,
-            "inputCount": 1,
-            "outputCount": 1,
-            "fallbackLockTime": "0",
-            "subnetworkId": "00".repeat(20),
-            "gas": "0",
-            "txPayload": ""
-        },
-        "inputs": [{
-            "previousOutpoint": {"transactionId": "22".repeat(32), "index": 7},
-            "utxoEntry": {"amount": "100000", "scriptPublicKey": input_script},
-            "sequence": "0",
-            "sigOpCount": 1,
-            "sighashType": 1,
-            "redeemScript": redeem.map(hex::encode),
-            "partialSigs": {},
-            "proprietaries": {}
-        }],
-        "outputs": [{
-            "amount": "90000",
-            "scriptPublicKey": "000051",
-            "covenantBinding": null
-        }]
-    })
-}
-
-fn sign_document(mut document: Value, signers: &[u8]) -> Value {
-    let wire = pskb(document.clone());
-    let digest = sighash_all_for_pskt(&wire, Network::Mainnet, 0).expect("test sighash");
-    let partials = document["inputs"][0]["partialSigs"]
-        .as_object_mut()
-        .expect("partialSigs object");
-    for marker in signers {
-        let signing = SigningKey::from_bytes(&[*marker; 32]).expect("test signing key");
-        let signature = signing
-            .sign_raw(&digest, &[0u8; 32])
-            .expect("test signature");
-        partials.insert(
-            format!("02{}", hex::encode(signing.verifying_key().to_bytes())),
-            json!({"schnorr": hex::encode(signature.to_bytes())}),
-        );
-    }
-    document
-}
-
 fn single_selector_covenant(owner: u8, beneficiary: u8) -> Vec<u8> {
     let mut script = vec![0x63, 0x20]; // OP_IF, PUSH32 owner
     script.extend_from_slice(&xonly(owner));
@@ -265,21 +207,6 @@ fn single_selector_covenant(owner: u8, beneficiary: u8) -> Vec<u8> {
     script.extend_from_slice(&xonly(beneficiary));
     script.extend_from_slice(&[0xac, 0x68]); // CHECKSIG, ENDIF
     script
-}
-
-fn multisig(keys: &[u8], threshold: u8) -> Vec<u8> {
-    let mut script = vec![0x50 + threshold];
-    for key in keys {
-        script.push(0x20);
-        script.extend_from_slice(&xonly(*key));
-    }
-    script.push(0x50 + u8::try_from(keys.len()).unwrap());
-    script.push(0xae);
-    script
-}
-
-fn pskb(document: Value) -> String {
-    encode(Format::Pskb, &json!([document])).expect("encode finalizer PSKB")
 }
 
 #[test]
@@ -369,7 +296,7 @@ fn unsupported_and_zero_signature_covenant_routes_are_disabled_at_public_finaliz
     unsupported["inputs"][0]["covenantExecution"] =
         json!({"suppliedMask": "1", "suppliedTrueMask": "1"});
     unsupported["inputs"][0]["proprietaries"] = json!({"escrowBranch": "buyer-release"});
-    let unsupported = sign_document(unsupported, &[0x31]);
+    let unsupported = sign_first_input(unsupported, &[0x31]);
     let error =
         finalize_json(&pskb(unsupported)).expect_err("untyped specialized route must be disabled");
     assert!(
@@ -479,7 +406,7 @@ fn private_swap_claim_document() -> Value {
     document["inputs"][0]["covenantExecution"] =
         json!({"suppliedMask": "1", "suppliedTrueMask": "1"});
     document["inputs"][0]["proprietaries"] = json!({"privateSwapClaim": true});
-    sign_document(document, &[claimer])
+    sign_first_input(document, &[claimer])
 }
 
 fn oracle_v1_claim_document() -> Value {
@@ -512,7 +439,7 @@ fn oracle_v1_claim_document() -> Value {
         "oracleV1Claim": true,
         "oracleV1Signature": hex::encode(oracle_signature.to_bytes())
     });
-    sign_document(document, &[claimer])
+    sign_first_input(document, &[claimer])
 }
 
 fn commit_reveal_claim_document() -> Value {
@@ -540,7 +467,7 @@ fn commit_reveal_claim_document() -> Value {
         "commitPartA": hex::encode(part_a),
         "commitPartB": hex::encode(part_b)
     });
-    sign_document(document, &[owner])
+    sign_first_input(document, &[owner])
 }
 
 fn merkle_claim_document() -> Value {
@@ -571,7 +498,7 @@ fn merkle_claim_document() -> Value {
         "merkleDestSpk": hex::encode(destination),
         "merkleProof": [{"sibling": hex::encode(sibling), "direction": 0}]
     });
-    sign_document(document, &[owner])
+    sign_first_input(document, &[owner])
 }
 
 fn push_test_data(script: &mut Vec<u8>, data: &[u8]) {
@@ -602,4 +529,8 @@ fn test_blake2b32(data: &[u8]) -> [u8; 32] {
     let mut out = [0u8; 32];
     out.copy_from_slice(hash.as_bytes());
     out
+}
+
+fn pskb(document: Value) -> String {
+    wrap_pskb(&document)
 }

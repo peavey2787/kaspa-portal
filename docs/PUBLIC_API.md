@@ -123,6 +123,7 @@ Native `NetworkApi` calls share one persistent WebSocket per Portal transport. N
 When a computed fee makes the would-be change output dust, Portal omits that change and accounts the complete input-minus-output remainder as the transaction fee; fee solving does not alternate between one-output and two-output estimates.
 
 `analyze` and `analyze_with_fee_rate` operate on a signed/finalizable PSKB because exact serialized mass depends on the completed input signature scripts. Use the planner fee estimates while a transaction is still unsigned.
+`analyze`, `analyze_with_fee_rate` and `finalize` run the verify-once pipeline (`transaction::interchange::pskt::pipeline`): every signature is verified and every covenant witness is built from the input's `covenantExecution` selectors (or a typed, template-bound route) before any consensus bytes exist. Branch names such as `covenantBranch` are refused.
 | `review` | `wire_hex: &str`, `network_prefix: &str` | `Result<PsktSummary>` |
 | `finalize` | `wire_hex: &str` | `Result<ConsensusTransaction>` |
 | `sign_compact_kspt` | `wire: &[u8]`, `private_key: &[u8; 32]`, `sighash_type: SigHashType` | `Result<SignedResponse>` |
@@ -171,7 +172,6 @@ When a computed fee makes the would-be change output dust, Portal omits that cha
 
 - `tx_version: u16`
 - `fallback_lock_time: Option<u64>`
-- `covenant_branch: Option<serde_json::Value>`
 - `proprietaries: serde_json::Value`
 - `transaction_payload: Option<Vec<u8>>`
 
@@ -183,6 +183,14 @@ When a computed fee makes the would-be change output dust, Portal omits that cha
 - `redeem_script: Option<Vec<u8>>`
 - `proprietaries: serde_json::Value`
 - `min_time: Option<u64>`
+- `execution: Option<CovenantExecution>`
+
+`CovenantExecution` fields (encoded as the input's `covenantExecution`):
+
+- `supplied_mask: u16` — every IF/NOTIF selector of the redeem script, in script order
+- `supplied_true_mask: u16` — the selectors set true
+
+`GlobalThreadPolicy` assigns the thread input's `covenantExecution` from its redeem script: the top-level selector chooses the path (allowance: beneficiary withdraws through ELSE, owner tops up through IF) and selectors the script computes itself are assigned false.
 
 `GlobalThreadWithdrawalRequest` fields:
 

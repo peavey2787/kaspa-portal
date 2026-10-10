@@ -6,11 +6,7 @@ use serde_json::Value;
 use super::wire::{decode_root, inject_tx_payload};
 use super::*;
 
-mod consensus;
-mod consensus_finalizer;
 mod exact_json;
-mod kspt_bridge;
-mod kspt_compact;
 mod review;
 mod review_boundaries;
 

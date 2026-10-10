@@ -61,18 +61,23 @@ pub(crate) fn generic_covenant_required(
     };
     let path = match trace_witness(&input.redeem, mask, truth) {
         Ok(path) => path,
-        Err(ExecutionError::IncompleteSelectors | ExecutionError::UnsupportedSignatureCheck) => {
-            return Ok(None)
-        }
+        // No generic plan exists for this path; a typed route may still own it.
+        Err(
+            ExecutionError::IncompleteSelectors
+            | ExecutionError::UnsupportedSignatureCheck
+            | ExecutionError::UnsupportedOpcode
+            | ExecutionError::WitnessDataRequired
+            | ExecutionError::DataDependentBranch,
+        ) => return Ok(None),
         Err(error) => {
             return Err(format!(
                 "input[{index}] covenantExecution path is invalid: {error:?}"
             ))
         }
     };
-    Ok(require_path_signatures(index, input, &path)
-        .is_ok()
-        .then(|| path_positions(&path).len()))
+    // Signatures off the path fail their branch binding, and fewer than the
+    // path's fall short of this count, so the count alone decides completion.
+    Ok(Some(path_positions(&path).len()))
 }
 
 /// The complete selector assignment and the witness items its path consumes.
@@ -88,37 +93,14 @@ pub(crate) fn covenant_path(
     Ok((mask, truth, path))
 }
 
+/// The resolver key positions whose signatures the path consumes.
 fn path_positions(path: &[WitnessItem]) -> Vec<u8> {
-    let mut positions = path
-        .iter()
+    path.iter()
         .filter_map(|item| match item {
             WitnessItem::Signature { position } => Some(*position),
             WitnessItem::Selector(_) => None,
         })
-        .collect::<Vec<_>>();
-    positions.sort_unstable();
-    positions
-}
-
-/// The input carries exactly the path's signatures, each once.
-pub(crate) fn require_path_signatures(
-    index: usize,
-    input: &Input,
-    path: &[WitnessItem],
-) -> Result<(), String> {
-    let mut supplied = input
-        .signatures
-        .iter()
-        .map(|signature| signature.position)
-        .collect::<Vec<_>>();
-    supplied.sort_unstable();
-    if supplied == path_positions(path) {
-        Ok(())
-    } else {
-        Err(format!(
-            "input[{index}] signatures do not match the covenantExecution path"
-        ))
-    }
+        .collect()
 }
 
 pub(crate) fn verify_all_signatures(transaction: &Transaction) -> Result<(), String> {

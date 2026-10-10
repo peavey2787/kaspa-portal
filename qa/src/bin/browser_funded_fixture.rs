@@ -1,17 +1,17 @@
 use std::{env, fs, path::PathBuf, time::Duration};
 
+use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
     contract::script::p2sh::script_to_address,
     primitives::NetworkId,
     transaction::{
         interchange::{
             kspt::{
-                is_fully_signed, parse_compact_kspt, serialize_compact_kspt_vec,
-                sign_transaction_account_multi_addr_with_entropy,
+                is_fully_signed, sign_transaction_account_multi_addr_with_entropy, wire::Limits,
             },
-            pskt::{merge_signed_kspt_into_pskb, relay_pskb_as_kspt_hex_for_network},
+            pskt::pipeline::sign_pskt,
         },
-        model::{SigHashType, Transaction},
+        model::SigHashType,
     },
     wallet::{
         key::xpub::{
@@ -78,29 +78,26 @@ fn sign_pskb(
     entropy: u8,
     network_name: &str,
 ) -> String {
-    let relay_hex =
-        relay_pskb_as_kspt_hex_for_network(wire, network_name).expect("relay PSKB as compact KSPT");
-    let relay = hex::decode(relay_hex).expect("decode relayed KSPT");
-    let mut transaction = Transaction::try_new().expect("transaction storage");
-    parse_compact_kspt(&relay, &mut transaction).expect("parse relayed KSPT");
-    let signed = sign_transaction_account_multi_addr_with_entropy(
-        &mut transaction,
-        &imported.key,
-        SigHashType::All,
-        &[entropy; 32],
-    )
-    .expect("sign funded wallet inputs");
-    assert!(
-        signed > 0,
-        "funded transaction had no signable wallet inputs"
-    );
-    assert!(
-        is_fully_signed(&transaction),
-        "funded transaction is not fully signed"
-    );
-    let signed_wire = serialize_compact_kspt_vec(&transaction).expect("serialize signed KSPT");
-    merge_signed_kspt_into_pskb(&hex::encode(signed_wire), wire)
-        .expect("merge signed KSPT into PSKB")
+    let network = KaspaNetwork::from_name(network_name).expect("known network");
+    sign_pskt(wire, network, Limits::grammar(), |transaction| {
+        let signed = sign_transaction_account_multi_addr_with_entropy(
+            transaction,
+            &imported.key,
+            SigHashType::All,
+            &[entropy; 32],
+        )
+        .expect("sign funded wallet inputs");
+        assert!(
+            signed > 0,
+            "funded transaction had no signable wallet inputs"
+        );
+        assert!(
+            is_fully_signed(transaction),
+            "funded transaction is not fully signed"
+        );
+        Ok(())
+    })
+    .expect("merge signed KSPT into PSKB")
 }
 
 fn fee_with_headroom(recommended_fee_sompi: u64) -> u64 {

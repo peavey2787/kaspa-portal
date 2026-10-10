@@ -49,12 +49,13 @@ fn standard_pskb_relays_to_compact_kspt_with_explicit_native_subnetwork() {
         vec![PlannedOutput::new(49_000_000, vec![0x21; 34])],
     );
     let wire = super::encode_plan(&plan).expect("encode standard PSKB");
-    let kspt = crate::transaction::interchange::pskt::relay_pskb_as_kspt_hex_for_network(
+    let kspt = crate::transaction::interchange::pskt::pipeline::encode_pskt(
         &wire,
-        "testnet-10",
+        crate::primitives::address::KaspaNetwork::Testnet,
+        crate::transaction::interchange::kspt::wire::Limits::grammar(),
     )
     .expect("standard PSKB must relay to compact KSPT");
-    assert!(kspt.starts_with("4b535054"));
+    assert!(kspt.starts_with(b"KSPT"));
 }
 
 #[test]

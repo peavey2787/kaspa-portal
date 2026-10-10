@@ -1,3 +1,4 @@
+mod consensus;
 mod covenant_paths;
 mod coverage_ratchet;
 mod finalization;

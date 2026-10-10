@@ -1,3 +1,4 @@
+use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
     chain::utxo::UtxoEntry,
     primitives::address::address_to_script_pubkey,
@@ -5,12 +6,11 @@ use kaspa_portal::{
     transaction::{
         interchange::{
             kspt::{
-                is_fully_signed, parse_compact_kspt, serialize_compact_kspt_vec,
-                sign_transaction_account_multi_addr_with_entropy,
+                is_fully_signed, sign_transaction_account_multi_addr_with_entropy, wire::Limits,
             },
-            pskt::{merge_signed_kspt_into_pskb, relay_pskb_as_kspt_hex_for_network},
+            pskt::pipeline::sign_pskt,
         },
-        model::{SigHashType, Transaction},
+        model::SigHashType,
     },
     wallet::{
         account::derivation::WalletData,
@@ -59,30 +59,26 @@ pub fn sign_pskb_for_account(
     imported: &ImportedAccountXprv,
     entropy_byte: u8,
 ) -> String {
-    let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, &standard_network_name())
-        .expect("relay offline PSKB as compact KSPT");
-    let relay = hex::decode(relay_hex).expect("decode offline relayed KSPT");
-    let mut transaction = Transaction::try_new().expect("transaction storage");
-    parse_compact_kspt(&relay, &mut transaction).expect("parse offline relayed KSPT");
-    let signed = sign_transaction_account_multi_addr_with_entropy(
-        &mut transaction,
-        &imported.key,
-        SigHashType::All,
-        &[entropy_byte; 32],
-    )
-    .expect("sign deterministic offline wallet inputs");
-    assert!(
-        signed > 0,
-        "offline transaction had no signable wallet inputs"
-    );
-    assert!(
-        is_fully_signed(&transaction),
-        "offline transaction is not fully signed"
-    );
-    let signed_wire =
-        serialize_compact_kspt_vec(&transaction).expect("serialize signed offline KSPT");
-    merge_signed_kspt_into_pskb(&hex::encode(signed_wire), wire)
-        .expect("merge signed offline KSPT into PSKB")
+    let network = KaspaNetwork::from_name(&standard_network_name()).expect("known network");
+    sign_pskt(wire, network, Limits::grammar(), |transaction| {
+        let signed = sign_transaction_account_multi_addr_with_entropy(
+            transaction,
+            &imported.key,
+            SigHashType::All,
+            &[entropy_byte; 32],
+        )
+        .expect("sign deterministic offline wallet inputs");
+        assert!(
+            signed > 0,
+            "offline transaction had no signable wallet inputs"
+        );
+        assert!(
+            is_fully_signed(transaction),
+            "offline transaction is not fully signed"
+        );
+        Ok(())
+    })
+    .expect("merge signed offline KSPT into PSKB")
 }
 
 pub fn deterministic_wallet(portal: &KaspaPortal, seed_byte: u8) -> WalletData {

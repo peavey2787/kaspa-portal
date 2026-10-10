@@ -1,4 +1,6 @@
-use super::{CovenantInputPolicy, PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan};
+use super::{
+    CovenantExecution, CovenantInputPolicy, PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan,
+};
 use crate::chain::utxo::UtxoEntry;
 use core::fmt;
 use serde::{Deserialize, Serialize};
@@ -12,8 +14,10 @@ pub const MIN_THREAD_CONTINUATION_SOMPI: u64 = 10_000_000;
 pub struct GlobalThreadPolicy {
     #[serde(with = "crate::primitives::serialization::decimal_opt_u64")]
     withdrawal_lock_time: Option<u64>,
-    withdrawal_branch: Option<Value>,
-    topup_branch: Option<Value>,
+    /// The thread script's top-level selector on withdrawal, when it has one.
+    withdrawal_selector: Option<bool>,
+    /// The thread script's top-level selector on top-up, when it has one.
+    topup_selector: Option<bool>,
     #[serde(with = "crate::primitives::serialization::decimal_u64")]
     topup_sequence: u64,
 }
@@ -22,8 +26,9 @@ impl GlobalThreadPolicy {
     pub fn allowance(cltv_lock_time: u64) -> Self {
         Self {
             withdrawal_lock_time: (cltv_lock_time > 0).then_some(cltv_lock_time),
-            withdrawal_branch: Some(Value::from("beneficiary")),
-            topup_branch: Some(Value::from("owner")),
+            // Beneficiary withdraws through ELSE; the owner tops up through IF.
+            withdrawal_selector: Some(false),
+            topup_selector: Some(true),
             topup_sequence: 0,
         }
     }
@@ -31,8 +36,8 @@ impl GlobalThreadPolicy {
     pub fn spending_limit() -> Self {
         Self {
             withdrawal_lock_time: Some(0),
-            withdrawal_branch: Some(Value::Null),
-            topup_branch: Some(Value::Null),
+            withdrawal_selector: None,
+            topup_selector: None,
             topup_sequence: 0,
         }
     }
@@ -51,6 +56,7 @@ pub enum GlobalThreadPlanError {
     ContinuationTooSmall { continuation: u64 },
     ArithmeticOverflow { operation: &'static str },
     SelectedFundsTooLow { selected_total: u64, fee: u64 },
+    InvalidRedeemScript,
 }
 impl fmt::Display for GlobalThreadPlanError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -70,8 +76,24 @@ impl fmt::Display for GlobalThreadPlanError {
             Self::SelectedFundsTooLow { selected_total, fee } => write!(
                 formatter, "Selected wallet funds {selected_total} must exceed fee {fee} to add to the thread"
             ),
+            Self::InvalidRedeemScript => {
+                write!(formatter, "Thread redeem script has no resolvable branch structure")
+            }
         }
     }
+}
+/// Assign every selector of the thread script: the top-level one from the
+/// policy, and the script's computed selectors (whose value it ignores) false.
+fn thread_execution(
+    redeem_script: &[u8],
+    top_level: Option<bool>,
+) -> Result<CovenantExecution, GlobalThreadPlanError> {
+    let branches = crate::contract::covenant::branch::resolve_covenant_branches(redeem_script)
+        .map_err(|_| GlobalThreadPlanError::InvalidRedeemScript)?;
+    Ok(CovenantExecution {
+        supplied_mask: branches.selector_mask(),
+        supplied_true_mask: u16::from(top_level == Some(true)),
+    })
 }
 fn checked_utxo_total(
     utxos: &[UtxoEntry],
@@ -114,7 +136,8 @@ pub fn plan_global_thread_withdrawal(
     let total = checked_utxo_total(thread_utxos, "summing thread UTXOs")?;
     let (is_close, continuation, user_receives) =
         withdrawal_amounts(total, request.withdrawal, request.fee)?;
-    let inputs = withdrawal_inputs(&request);
+    let execution = thread_execution(request.redeem_script, request.policy.withdrawal_selector)?;
+    let inputs = withdrawal_inputs(&request, execution);
     let outputs = withdrawal_outputs(&request, is_close, continuation, user_receives);
     Ok(GlobalThreadWithdrawalPlan {
         plan: withdrawal_plan(&request, inputs, outputs),
@@ -185,7 +208,10 @@ fn validate_continuation(continuation: u64, is_close: bool) -> Result<(), Global
     }
 }
 
-fn withdrawal_inputs(request: &GlobalThreadWithdrawalRequest<'_>) -> Vec<PskbInputPlan> {
+fn withdrawal_inputs(
+    request: &GlobalThreadWithdrawalRequest<'_>,
+    execution: CovenantExecution,
+) -> Vec<PskbInputPlan> {
     request
         .thread_utxos
         .iter()
@@ -201,6 +227,7 @@ fn withdrawal_inputs(request: &GlobalThreadWithdrawalRequest<'_>) -> Vec<PskbInp
                     minimum_signatures: 1,
                     proprietaries: Value::Array(Vec::new()),
                     min_time: Some(0),
+                    execution: Some(execution),
                 },
             )
         })
@@ -237,7 +264,6 @@ fn withdrawal_plan(
         global: PskbGlobalPlan {
             tx_version: 1,
             fallback_lock_time: request.policy.withdrawal_lock_time,
-            covenant_branch: request.policy.withdrawal_branch.clone(),
             proprietaries: Value::Array(Vec::new()),
             transaction_payload: None,
         },
@@ -293,6 +319,7 @@ pub fn plan_global_thread_topup(
         .ok_or(GlobalThreadPlanError::ArithmeticOverflow {
             operation: "subtracting fee from top-up continuation",
         })?;
+    let execution = thread_execution(redeem_script, policy.topup_selector)?;
     let mut inputs = Vec::with_capacity(1 + wallet_utxos.len());
     inputs.push(PskbInputPlan::covenant(
         thread_utxo,
@@ -304,6 +331,7 @@ pub fn plan_global_thread_topup(
             minimum_signatures: 1,
             proprietaries: Value::Array(Vec::new()),
             min_time: Some(0),
+            execution: Some(execution),
         },
     ));
     inputs.extend(wallet_utxos.iter().cloned().map(|utxo| {
@@ -326,7 +354,6 @@ pub fn plan_global_thread_topup(
             global: PskbGlobalPlan {
                 tx_version: 1,
                 fallback_lock_time: Some(0),
-                covenant_branch: policy.topup_branch.clone(),
                 proprietaries: Value::Array(Vec::new()),
                 transaction_payload: None,
             },

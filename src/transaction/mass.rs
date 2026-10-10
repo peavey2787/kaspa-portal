@@ -8,11 +8,9 @@
 //! per transient byte.
 
 use serde::Serialize;
-use serde_json::{Map, Value};
 
 use crate::transaction::{
-    consensus::ConsensusTransaction,
-    interchange::pskt::{exact_json::parse_exact_u64, wire},
+    consensus::ConsensusTransaction, interchange::pskt::pipeline::VerifiedTransaction,
 };
 
 pub const MASS_PER_TX_BYTE: u64 = 1;
@@ -24,10 +22,6 @@ pub const MAX_COMPUTE_MASS: u64 = 500_000;
 pub const MAX_STORAGE_MASS: u64 = 500_000;
 pub const MAX_TRANSIENT_MASS: u64 = 1_000_000;
 pub const MIN_STANDARD_FEE_RATE_SOMPI_PER_GRAM: u64 = 100;
-
-const UTXO_CONST_STORAGE_BYTES: u64 = 63;
-const UTXO_COVENANT_STORAGE_BYTES: u64 = 32;
-const UTXO_STORAGE_UNIT_BYTES: u64 = 100;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,40 +59,12 @@ pub struct TransactionAnalysis {
     pub fee_sufficient: bool,
 }
 
-pub(crate) fn analyze_pskb(
-    wire_hex: &str,
+pub(crate) fn analyze_verified(
+    verified: &VerifiedTransaction,
     recommended_fee_rate_sompi_per_gram: u64,
 ) -> Result<TransactionAnalysis, String> {
-    let transaction = crate::transaction::interchange::pskt::finalize_to_consensus(wire_hex)?
-        .into_consensus_transaction();
-    let (_, root) = wire::decode_root(wire_hex)?;
-    let format = wire::detect_format_hex(wire_hex);
-    let pskt = wire::pskt_from_root(&root, format)?;
-    let document = pskt
-        .as_object()
-        .ok_or_else(|| "PSKT not object".to_string())?;
-    let input_values = document
-        .get("inputs")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "missing inputs".to_string())?;
-    let output_values = document
-        .get("outputs")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "missing outputs".to_string())?;
-
-    let input_cells = input_values
-        .iter()
-        .map(input_storage_cell)
-        .collect::<Result<Vec<_>, _>>()?;
-    let output_cells = output_values
-        .iter()
-        .map(output_storage_cell)
-        .collect::<Result<Vec<_>, _>>()?;
-    let input_total = checked_amount_total(input_cells.iter().map(|cell| cell.amount), "input")?;
-    let output_total = checked_amount_total(output_cells.iter().map(|cell| cell.amount), "output")?;
-    let fee_sompi = input_total
-        .checked_sub(output_total)
-        .ok_or_else(|| "transaction outputs exceed inputs".to_string())?;
+    let transaction = verified.to_consensus()?;
+    let fee_sompi = verified.fee()?;
 
     let estimated_serialized_bytes = estimated_serialized_size(&transaction)?;
     let compute_mass = compute_mass(&transaction, estimated_serialized_bytes)?;
@@ -107,7 +73,7 @@ pub(crate) fn analyze_pskb(
         .ok_or_else(|| "transient mass overflow".to_string())?;
     let normalized_transient_mass =
         normalize_mass(transient_mass, MAX_COMPUTE_MASS, MAX_TRANSIENT_MASS)?;
-    let storage_mass = storage_mass(&input_cells, &output_cells)?;
+    let storage_mass = transaction.storage_mass;
     let normalized_storage_mass = normalize_mass(storage_mass, MAX_COMPUTE_MASS, MAX_STORAGE_MASS)?;
     let normalized_mass = compute_mass
         .max(normalized_transient_mass)
@@ -122,10 +88,8 @@ pub(crate) fn analyze_pskb(
         .checked_mul(recommended_rate)
         .ok_or_else(|| "recommended fee overflow".to_string())?;
     let fee_rate_sompi_per_gram = fee_sompi.checked_div(fee_mass).unwrap_or(0);
-    let compute_mass_valid = compute_mass <= MAX_COMPUTE_MASS;
-    let transient_mass_valid = transient_mass <= MAX_TRANSIENT_MASS;
-    let storage_mass_valid = storage_mass <= MAX_STORAGE_MASS;
-    let mass_valid = compute_mass_valid && transient_mass_valid && storage_mass_valid;
+    let [compute_mass_valid, transient_mass_valid, storage_mass_valid, mass_valid] =
+        mass_validity(compute_mass, transient_mass, storage_mass);
 
     Ok(TransactionAnalysis {
         estimated_serialized_bytes,
@@ -147,6 +111,15 @@ pub(crate) fn analyze_pskb(
         mass_valid,
         fee_sufficient: fee_sompi >= recommended_fee_sompi,
     })
+}
+
+/// Whether compute, transient and storage mass are each within their limits,
+/// followed by whether all three are.
+fn mass_validity(compute_mass: u64, transient_mass: u64, storage_mass: u64) -> [bool; 4] {
+    let compute = compute_mass <= MAX_COMPUTE_MASS;
+    let transient = transient_mass <= MAX_TRANSIENT_MASS;
+    let storage = storage_mass <= MAX_STORAGE_MASS;
+    [compute, transient, storage, compute && transient && storage]
 }
 
 pub(crate) fn estimate_non_contextual_fee(
@@ -237,82 +210,6 @@ pub(crate) fn estimate_covenant_deposit_fee(
     Ok(fee.max(MINIMUM_FEE))
 }
 
-#[derive(Clone, Copy)]
-struct StorageCell {
-    amount: u64,
-    plurality: u64,
-}
-
-fn input_storage_cell(value: &Value) -> Result<StorageCell, String> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| "input not object".to_string())?;
-    let utxo = object
-        .get("utxoEntry")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "missing utxoEntry".to_string())?;
-    let amount = parse_exact_u64(
-        utxo.get("amount")
-            .ok_or_else(|| "missing input amount".to_string())?,
-        "amount",
-    )?;
-    let script_len = script_length(utxo, "scriptPublicKey")?;
-    let covenant = utxo.get("covenantId").is_some_and(|value| !value.is_null());
-    Ok(StorageCell {
-        amount,
-        plurality: utxo_plurality(script_len, covenant),
-    })
-}
-
-fn output_storage_cell(value: &Value) -> Result<StorageCell, String> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| "output not object".to_string())?;
-    let amount = parse_exact_u64(
-        object
-            .get("amount")
-            .ok_or_else(|| "missing output amount".to_string())?,
-        "amount",
-    )?;
-    let script_len = script_length(object, "scriptPublicKey")?;
-    let covenant = object
-        .get("covenantBinding")
-        .is_some_and(|value| !value.is_null());
-    Ok(StorageCell {
-        amount,
-        plurality: utxo_plurality(script_len, covenant),
-    })
-}
-
-fn script_length(object: &Map<String, Value>, key: &str) -> Result<u64, String> {
-    let encoded = object
-        .get(key)
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("missing {key}"))?;
-    let bytes = hex::decode(encoded).map_err(|error| format!("invalid {key}: {error}"))?;
-    let script_bytes = bytes.len().saturating_sub(2);
-    u64::try_from(script_bytes).map_err(|_| "script length exceeds u64".to_string())
-}
-
-fn utxo_plurality(script_len: u64, covenant: bool) -> u64 {
-    let bytes = UTXO_CONST_STORAGE_BYTES
-        .saturating_add(script_len)
-        .saturating_add(if covenant {
-            UTXO_COVENANT_STORAGE_BYTES
-        } else {
-            0
-        });
-    bytes.div_ceil(UTXO_STORAGE_UNIT_BYTES).max(1)
-}
-
-fn checked_amount_total(mut values: impl Iterator<Item = u64>, kind: &str) -> Result<u64, String> {
-    values.try_fold(0u64, |total, value| {
-        total
-            .checked_add(value)
-            .ok_or_else(|| format!("{kind} amount total overflow"))
-    })
-}
-
 fn estimated_serialized_size(transaction: &ConsensusTransaction) -> Result<u64, String> {
     let mut size = 2u64 + 8 + 8 + 8 + 20 + 8 + 32 + 8;
     for input in &transaction.inputs {
@@ -401,18 +298,6 @@ fn normalize_mass(mass: u64, reference_limit: u64, dimension_limit: u64) -> Resu
         .ok_or_else(|| "mass normalization overflow".to_string())
 }
 
-fn storage_mass(inputs: &[StorageCell], outputs: &[StorageCell]) -> Result<u64, String> {
-    let input_pairs = inputs
-        .iter()
-        .map(|cell| (cell.amount, cell.plurality))
-        .collect::<Vec<_>>();
-    let output_pairs = outputs
-        .iter()
-        .map(|cell| (cell.amount, cell.plurality))
-        .collect::<Vec<_>>();
-    storage_mass_pairs(&input_pairs, &output_pairs)
-}
-
-fn storage_mass_pairs(inputs: &[(u64, u64)], outputs: &[(u64, u64)]) -> Result<u64, String> {
-    crate::transaction::builder::planning::amounts::storage_mass_estimate(inputs, outputs)
-}
+#[cfg(test)]
+#[path = "unit-tests/mass.rs"]
+mod unit_tests;

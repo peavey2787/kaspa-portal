@@ -19,6 +19,16 @@ pub struct PskbInputPlan {
     pub proprietaries: Value,
     #[serde(with = "crate::primitives::serialization::decimal_opt_u64")]
     pub min_time: Option<u64>,
+    pub covenant_execution: Option<CovenantExecution>,
+}
+
+/// The complete selector assignment that chooses a covenant input's path.
+/// Signers and finalizers act only on this; branch names are never consulted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CovenantExecution {
+    pub supplied_mask: u16,
+    pub supplied_true_mask: u16,
 }
 
 /// Signing and metadata policy for one covenant PSKB input.
@@ -32,6 +42,7 @@ pub struct CovenantInputPolicy {
     pub proprietaries: Value,
     #[serde(with = "crate::primitives::serialization::decimal_opt_u64")]
     pub min_time: Option<u64>,
+    pub execution: Option<CovenantExecution>,
 }
 
 impl PskbInputPlan {
@@ -52,6 +63,7 @@ impl PskbInputPlan {
             redeem_script: Some(redeem_script.to_vec()),
             proprietaries: policy.proprietaries,
             min_time: policy.min_time,
+            covenant_execution: policy.execution,
         }
     }
 
@@ -67,6 +79,7 @@ impl PskbInputPlan {
             redeem_script: None,
             proprietaries,
             min_time: Some(0),
+            covenant_execution: None,
         }
     }
 }
@@ -108,7 +121,6 @@ pub struct PskbGlobalPlan {
     pub tx_version: u16,
     #[serde(with = "crate::primitives::serialization::decimal_opt_u64")]
     pub fallback_lock_time: Option<u64>,
-    pub covenant_branch: Option<Value>,
     pub proprietaries: Value,
     pub transaction_payload: Option<Vec<u8>>,
 }
@@ -119,16 +131,9 @@ impl PskbGlobalPlan {
         Self {
             tx_version: 0,
             fallback_lock_time: None,
-            covenant_branch: None,
             proprietaries: Value::Array(Vec::new()),
             transaction_payload: None,
         }
-    }
-
-    #[must_use]
-    pub fn with_branch(mut self, branch: impl Into<Value>) -> Self {
-        self.covenant_branch = Some(branch.into());
-        self
     }
 
     #[must_use]

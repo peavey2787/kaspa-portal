@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+Finalization runs only through the verify-once PSKT pipeline.
+
+- `TransactionApi::finalize`, `analyze` and `analyze_with_fee_rate` verify
+  every signature and build witnesses from the authorized typed plan; the
+  unverified finalizer that chose branches from `covenantBranch`,
+  `escrowBranch` and `shipBranch` metadata is removed.
+- Covenant witnesses follow `contract::covenant::execution::trace_witness`,
+  which models stack effects: IF/NOTIF conditions the script computes (the
+  global-thread continuation check) are not witness selectors, and any path
+  needing other witness data, unmodelled opcodes or non-canonical signature
+  checks is refused rather than guessed.
+- Removed: `pskt::relay_pskb_as_kspt_hex_for_network`,
+  `pskt::merge_signed_kspt_into_pskb` and `consensus::decode_signed_kspt`.
+  Use `pskt::pipeline::{encode_pskt, merge_signed_kspt, sign_pskt,
+  verify_complete_kspt}` and `VerifiedTransaction::to_consensus`.
+- Removed proprietary routes no producer emits (`commitPreimage`, oracle-MB,
+  ZK/RISC0/Groth16/bridge claims, rollup and deposit-holding transitions);
+  those fields are rejected as having no typed verified witness plan.
+- PSKB plans carry an explicit per-input `CovenantExecution`;
+  `PskbGlobalPlan::covenant_branch`/`with_branch` are removed and
+  `SweepInputPolicy::covenant` takes the execution instead of branch metadata.
+
 ## 1.4.0
 
 Hardened signer core merged from KasKold, so the hardware signer can depend on

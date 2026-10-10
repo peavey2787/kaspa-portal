@@ -1,17 +1,17 @@
 use std::hint::black_box;
 
+use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
     contract::{crowdfund::CrowdfundScript, shipping_escrow::ShippingEscrowScriptRequest},
     primitives::address::address_to_script_pubkey,
     transaction::{
         interchange::{
             kspt::{
-                is_fully_signed, parse_compact_kspt, serialize_compact_kspt_vec,
-                sign_transaction_account_multi_addr_with_entropy,
+                is_fully_signed, sign_transaction_account_multi_addr_with_entropy, wire::Limits,
             },
-            pskt::{merge_signed_kspt_into_pskb, relay_pskb_as_kspt_hex_for_network},
+            pskt::pipeline::sign_pskt,
         },
-        model::{SigHashType, Transaction},
+        model::SigHashType,
     },
     wallet::key::xpub::{
         derive_and_serialize_kpub, derive_and_serialize_xprv, import_xprv_with_metadata,
@@ -26,24 +26,21 @@ fn sign_pskb_for_seed(wire: &str, seed: &[u8; 64]) -> Result<String, String> {
     let mut encoded = [0u8; XPRV_MAX_LEN];
     let len = derive_and_serialize_xprv(seed, &mut encoded).map_err(|error| error.to_string())?;
     let imported = import_xprv_with_metadata(&encoded[..len]).map_err(|error| error.to_string())?;
-    let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, &super::standard_network_name())?;
-    let relay = hex::decode(relay_hex).map_err(|error| error.to_string())?;
-    let mut transaction = Transaction::try_new().expect("transaction storage");
-    parse_compact_kspt(&relay, &mut transaction)
-        .map_err(|error| format!("parse resource-probe KSPT: {error:?}"))?;
-    let signed = sign_transaction_account_multi_addr_with_entropy(
-        &mut transaction,
-        &imported.key,
-        SigHashType::All,
-        &[0x75; 32],
-    )
-    .map_err(|error| format!("sign resource-probe KSPT: {error:?}"))?;
-    if signed == 0 || !is_fully_signed(&transaction) {
-        return Err("resource-probe transaction was not fully signed".to_string());
-    }
-    let signed_wire = serialize_compact_kspt_vec(&transaction)
-        .map_err(|error| format!("serialize resource-probe KSPT: {error:?}"))?;
-    merge_signed_kspt_into_pskb(&hex::encode(signed_wire), wire)
+    let network = KaspaNetwork::from_name(&super::standard_network_name())
+        .ok_or_else(|| "unknown resource-probe network".to_string())?;
+    sign_pskt(wire, network, Limits::grammar(), |transaction| {
+        let signed = sign_transaction_account_multi_addr_with_entropy(
+            transaction,
+            &imported.key,
+            SigHashType::All,
+            &[0x75; 32],
+        )
+        .map_err(|error| format!("sign resource-probe KSPT: {error:?}"))?;
+        if signed == 0 || !is_fully_signed(transaction) {
+            return Err("resource-probe transaction was not fully signed".to_string());
+        }
+        Ok(())
+    })
 }
 
 pub fn run(iteration: usize) -> Result<(), String> {

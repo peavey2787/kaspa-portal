@@ -4,6 +4,7 @@ mod funded_support;
 
 use std::time::Duration;
 
+use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
     contract::script::p2sh::script_to_address,
     primitives::NetworkId,
@@ -12,11 +13,10 @@ use kaspa_portal::{
         consensus::ConsensusTransaction,
         interchange::{
             kspt::{
-                is_fully_signed, parse_compact_kspt, serialize_compact_kspt_vec,
-                sign_transaction_account_multi_addr_with_entropy,
-                sign_transaction_multisig_with_entropy,
+                is_fully_signed, sign_transaction_account_multi_addr_with_entropy,
+                sign_transaction_multisig_with_entropy, wire::Limits,
             },
-            pskt::{merge_signed_kspt_into_pskb, relay_pskb_as_kspt_hex_for_network},
+            pskt::pipeline::sign_pskt,
         },
         model::{SigHashType, Transaction},
     },
@@ -58,39 +58,37 @@ fn funded_wallet(
     (imported, wallet)
 }
 
-fn relay_transaction(wire: &str, network_name: &str) -> Transaction {
-    let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, network_name)
-        .expect("relay funded PSKB as compact KSPT");
-    let relay = hex::decode(relay_hex).expect("decode relayed KSPT");
-    let mut transaction = Transaction::try_new().expect("transaction storage");
-    parse_compact_kspt(&relay, &mut transaction).expect("parse relayed KSPT");
-    transaction
-}
-
-fn merge_signed_transaction(wire: &str, transaction: &Transaction) -> String {
-    assert!(
-        is_fully_signed(transaction),
-        "funded transaction is not fully signed"
-    );
-    let signed_wire = serialize_compact_kspt_vec(transaction).expect("serialize signed KSPT");
-    merge_signed_kspt_into_pskb(&hex::encode(signed_wire), wire)
-        .expect("merge signed KSPT into PSKB")
+/// Sign every wallet input of `wire` with `sign` and merge the result.
+fn sign_and_merge_with(
+    wire: &str,
+    network_name: &str,
+    sign: impl FnOnce(&mut Transaction) -> usize,
+) -> String {
+    let network = KaspaNetwork::from_name(network_name).expect("known network");
+    sign_pskt(wire, network, Limits::grammar(), |transaction| {
+        assert!(
+            sign(transaction) > 0,
+            "funded transaction had no signable inputs"
+        );
+        assert!(
+            is_fully_signed(transaction),
+            "funded transaction is not fully signed"
+        );
+        Ok(())
+    })
+    .expect("merge signed KSPT into PSKB")
 }
 
 fn sign_and_merge(wire: &str, imported: &ImportedAccountXprv, network_name: &str) -> String {
-    let mut transaction = relay_transaction(wire, network_name);
-    let signed = sign_transaction_account_multi_addr_with_entropy(
-        &mut transaction,
-        &imported.key,
-        SigHashType::All,
-        &[0x7au8; 32],
-    )
-    .expect("sign funded wallet inputs");
-    assert!(
-        signed > 0,
-        "funded transaction had no signable wallet inputs"
-    );
-    merge_signed_transaction(wire, &transaction)
+    sign_and_merge_with(wire, network_name, |transaction| {
+        sign_transaction_account_multi_addr_with_entropy(
+            transaction,
+            &imported.key,
+            SigHashType::All,
+            &[0x7au8; 32],
+        )
+        .expect("sign funded wallet inputs")
+    })
 }
 
 fn fee_with_headroom(recommended_fee_sompi: u64) -> u64 {
@@ -147,17 +145,16 @@ async fn plan_signed_send_with_adaptive_fee(
 }
 
 fn sign_multisig_and_merge(wire: &str, network_name: &str) -> String {
-    let mut transaction = relay_transaction(wire, network_name);
-    let signed = sign_transaction_multisig_with_entropy(
-        &mut transaction,
-        &[([0x71u8; 64], true)],
-        SigHashType::All,
-        None,
-        &[0x7bu8; 32],
-    )
-    .expect("sign deterministic 1-of-2 multisig fixture");
-    assert!(signed > 0, "multisig fixture had no signable inputs");
-    merge_signed_transaction(wire, &transaction)
+    sign_and_merge_with(wire, network_name, |transaction| {
+        sign_transaction_multisig_with_entropy(
+            transaction,
+            &[([0x71u8; 64], true)],
+            SigHashType::All,
+            None,
+            &[0x7bu8; 32],
+        )
+        .expect("sign deterministic 1-of-2 multisig fixture")
+    })
 }
 
 async fn plan_multisig_spend_with_adaptive_fee(

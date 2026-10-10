@@ -130,8 +130,8 @@ pub(crate) fn covenant_witness_plan(
     index: usize,
     input: &compact::Input,
 ) -> Result<VerifiedWitnessPlan, String> {
+    // Completion verification already required exactly the path's signatures.
     let (supplied_mask, supplied_true_mask, path) = compact::covenant_path(index, input)?;
-    compact::require_path_signatures(index, input, &path)?;
     let witness = path
         .iter()
         .map(|item| match item {

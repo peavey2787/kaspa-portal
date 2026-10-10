@@ -115,9 +115,7 @@ fn rust_offline_transaction() {
         &source_script,
         &destination_script,
         499_000_000,
-        PskbGlobalPlan::standard()
-            .with_lock_time(12)
-            .with_branch("e2e"),
+        PskbGlobalPlan::standard().with_lock_time(12),
         &SweepInputPolicy::p2pk(json!({"case": "e2e"})),
     );
     let sweep_wire = pskb.encode(&sweep).expect("encode typed sweep");

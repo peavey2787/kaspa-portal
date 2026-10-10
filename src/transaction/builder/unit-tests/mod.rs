@@ -78,17 +78,23 @@ fn decode_pskb_wire(wire: &str) -> serde_json::Value {
     serde_json::from_slice(&json_bytes).expect("PSKB JSON")
 }
 
+const NO_SELECTORS: super::pskb::CovenantExecution = super::pskb::CovenantExecution {
+    supplied_mask: 0,
+    supplied_true_mask: 0,
+};
+
 #[test]
 fn typed_pskb_sweep_preserves_contract_metadata() {
     let inputs = vec![utxo(0x44, 7, 50_000)];
-    let mut global = super::pskb::PskbGlobalPlan::standard()
-        .with_lock_time(123)
-        .with_branch("beneficiary");
+    let mut global = super::pskb::PskbGlobalPlan::standard().with_lock_time(123);
     global.transaction_payload = Some(b"payload".to_vec());
     let policy = super::pskb::SweepInputPolicy::covenant(
         &[0x51, 0x75],
         9,
-        serde_json::json!({"proof": "abcd"}),
+        super::pskb::CovenantExecution {
+            supplied_mask: 1,
+            supplied_true_mask: 0,
+        },
     );
     let plan = super::pskb::plan_sweep(
         &inputs,
@@ -105,11 +111,14 @@ fn typed_pskb_sweep_preserves_contract_metadata() {
     assert_eq!(pskt["global"]["txVersion"], 0);
     assert_eq!(pskt["global"]["subnetworkId"], "00".repeat(20));
     assert_eq!(pskt["global"]["fallbackLockTime"], "123");
-    assert_eq!(pskt["global"]["covenantBranch"], "beneficiary");
+    assert!(pskt["global"].get("covenantBranch").is_none());
     assert_eq!(pskt["global"]["txPayload"], hex::encode(b"payload"));
     assert_eq!(pskt["inputs"][0]["sequence"], "9");
     assert_eq!(pskt["inputs"][0]["redeemScript"], "5175");
-    assert_eq!(pskt["inputs"][0]["proprietaries"]["proof"], "abcd");
+    assert_eq!(
+        pskt["inputs"][0]["covenantExecution"],
+        serde_json::json!({"suppliedMask": "1", "suppliedTrueMask": "0"})
+    );
     assert_eq!(pskt["outputs"][0]["amount"], "49000");
     assert_eq!(pskt["outputs"][0]["scriptPublicKey"], "0000ccdd");
 }
@@ -137,10 +146,8 @@ fn pskb_output_binding_field_is_explicitly_configurable() {
 #[test]
 fn typed_sweep_matches_the_browser_pskb_shape() {
     let inputs = vec![utxo(0x66, 3, 42_000)];
-    let global = super::pskb::PskbGlobalPlan::standard()
-        .with_lock_time(77)
-        .with_branch("savings");
-    let policy = super::pskb::SweepInputPolicy::covenant(&[0x51, 0xac], 0, serde_json::json!([]));
+    let global = super::pskb::PskbGlobalPlan::standard().with_lock_time(77);
+    let policy = super::pskb::SweepInputPolicy::covenant(&[0x51, 0xac], 0, NO_SELECTORS);
     let typed = super::pskb::plan_sweep(
         &inputs,
         &[0xaa, 0xbb],
@@ -155,7 +162,6 @@ fn typed_sweep_matches_the_browser_pskb_shape() {
             "version": 0,
             "txVersion": 0,
             "fallbackLockTime": "77",
-            "covenantBranch": "savings",
             "inputsModifiable": false,
             "outputsModifiable": false,
             "inputCount": 1,
@@ -183,7 +189,8 @@ fn typed_sweep_matches_the_browser_pskb_shape() {
             "bip32Derivations": {},
             "proprietaries": {},
             "finalScriptSig": serde_json::Value::Null,
-            "minTime": "0"
+            "minTime": "0",
+            "covenantExecution": {"suppliedMask": "0", "suppliedTrueMask": "0"}
         }],
         "outputs": [{
             "amount": "41000",
@@ -263,7 +270,7 @@ fn typed_p2pk_sweep_matches_the_stealth_pskb_shape() {
 
 #[test]
 fn typed_keyless_covenant_preserves_zero_signature_requirement() {
-    let mut policy = super::pskb::SweepInputPolicy::covenant(&[0x51], 0, serde_json::json!([]));
+    let mut policy = super::pskb::SweepInputPolicy::covenant(&[0x51], 0, NO_SELECTORS);
     policy.minimum_signatures = 0;
     let plan = super::pskb::plan_sweep(
         &[utxo(0x88, 0, 20_000)],
@@ -301,7 +308,6 @@ fn global_thread_allowance_withdrawal_matches_browser_wire_shape() {
             "version": 0,
             "txVersion": 1,
             "fallbackLockTime": "123",
-            "covenantBranch": "beneficiary",
             "inputsModifiable": false,
             "outputsModifiable": false,
             "inputCount": 1,
@@ -329,7 +335,8 @@ fn global_thread_allowance_withdrawal_matches_browser_wire_shape() {
             "bip32Derivations": {},
             "proprietaries": {},
             "finalScriptSig": serde_json::Value::Null,
-            "minTime": "0"
+            "minTime": "0",
+            "covenantExecution": {"suppliedMask": "0", "suppliedTrueMask": "0"}
         }],
         "outputs": [{
             "amount": "80000000",
@@ -372,7 +379,11 @@ fn global_thread_spending_limit_close_keeps_explicit_null_policy_fields() {
     let document = decode_pskb_wire(&super::pskb::encode_wire(&planned.plan).expect("wire"));
 
     assert_eq!(document[0]["global"]["fallbackLockTime"], "0");
-    assert!(document[0]["global"]["covenantBranch"].is_null());
+    assert!(document[0]["global"].get("covenantBranch").is_none());
+    assert_eq!(
+        document[0]["inputs"][0]["covenantExecution"],
+        serde_json::json!({"suppliedMask": "0", "suppliedTrueMask": "0"})
+    );
     assert_eq!(document[0]["outputs"].as_array().expect("outputs").len(), 1);
     assert!(document[0]["outputs"][0]["covenantBinding"].is_null());
 }
@@ -404,7 +415,6 @@ fn global_thread_topup_matches_mixed_input_shape() {
             "version": 0,
             "txVersion": 1,
             "fallbackLockTime": "0",
-            "covenantBranch": serde_json::Value::Null,
             "inputsModifiable": false,
             "outputsModifiable": false,
             "inputCount": 3,
@@ -429,7 +439,8 @@ fn global_thread_topup_matches_mixed_input_shape() {
             "bip32Derivations": {},
             "proprietaries": {},
             "finalScriptSig": serde_json::Value::Null,
-            "minTime": "0"
+            "minTime": "0",
+            "covenantExecution": {"suppliedMask": "0", "suppliedTrueMask": "0"}
         }, {
             "previousOutpoint": { "transactionId": wallet_one.tx_id, "index": wallet_one.index },
             "sequence": "0",
@@ -1187,5 +1198,74 @@ fn payload_send_adds_an_input_instead_of_paying_tiny_change_storage_mass() {
     assert!(
         fee < 5_000_000,
         "fee {fee} should be far below the tiny-change penalty"
+    );
+}
+
+#[test]
+fn global_thread_paths_are_chosen_by_explicit_selectors_over_the_real_script() {
+    let redeem = crate::contract::covenant::build_global_allowance_script(
+        &[0x31; 32],
+        &[0x32; 32],
+        5_000_000,
+        10,
+        0,
+        &[7; 8],
+    );
+    let thread = utxo(0x96, 0, 100_000_000);
+    let withdrawal = plan_global_thread_withdrawal(GlobalThreadWithdrawalRequest {
+        thread_utxos: std::slice::from_ref(&thread),
+        covenant_script_public_key: &[0xaa],
+        destination_script_public_key: &[0xbb],
+        redeem_script: &redeem,
+        covenant_id: &[0x24; 32],
+        withdrawal: 2_000_000,
+        fee: 1_000_000,
+        csv_sequence: 7,
+        policy: &GlobalThreadPolicy::allowance(0),
+    })
+    .expect("allowance withdrawal");
+    // The beneficiary takes the outer ELSE; the inner computed selector is assigned false.
+    assert_eq!(
+        withdrawal.plan.inputs[0].covenant_execution,
+        Some(super::pskb::CovenantExecution {
+            supplied_mask: 0b11,
+            supplied_true_mask: 0b00,
+        })
+    );
+    let topup = plan_global_thread_topup(GlobalThreadTopupRequest {
+        thread_utxo: thread,
+        wallet_utxos: &[utxo(0x97, 1, 20_000_000)],
+        covenant_script_public_key: &[0xaa],
+        redeem_script: &redeem,
+        covenant_id: &[0x24; 32],
+        fee: 1_000_000,
+        policy: &GlobalThreadPolicy::allowance(0),
+    })
+    .expect("allowance top-up");
+    assert_eq!(
+        topup.plan.inputs[0].covenant_execution,
+        Some(super::pskb::CovenantExecution {
+            supplied_mask: 0b11,
+            supplied_true_mask: 0b01,
+        })
+    );
+    assert_eq!(topup.plan.inputs[1].covenant_execution, None);
+
+    let malformed = plan_global_thread_topup(GlobalThreadTopupRequest {
+        thread_utxo: utxo(0x98, 0, 50_000_000),
+        wallet_utxos: &[utxo(0x99, 1, 20_000_000)],
+        covenant_script_public_key: &[0xaa],
+        redeem_script: &[0x67],
+        covenant_id: &[0x24; 32],
+        fee: 1_000_000,
+        policy: &GlobalThreadPolicy::allowance(0),
+    });
+    assert_eq!(
+        malformed.map(|_| ()),
+        Err(GlobalThreadPlanError::InvalidRedeemScript)
+    );
+    assert_eq!(
+        GlobalThreadPlanError::InvalidRedeemScript.to_string(),
+        "Thread redeem script has no resolvable branch structure"
     );
 }

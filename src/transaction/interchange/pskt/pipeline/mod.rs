@@ -8,6 +8,7 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
 mod compact;
+mod consensus;
 mod relay;
 mod relay_fields;
 mod schema_validate;
@@ -18,7 +19,13 @@ mod wire;
 
 use crate::{
     primitives::address::KaspaNetwork,
-    transaction::interchange::kspt::wire::{Derivation, Limits, FLAG_SIGNED_OR_COMPLETE},
+    transaction::{
+        interchange::kspt::{
+            parse_compact_kspt, serialize_compact_kspt_vec,
+            wire::{Derivation, Limits, FLAG_SIGNED_OR_COMPLETE},
+        },
+        model::Transaction,
+    },
 };
 
 pub use verified::{
@@ -47,6 +54,26 @@ pub fn merge_signed_kspt(
 }
 
 /// Whether every input carries enough cryptographically valid signatures.
+/// Relay `pskt_hex` to compact KSPT, let `sign` add signatures to the parsed
+/// transaction, then merge them back through the verified pipeline. Returns
+/// the merged PSKT hex; whether every input must be signed is the caller's call.
+pub fn sign_pskt(
+    pskt_hex: &str,
+    network: KaspaNetwork,
+    limits: Limits,
+    sign: impl FnOnce(&mut Transaction) -> Result<(), String>,
+) -> Result<String, String> {
+    let relay = encode_pskt(pskt_hex, network, limits)?;
+    let mut transaction =
+        Transaction::try_new().map_err(|error| format!("KSPT transaction storage: {error:?}"))?;
+    parse_compact_kspt(&relay, &mut transaction)
+        .map_err(|error| format!("relayed KSPT parse failed: {error:?}"))?;
+    sign(&mut transaction)?;
+    let signed = serialize_compact_kspt_vec(&transaction)
+        .map_err(|error| format!("signed KSPT serialization failed: {error:?}"))?;
+    merge_signed_kspt(pskt_hex, &signed, network, limits)
+}
+
 pub fn is_complete(pskt_hex: &str, network: KaspaNetwork, limits: Limits) -> Result<bool, String> {
     relay::is_complete(pskt_hex, network, limits)
 }
@@ -62,9 +89,14 @@ pub fn verified_signature_counts(
 
 /// Finalize a complete PSKT into consensus JSON from its single verified parse.
 pub fn finalize_json(pskt_hex: &str, limits: Limits) -> Result<String, String> {
-    let transaction = relay::verify_complete_transaction(pskt_hex, KaspaNetwork::Mainnet, limits)?;
-    let verified = verified::from_compact(transaction)?;
-    verified_finalize::finalize_json(&verified)
+    verified_finalize::finalize_json(&verify_for_broadcast(pskt_hex, limits)?)
+}
+
+/// Verify a complete PSKT for finalization or analysis. The network only
+/// stamps the relay trailer of the compact form; authorization, witnesses and
+/// the consensus transaction are network-independent.
+pub fn verify_for_broadcast(pskt_hex: &str, limits: Limits) -> Result<VerifiedTransaction, String> {
+    verify_complete_pskt(pskt_hex, KaspaNetwork::Mainnet, limits)
 }
 
 /// Record the signer's receive/change derivation for one input.
@@ -130,41 +162,7 @@ pub fn verify_complete_pskt(
 }
 
 #[cfg(test)]
-pub(crate) mod test_support {
-    /// The KasKold signer capacity these vectors were written against.
-    pub(crate) const SIGNER_TEST_LIMITS: crate::transaction::interchange::kspt::wire::Limits =
-        crate::transaction::interchange::kspt::wire::Limits::new(32, 8, 768);
-
-    pub(crate) use super::relay_fields::{
-        find_pubkey_position, parse_ms45, parse_multisig_redeem, InputFields,
-    };
-    pub(crate) use super::wire::{
-        decode, document, encode, parse_derivation, Format, MAX_PSKT_WIRE_HEX_CHARS,
-    };
-
-    pub(crate) fn sighash_all_for_pskt(
-        pskt_hex: &str,
-        network: crate::primitives::address::KaspaNetwork,
-        input_index: usize,
-    ) -> Result<[u8; 32], String> {
-        super::compact::test_sighash_all_for_pskt(pskt_hex, network, input_index)
-    }
-
-    pub(crate) fn compact_covenant_execution_for_test(
-        data: &[u8],
-        input_index: usize,
-    ) -> Result<Option<(u16, u16)>, String> {
-        let transaction = super::compact::parse(
-            data,
-            crate::transaction::interchange::kspt::wire::Limits::grammar(),
-        )?;
-        transaction
-            .inputs
-            .get(input_index)
-            .map(|input| input.covenant_execution)
-            .ok_or_else(|| "KSPT input index out of range".to_string())
-    }
-}
+pub(crate) mod test_support;
 
 #[cfg(test)]
 #[path = "unit-tests/mod.rs"]

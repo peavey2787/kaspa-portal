@@ -9,7 +9,9 @@ pub use global_thread::{
     GlobalThreadPlanError, GlobalThreadPolicy, GlobalThreadTopupPlan, GlobalThreadTopupRequest,
     GlobalThreadWithdrawalPlan, GlobalThreadWithdrawalRequest,
 };
-pub use model::{CovenantInputPolicy, PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan};
+pub use model::{
+    CovenantExecution, CovenantInputPolicy, PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan,
+};
 pub use sweep::SweepInputPolicy;
 
 #[cfg(test)]

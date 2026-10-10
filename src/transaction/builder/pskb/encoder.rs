@@ -16,7 +16,7 @@ fn versioned_script_hex(script_public_key: &[u8]) -> String {
 }
 
 fn input_value(input: &PskbInputPlan) -> Value {
-    json!({
+    let mut value = json!({
         "previousOutpoint": {
             "transactionId": input.utxo.tx_id.clone(),
             "index": input.utxo.index
@@ -39,7 +39,14 @@ fn input_value(input: &PskbInputPlan) -> Value {
         "proprietaries": standard_map(&input.proprietaries),
         "finalScriptSig": Value::Null,
         "minTime": input.min_time.map(|value| value.to_string())
-    })
+    });
+    if let Some(execution) = input.covenant_execution {
+        value["covenantExecution"] = json!({
+            "suppliedMask": execution.supplied_mask.to_string(),
+            "suppliedTrueMask": execution.supplied_true_mask.to_string(),
+        });
+    }
+    value
 }
 
 fn output_value(output: &PskbOutputPlan) -> Value {
@@ -81,9 +88,6 @@ pub fn encode_wire(plan: &PskbPlan) -> Result<String, String> {
             .map(|value| Value::String(value.to_string()))
             .unwrap_or(Value::Null),
     );
-    if let Some(branch) = &plan.global.covenant_branch {
-        global.insert("covenantBranch".to_string(), branch.clone());
-    }
     global.insert("inputsModifiable".to_string(), Value::Bool(false));
     global.insert("outputsModifiable".to_string(), Value::Bool(false));
     global.insert("inputCount".to_string(), Value::from(inputs.len()));

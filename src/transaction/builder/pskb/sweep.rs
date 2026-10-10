@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::chain::utxo::UtxoEntry;
 
-use super::{PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan};
+use super::{CovenantExecution, PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan};
 
 /// Input policy shared by full-sweep covenant, ZK and privacy spends.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -17,18 +17,20 @@ pub struct SweepInputPolicy {
     pub proprietaries: Value,
     #[serde(with = "crate::primitives::serialization::decimal_opt_u64")]
     pub min_time: Option<u64>,
+    pub execution: Option<CovenantExecution>,
 }
 
 impl SweepInputPolicy {
     #[must_use]
-    pub fn covenant(redeem_script: &[u8], sequence: u64, branch_metadata: Value) -> Self {
+    pub fn covenant(redeem_script: &[u8], sequence: u64, execution: CovenantExecution) -> Self {
         Self {
             sequence,
             sig_op_count: 1,
             minimum_signatures: 1,
             redeem_script: Some(redeem_script.to_vec()),
-            proprietaries: branch_metadata,
+            proprietaries: Value::Array(Vec::new()),
             min_time: Some(0),
+            execution: Some(execution),
         }
     }
 
@@ -41,6 +43,7 @@ impl SweepInputPolicy {
             redeem_script: None,
             proprietaries,
             min_time: Some(0),
+            execution: None,
         }
     }
 }
@@ -68,6 +71,7 @@ pub fn plan_sweep(
             redeem_script: input_policy.redeem_script.clone(),
             proprietaries: input_policy.proprietaries.clone(),
             min_time: input_policy.min_time,
+            covenant_execution: input_policy.execution,
         })
         .collect();
 

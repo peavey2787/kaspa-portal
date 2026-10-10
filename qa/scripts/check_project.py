@@ -320,7 +320,7 @@ for rel, text in [
         fail(f'{rel} must not handcraft fake PSKB signatures; use the real compact-KSPT sign/merge path')
 
 offline_support = (ROOT/'qa/tests/e2e/offline_support.rs').read_text(errors='replace')
-if 'sign_transaction_account_multi_addr_with_entropy' not in offline_support or 'merge_signed_kspt_into_pskb' not in offline_support:
+if 'sign_transaction_account_multi_addr_with_entropy' not in offline_support or 'sign_pskt(' not in offline_support:
     fail('offline E2E support must sign planner output through the real account KSPT sign/merge pipeline')
 if 'sign_pskb_for_account(&with_payload' not in offline_tx:
     fail('offline transaction E2E must sign its planner-generated payload PSKB before analysis/finalization')

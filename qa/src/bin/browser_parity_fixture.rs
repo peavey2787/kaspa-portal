@@ -1,5 +1,6 @@
 use std::{env, fs, path::PathBuf};
 
+use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
     chain::utxo::UtxoEntry,
     contract::{crowdfund::CrowdfundScript, shipping_escrow::ShippingEscrowScriptRequest},
@@ -12,12 +13,11 @@ use kaspa_portal::{
     transaction::{
         interchange::{
             kspt::{
-                is_fully_signed, parse_compact_kspt, serialize_compact_kspt_vec,
-                sign_transaction_account_multi_addr_with_entropy,
+                is_fully_signed, sign_transaction_account_multi_addr_with_entropy, wire::Limits,
             },
-            pskt::{merge_signed_kspt_into_pskb, relay_pskb_as_kspt_hex_for_network},
+            pskt::pipeline::sign_pskt,
         },
-        model::{SigHashType, Transaction},
+        model::SigHashType,
     },
     wallet::key::xpub::{
         derive_account_raw_kpub_payload, derive_and_serialize_kpub,
@@ -81,27 +81,23 @@ fn sign_pskb_for_account(
     entropy_byte: u8,
     network_name: &str,
 ) -> String {
-    let relay_hex = relay_pskb_as_kspt_hex_for_network(wire, network_name)
-        .expect("relay browser fixture PSKB as compact KSPT");
-    let relay = hex::decode(relay_hex).expect("decode browser fixture relay");
-    let mut transaction = Transaction::try_new().expect("transaction storage");
-    parse_compact_kspt(&relay, &mut transaction).expect("parse browser fixture relay");
-    let signed = sign_transaction_account_multi_addr_with_entropy(
-        &mut transaction,
-        &imported.key,
-        SigHashType::All,
-        &[entropy_byte; 32],
-    )
-    .expect("sign browser fixture wallet inputs");
-    assert!(signed > 0, "browser fixture had no signable wallet inputs");
-    assert!(
-        is_fully_signed(&transaction),
-        "browser fixture transaction is not fully signed"
-    );
-    let signed_wire =
-        serialize_compact_kspt_vec(&transaction).expect("serialize browser fixture KSPT");
-    merge_signed_kspt_into_pskb(&hex::encode(signed_wire), wire)
-        .expect("merge browser fixture signatures")
+    let network = KaspaNetwork::from_name(network_name).expect("known network");
+    sign_pskt(wire, network, Limits::grammar(), |transaction| {
+        let signed = sign_transaction_account_multi_addr_with_entropy(
+            transaction,
+            &imported.key,
+            SigHashType::All,
+            &[entropy_byte; 32],
+        )
+        .expect("sign browser fixture wallet inputs");
+        assert!(signed > 0, "browser fixture had no signable wallet inputs");
+        assert!(
+            is_fully_signed(transaction),
+            "browser fixture transaction is not fully signed"
+        );
+        Ok(())
+    })
+    .expect("merge browser fixture signatures")
 }
 
 fn raw_scanner_fixture(transaction_id: &[u8; 32], preimage: &[u8]) -> Vec<u8> {
