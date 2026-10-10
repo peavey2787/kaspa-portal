@@ -152,9 +152,8 @@ fn placeholder_signatures_and_unsupported_versions_never_reach_consensus_bytes()
 
     let mut future = bytes;
     future[6..8].copy_from_slice(&2u16.to_le_bytes());
-    let error = super::verify_complete_kspt(&future)
-        .err()
-        .expect("future transaction version refused");
+    let error =
+        super::verify_complete_kspt(&future).expect_err("future transaction version refused");
     assert!(
         error.to_ascii_lowercase().contains("version"),
         "unexpected error: {error}"
