@@ -78,7 +78,10 @@ fn storage_mass_charges_a_spent_covenant_identity() {
         covenant.storage_mass,
         ConsensusTransaction::storage_mass_for(&[(100_000, 34, true)], &covenant.outputs).unwrap()
     );
-    assert_ne!(covenant.storage_mass, plain.storage_mass);
+    // KIP-9: C/90_000 - C/100_000 for the plain spend; a spent covenant
+    // identity makes the input two storage units, so the relaxed mass is 0.
+    assert_eq!(plain.storage_mass, 1_111_111);
+    assert_eq!(covenant.storage_mass, 0);
 }
 
 #[test]
