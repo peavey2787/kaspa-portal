@@ -3,7 +3,10 @@ use wasm_bindgen::prelude::*;
 use crate::{
     chain::utxo::UtxoEntry,
     transaction::{
-        builder::{CovenantBuildRequest, CovenantEncoding, MultisigConsolidationRequest},
+        builder::{
+            CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding,
+            MultisigConsolidationRequest,
+        },
         interchange::kspt::SignedResponse,
         model::SigHashType,
         TransactionApi,
@@ -173,6 +176,7 @@ impl WasmTransaction {
                 fee: decimal(fee_sompi, "fee")?,
                 change_address,
                 utxo_indices_csv,
+                dust_policy: CovenantDustPolicy::Preserve,
                 encoding,
             })
             .await
@@ -203,6 +207,7 @@ impl WasmTransaction {
                 fee: decimal(fee_sompi, "fee")?,
                 change_address,
                 utxo_indices_csv,
+                dust_policy: CovenantDustPolicy::Preserve,
                 encoding,
             })
             .await

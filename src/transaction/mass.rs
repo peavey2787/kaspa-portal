@@ -205,48 +205,70 @@ pub(crate) fn estimate_non_contextual_fee_for_shape(
     Ok((fee, compute, transient))
 }
 
-pub(crate) fn estimate_covenant_deposit_fee(
-    payload_len: u64,
-    tag_genesis: bool,
-    input_count: u64,
-) -> Result<u64, String> {
-    const FEE_MARKUP_PERCENT: u64 = 115;
-    const MINIMUM_FEE: u64 = 100_000;
-    const BASE_TRANSACTION_BYTES: u64 = 46;
-    const PER_P2PK_INPUT_BYTES: u64 = 45 + 66 + 4;
-    const COVENANT_OUTPUT_BYTES: u64 = 35;
-    const GENESIS_TAG_BYTES: u64 = 32;
-    const CHANGE_OUTPUT_BYTES: u64 = 43;
-    const FRAMING_BYTES: u64 = 10;
-    const SCRIPT_PUBLIC_KEY_MASS: u64 = (35 + 34) * MASS_PER_SCRIPT_PUBLIC_KEY_BYTE;
+/// Transaction shape priced by the covenant fee estimate: P2PK funding
+/// inputs, at most one P2SH covenant input carrying `redeem_bytes`, a
+/// covenant output with `binding_bytes` of covenant binding, a P2PK change
+/// output and `payload_bytes` of payload.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CovenantFeeShape {
+    pub p2pk_inputs: u64,
+    pub redeem_bytes: u64,
+    pub payload_bytes: u64,
+    pub binding_bytes: u64,
+}
 
-    let input_bytes = input_count
-        .checked_mul(PER_P2PK_INPUT_BYTES)
-        .ok_or_else(|| "Covenant fee input-byte estimate overflow".to_string())?;
-    let covenant_output_bytes = COVENANT_OUTPUT_BYTES
-        .checked_add(if tag_genesis { GENESIS_TAG_BYTES } else { 0 })
-        .ok_or_else(|| "Covenant fee output-byte estimate overflow".to_string())?;
-    let estimated_transaction_bytes = BASE_TRANSACTION_BYTES
-        .checked_add(input_bytes)
-        .and_then(|value| value.checked_add(covenant_output_bytes))
-        .and_then(|value| value.checked_add(CHANGE_OUTPUT_BYTES))
-        .and_then(|value| value.checked_add(payload_len))
-        .and_then(|value| value.checked_add(FRAMING_BYTES))
-        .ok_or_else(|| "Covenant transaction-byte estimate overflow".to_string())?;
-    let signature_operation_mass = input_count
-        .checked_mul(MASS_PER_SIG_OP)
-        .ok_or_else(|| "Covenant signature-operation mass overflow".to_string())?;
-    let compute_mass = estimated_transaction_bytes
-        .checked_mul(MASS_PER_TX_BYTE)
-        .and_then(|value| value.checked_add(signature_operation_mass))
-        .and_then(|value| value.checked_add(SCRIPT_PUBLIC_KEY_MASS))
-        .ok_or_else(|| "Covenant compute-mass estimate overflow".to_string())?;
-    let fee = compute_mass
-        .checked_mul(MIN_STANDARD_FEE_RATE_SOMPI_PER_GRAM)
-        .and_then(|value| value.checked_mul(FEE_MARKUP_PERCENT))
-        .map(|value| value / 100)
-        .ok_or_else(|| "Covenant fee estimate overflow".to_string())?;
-    Ok(fee.max(MINIMUM_FEE))
+impl CovenantFeeShape {
+    /// Minimum-rate fee for the shape with a 15% markup, never below 0.001 KAS.
+    pub fn calculate(self) -> Result<u64, String> {
+        const FEE_MARKUP_PERCENT: u64 = 115;
+        const MINIMUM_FEE: u64 = 100_000;
+        const BASE_TRANSACTION_BYTES: u64 = 46;
+        const PER_P2PK_INPUT_BYTES: u64 = 45 + 66 + 4;
+        const P2SH_INPUT_FIXED_BYTES: u64 = 118;
+        const COVENANT_OUTPUT_BYTES: u64 = 35;
+        const CHANGE_OUTPUT_BYTES: u64 = 43;
+        const FRAMING_BYTES: u64 = 10;
+        const SCRIPT_PUBLIC_KEY_MASS: u64 = (35 + 34) * MASS_PER_SCRIPT_PUBLIC_KEY_BYTE;
+
+        let has_p2sh_input = self.redeem_bytes > 0;
+        let input_count = self
+            .p2pk_inputs
+            .checked_add(u64::from(has_p2sh_input))
+            .ok_or_else(|| "Covenant fee input-count overflow".to_string())?;
+        let p2pk_bytes = self
+            .p2pk_inputs
+            .checked_mul(PER_P2PK_INPUT_BYTES)
+            .ok_or_else(|| "Covenant fee input-byte estimate overflow".to_string())?;
+        let p2sh_bytes = P2SH_INPUT_FIXED_BYTES
+            .checked_add(self.redeem_bytes)
+            .ok_or_else(|| "Covenant P2SH input-byte estimate overflow".to_string())?
+            * u64::from(has_p2sh_input);
+        let covenant_output_bytes = COVENANT_OUTPUT_BYTES
+            .checked_add(self.binding_bytes)
+            .ok_or_else(|| "Covenant fee output-byte estimate overflow".to_string())?;
+        let estimated_transaction_bytes = BASE_TRANSACTION_BYTES
+            .checked_add(p2pk_bytes)
+            .and_then(|value| value.checked_add(p2sh_bytes))
+            .and_then(|value| value.checked_add(covenant_output_bytes))
+            .and_then(|value| value.checked_add(CHANGE_OUTPUT_BYTES))
+            .and_then(|value| value.checked_add(self.payload_bytes))
+            .and_then(|value| value.checked_add(FRAMING_BYTES))
+            .ok_or_else(|| "Covenant transaction-byte estimate overflow".to_string())?;
+        let signature_operation_mass = input_count
+            .checked_mul(MASS_PER_SIG_OP)
+            .ok_or_else(|| "Covenant signature-operation mass overflow".to_string())?;
+        let compute_mass = estimated_transaction_bytes
+            .checked_mul(MASS_PER_TX_BYTE)
+            .and_then(|value| value.checked_add(signature_operation_mass))
+            .and_then(|value| value.checked_add(SCRIPT_PUBLIC_KEY_MASS))
+            .ok_or_else(|| "Covenant compute-mass estimate overflow".to_string())?;
+        let fee = compute_mass
+            .checked_mul(MIN_STANDARD_FEE_RATE_SOMPI_PER_GRAM)
+            .and_then(|value| value.checked_mul(FEE_MARKUP_PERCENT))
+            .map(|value| value / 100)
+            .ok_or_else(|| "Covenant fee estimate overflow".to_string())?;
+        Ok(fee.max(MINIMUM_FEE))
+    }
 }
 
 fn estimated_serialized_size(transaction: &ConsensusTransaction) -> Result<u64, String> {

@@ -1,6 +1,6 @@
 use super::{
     fee::DepositFeePolicy,
-    model::{CovenantBuildRequest, CovenantEncoding},
+    model::{CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding, KIP9_MIN_CHANGE_SOMPI},
     selection,
 };
 use crate::{
@@ -20,6 +20,7 @@ pub(super) struct PreparedRequest {
 pub(crate) struct CovenantPlanInput<'a> {
     pub(crate) send_amount: u64,
     pub(crate) fee: u64,
+    pub(crate) dust_policy: CovenantDustPolicy,
     pub(crate) utxo_indices_csv: &'a str,
     pub(crate) encoding: CovenantEncoding<'a>,
     pub(crate) covenant_script: &'a [u8],
@@ -33,7 +34,7 @@ struct SelectedPlan {
     fee: u64,
 }
 
-pub(crate) async fn build(
+pub async fn build(
     client: &NetworkClient,
     request: CovenantBuildRequest<'_>,
 ) -> Result<String, String> {
@@ -45,7 +46,7 @@ pub(crate) async fn build(
 /// Build a covenant PSKB and return the genesis covenant ID when the selected
 /// encoding carries a bound genesis. This keeps the UI from recomputing the ID
 /// from a potentially different UTXO selection.
-pub(crate) async fn build_with_binding(
+pub async fn build_with_binding(
     client: &NetworkClient,
     request: CovenantBuildRequest<'_>,
 ) -> Result<(String, Option<[u8; 32]>), String> {
@@ -62,6 +63,7 @@ pub(crate) async fn build_with_binding(
         CovenantPlanInput {
             send_amount: request.send_amount,
             fee: request.fee,
+            dust_policy: request.dust_policy,
             utxo_indices_csv: request.utxo_indices_csv,
             encoding: request.encoding,
             covenant_script: &prepared.covenant_script,
@@ -148,7 +150,7 @@ fn adjusted_send(
 ) -> Result<u64, String> {
     let selected =
         selected_send_amount(input.send_amount, total, fee, target, used_manual_selection)?;
-    let adjusted = apply_genesis_send_policy(input, selected, total, fee)?;
+    let adjusted = apply_send_policies(input, selected, total, fee, used_manual_selection)?;
     validate_genesis_minimum(input, adjusted)?;
     Ok(adjusted)
 }
@@ -172,6 +174,23 @@ fn selected_send_amount(
     Ok(adjusted)
 }
 
+fn apply_send_policies(
+    input: &CovenantPlanInput<'_>,
+    selected: u64,
+    total: u64,
+    fee: u64,
+    used_manual_selection: bool,
+) -> Result<u64, String> {
+    let adjusted = apply_genesis_send_policy(input, selected, total, fee)?;
+    apply_dust_policy(
+        input.dust_policy,
+        adjusted,
+        total,
+        fee,
+        used_manual_selection,
+    )
+}
+
 fn apply_genesis_send_policy(
     input: &CovenantPlanInput<'_>,
     selected: u64,
@@ -184,6 +203,28 @@ fn apply_genesis_send_policy(
     total
         .checked_sub(fee)
         .ok_or("Covenant genesis adjustment underflow".to_string())
+}
+
+pub(super) fn apply_dust_policy(
+    policy: CovenantDustPolicy,
+    selected: u64,
+    total: u64,
+    fee: u64,
+    used_manual_selection: bool,
+) -> Result<u64, String> {
+    if policy != CovenantDustPolicy::FoldSubKip9Change || !used_manual_selection {
+        return Ok(selected);
+    }
+    let change = total
+        .checked_sub(selected)
+        .and_then(|remaining| remaining.checked_sub(fee))
+        .ok_or_else(|| "Covenant dust-policy arithmetic underflow".to_string())?;
+    if change == 0 || change >= KIP9_MIN_CHANGE_SOMPI {
+        return Ok(selected);
+    }
+    total
+        .checked_sub(fee)
+        .ok_or_else(|| "Covenant dust-fold arithmetic underflow".to_string())
 }
 
 fn validate_genesis_minimum(input: &CovenantPlanInput<'_>, adjusted: u64) -> Result<(), String> {

@@ -9,7 +9,9 @@ use kaspa_portal::{
     contract::script::p2sh::script_to_address,
     primitives::NetworkId,
     transaction::{
-        builder::{CovenantBuildRequest, CovenantEncoding, MultisigConsolidationRequest},
+        builder::{
+            CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding, MultisigConsolidationRequest,
+        },
         consensus::ConsensusTransaction,
         interchange::{
             kspt::{
@@ -430,6 +432,7 @@ async fn rust_funded_covenant_network_transactions() {
             fee: PRIORITY_FEE_SOMPI,
             change_address,
             utxo_indices_csv: "",
+            dust_policy: CovenantDustPolicy::Preserve,
             encoding: CovenantEncoding::Payload {
                 payload_hex: "706f7274616c2d653265",
                 tag_genesis: false,
@@ -447,6 +450,7 @@ async fn rust_funded_covenant_network_transactions() {
             fee: PRIORITY_FEE_SOMPI,
             change_address,
             utxo_indices_csv: "",
+            dust_policy: CovenantDustPolicy::Preserve,
             encoding: CovenantEncoding::Payload {
                 payload_hex: "706f7274616c2d626f756e64",
                 tag_genesis: true,

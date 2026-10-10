@@ -94,6 +94,7 @@ fn covenant_planning_covers_manual_adjustment_payload_and_genesis_policy() {
         CovenantPlanInput {
             send_amount: 200_000,
             fee: 1,
+            dust_policy: super::model::CovenantDustPolicy::Preserve,
             utxo_indices_csv: "0",
             encoding: CovenantEncoding::Payload {
                 payload_hex: "",
@@ -114,6 +115,7 @@ fn covenant_planning_covers_manual_adjustment_payload_and_genesis_policy() {
         CovenantPlanInput {
             send_amount: 0,
             fee: 1,
+            dust_policy: super::model::CovenantDustPolicy::Preserve,
             utxo_indices_csv: "",
             encoding: CovenantEncoding::Payload {
                 payload_hex: "",
@@ -146,6 +148,7 @@ fn covenant_planning_rejects_insufficient_small_and_invalid_genesis_funding() {
     let base = |encoding, send_amount, csv| CovenantPlanInput {
         send_amount,
         fee: 1,
+        dust_policy: super::model::CovenantDustPolicy::Preserve,
         utxo_indices_csv: csv,
         encoding,
         covenant_script: &script,
@@ -240,6 +243,7 @@ fn covenant_request_preparation_covers_payload_bound_and_invalid_hex_paths() {
             send_amount: 20_000_000,
             fee: 1_000,
             change_address,
+            dust_policy: super::model::CovenantDustPolicy::Preserve,
             utxo_indices_csv: "",
             encoding,
         }
@@ -303,6 +307,7 @@ fn covenant_builder_boundary_rejects_invalid_addresses_before_network_io() {
         send_amount: 20_000_000,
         fee: 300_000,
         change_address: "not-an-address",
+        dust_policy: super::model::CovenantDustPolicy::Preserve,
         utxo_indices_csv: "",
         encoding: CovenantEncoding::BoundGenesis,
     };
@@ -374,6 +379,7 @@ fn covenant_adjustment_and_change_boundaries_are_amount_exact() {
     let input = |send_amount, fee, csv, encoding, payload| CovenantPlanInput {
         send_amount,
         fee,
+        dust_policy: super::model::CovenantDustPolicy::Preserve,
         utxo_indices_csv: csv,
         encoding,
         covenant_script: &covenant_script,
@@ -468,6 +474,7 @@ fn tagged_genesis_policy_observes_zero_send_and_exact_floor_boundaries() {
             CovenantPlanInput {
                 send_amount,
                 fee: 1,
+                dust_policy: super::model::CovenantDustPolicy::Preserve,
                 utxo_indices_csv: "",
                 encoding: CovenantEncoding::Payload {
                     payload_hex: "",
@@ -503,4 +510,170 @@ fn tagged_genesis_policy_observes_zero_send_and_exact_floor_boundaries() {
     let tagged_doc = decode_covenant_wire(&tagged_nonzero);
     assert_eq!(tagged_doc[0]["outputs"][0]["amount"], "10000000");
     assert_eq!(tagged_doc[0]["outputs"][1]["amount"], "2000000");
+}
+
+#[test]
+fn covenant_dust_policy_folds_only_opted_in_manual_sub_kip9_change() {
+    use super::{
+        builder::{encode_from_utxos, CovenantPlanInput},
+        model::{CovenantDustPolicy, CovenantEncoding},
+    };
+
+    let covenant_script = [0x51, 0xac];
+    let change_script = [0x20, 0x01, 0xac];
+    let fee = DepositFeePolicy::new(0, false)
+        .calculate(1)
+        .expect("fee calculation");
+    let total = fee + 15_000_000;
+    let build = |policy| {
+        encode_from_utxos(
+            CovenantPlanInput {
+                send_amount: 10_000_000,
+                fee: 1,
+                dust_policy: policy,
+                utxo_indices_csv: "0",
+                encoding: CovenantEncoding::Payload {
+                    payload_hex: "",
+                    tag_genesis: false,
+                },
+                covenant_script: &covenant_script,
+                change_script: &change_script,
+                payload: Some(&[]),
+            },
+            vec![utxo(0x76, total)],
+        )
+    };
+
+    let preserved = decode_covenant_wire(&build(CovenantDustPolicy::Preserve).expect("preserved"));
+    assert_eq!(preserved[0]["outputs"].as_array().unwrap().len(), 2);
+    assert_eq!(preserved[0]["outputs"][1]["amount"], "5000000");
+
+    let folded =
+        decode_covenant_wire(&build(CovenantDustPolicy::FoldSubKip9Change).expect("folded"));
+    assert_eq!(folded[0]["outputs"].as_array().unwrap().len(), 1);
+    assert_eq!(folded[0]["outputs"][0]["amount"], "15000000");
+}
+
+#[test]
+fn covenant_fee_shape_preserves_p2sh_accounting_and_overflow_checks() {
+    use crate::transaction::mass::CovenantFeeShape;
+
+    let plain = CovenantFeeShape {
+        p2pk_inputs: 1,
+        redeem_bytes: 0,
+        payload_bytes: 0,
+        binding_bytes: 0,
+    }
+    .calculate()
+    .expect("plain fee");
+    let p2sh = CovenantFeeShape {
+        p2pk_inputs: 1,
+        redeem_bytes: 64,
+        payload_bytes: 0,
+        binding_bytes: 0,
+    }
+    .calculate()
+    .expect("p2sh fee");
+    assert!(p2sh > plain);
+
+    assert!(matches!(
+        CovenantFeeShape {
+            p2pk_inputs: 0,
+            redeem_bytes: u64::MAX,
+            payload_bytes: 0,
+            binding_bytes: 0,
+        }
+        .calculate(),
+        Err(error) if error.contains("P2SH input-byte estimate overflow")
+    ));
+
+    assert!(matches!(
+        CovenantFeeShape {
+            p2pk_inputs: u64::MAX,
+            redeem_bytes: 1,
+            payload_bytes: 0,
+            binding_bytes: 0,
+        }
+        .calculate(),
+        Err(error) if error.contains("input-count overflow")
+    ));
+    assert!(matches!(
+        CovenantFeeShape {
+            p2pk_inputs: 20_000_000_000_000_000,
+            redeem_bytes: 0,
+            payload_bytes: 0,
+            binding_bytes: 0,
+        }
+        .calculate(),
+        Err(error) if error.contains("signature-operation mass overflow")
+    ));
+    assert!(matches!(
+        CovenantFeeShape {
+            p2pk_inputs: 0,
+            redeem_bytes: 0,
+            payload_bytes: 0,
+            binding_bytes: u64::MAX,
+        }
+        .calculate(),
+        Err(error) if error.contains("output-byte estimate overflow")
+    ));
+    assert!(matches!(
+        CovenantFeeShape {
+            p2pk_inputs: 0,
+            redeem_bytes: 0,
+            payload_bytes: u64::MAX,
+            binding_bytes: 0,
+        }
+        .calculate(),
+        Err(error) if error.contains("transaction-byte estimate overflow")
+    ));
+}
+
+#[test]
+fn dust_policy_short_circuit_terms_are_independent() {
+    assert_eq!(
+        super::builder::apply_dust_policy(
+            super::model::CovenantDustPolicy::Preserve,
+            100,
+            101,
+            0,
+            true
+        ),
+        Ok(100),
+    );
+    assert_eq!(
+        super::builder::apply_dust_policy(
+            super::model::CovenantDustPolicy::FoldSubKip9Change,
+            100,
+            101,
+            0,
+            false
+        ),
+        Ok(100),
+    );
+    assert_eq!(
+        super::builder::apply_dust_policy(
+            super::model::CovenantDustPolicy::FoldSubKip9Change,
+            100,
+            101,
+            0,
+            true
+        ),
+        Ok(101),
+    );
+
+    let selected = 100_000_000;
+    let fee = 10_000;
+    let total = selected + fee + super::model::KIP9_MIN_CHANGE_SOMPI;
+    assert_eq!(
+        super::builder::apply_dust_policy(
+            super::model::CovenantDustPolicy::FoldSubKip9Change,
+            selected,
+            total,
+            fee,
+            true,
+        ),
+        Ok(selected),
+        "change at the KIP-9 minimum is preserved rather than folded",
+    );
 }

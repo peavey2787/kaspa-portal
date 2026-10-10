@@ -13,10 +13,12 @@ impl DepositFeePolicy {
     }
 
     pub(super) fn calculate(self, input_count: u64) -> Result<u64, String> {
-        crate::transaction::mass::estimate_covenant_deposit_fee(
-            self.payload_len,
-            self.tag_genesis,
-            input_count,
-        )
+        crate::transaction::mass::CovenantFeeShape {
+            p2pk_inputs: input_count,
+            redeem_bytes: 0,
+            payload_bytes: self.payload_len,
+            binding_bytes: if self.tag_genesis { 32 } else { 0 },
+        }
+        .calculate()
     }
 }
