@@ -23,6 +23,11 @@ Finalization runs only through the verify-once PSKT pipeline.
 - PSKB plans carry an explicit per-input `CovenantExecution`;
   `PskbGlobalPlan::covenant_branch`/`with_branch` are removed and
   `SweepInputPolicy::covenant` takes the execution instead of branch metadata.
+- `pskt::parse_summary` reports cryptographically verified signature counts
+  and completion (from the pipeline) instead of counting signature entries,
+  and includes output change-derivation hints. Review, mutation and the PSKB
+  envelope share the pipeline's strict JSON grammar, lowercase outer hex and
+  resource ceiling; multisig and key-position parsing exist once.
 
 ## 1.4.0
 

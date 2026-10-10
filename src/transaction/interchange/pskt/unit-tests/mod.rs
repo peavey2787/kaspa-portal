@@ -10,6 +10,100 @@ mod exact_json;
 mod review;
 mod review_boundaries;
 
+/// Fill the PSKT fields the canonical grammar requires but review fixtures omit.
+pub(super) fn canonical_test_pskt(mut value: Value) -> Value {
+    fn normalize_one(pskt: &mut Value) {
+        let input_count = pskt
+            .get("inputs")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        let output_count = pskt
+            .get("outputs")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        if let Some(global) = pskt.get_mut("global").and_then(Value::as_object_mut) {
+            global.entry("version").or_insert(Value::from(0u8));
+            global.entry("txVersion").or_insert(Value::from(0u8));
+            global
+                .entry("inputCount")
+                .or_insert(Value::from(input_count));
+            global
+                .entry("outputCount")
+                .or_insert(Value::from(output_count));
+        }
+        if let Some(inputs) = pskt.get_mut("inputs").and_then(Value::as_array_mut) {
+            for input in inputs {
+                if let Some(obj) = input.as_object_mut() {
+                    obj.entry("sighashType").or_insert(Value::from(1u8));
+                    if !obj.get("proprietaries").is_some_and(Value::is_object) {
+                        obj.insert(
+                            "proprietaries".into(),
+                            Value::Object(serde_json::Map::new()),
+                        );
+                    }
+                }
+            }
+        }
+        if let Some(outputs) = pskt.get_mut("outputs").and_then(Value::as_array_mut) {
+            for output in outputs {
+                if let Some(obj) = output.as_object_mut() {
+                    if !obj.get("proprietaries").is_some_and(Value::is_object) {
+                        obj.insert(
+                            "proprietaries".into(),
+                            Value::Object(serde_json::Map::new()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    match &mut value {
+        Value::Array(items) => items.iter_mut().for_each(normalize_one),
+        Value::Object(_) => normalize_one(&mut value),
+        _ => {}
+    }
+    value
+}
+
+/// The deterministic test signers' keys, and signing of input 0.
+mod signing {
+    use serde_json::Value;
+
+    use crate::transaction::interchange::pskt::pipeline::test_support::{
+        pskb, sign_first_input, xonly,
+    };
+
+    pub(super) fn test_xonly(seed: u8) -> [u8; 32] {
+        xonly(seed)
+    }
+
+    pub(super) fn test_compressed_key(seed: u8) -> String {
+        format!("02{}", hex::encode(xonly(seed)))
+    }
+
+    /// Sign input 0 of a single-entry PSKB document with each seed; returns
+    /// the unsigned wire, the signed wire, and the signature hex strings.
+    pub(super) fn sign_first_input_document(
+        document: Value,
+        seeds: &[u8],
+    ) -> (String, String, Vec<String>) {
+        let mut entry = super::canonical_test_pskt(document)[0].clone();
+        entry["inputs"][0]["partialSigs"] = serde_json::json!({});
+        let unsigned = pskb(&entry);
+        let signed = sign_first_input(entry, seeds);
+        let signatures = signed["inputs"][0]["partialSigs"]
+            .as_object()
+            .map(|partials| {
+                partials
+                    .values()
+                    .filter_map(|entry| entry["schnorr"].as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        (unsigned, pskb(&signed), signatures)
+    }
+}
+
 #[test]
 fn detects_supported_wire_magics() {
     assert_eq!(detect_format_hex("50534b42"), PsktFormat::Pskb);

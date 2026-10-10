@@ -10,11 +10,14 @@ use crate::transaction::interchange::pskt::wire::{
     decode_root_for_review, pskt_from_root_for_review,
 };
 use crate::transaction::interchange::pskt::{InputSummary, OutputSummary, PsktFormat, PsktSummary};
+use crate::{
+    primitives::address::KaspaNetwork,
+    transaction::interchange::{kspt::wire::Limits, pskt::pipeline},
+};
 
 struct ParsedInputs {
     summaries: Vec<InputSummary>,
     total_sompi: u64,
-    all_ready: bool,
 }
 
 struct ParsedOutputs {
@@ -25,7 +28,30 @@ struct ParsedOutputs {
 pub fn parse_summary(wire_hex: &str, network_prefix: &str) -> Result<PsktSummary, String> {
     let (format, root) = decode_root_for_review(wire_hex)?;
     let pskt = pskt_from_root_for_review(&root, format)?;
-    parse_pskt_object(pskt, format, network_prefix)
+    let mut summary = parse_pskt_object(pskt, format, network_prefix)?;
+    let network = KaspaNetwork::from_hrp(network_prefix)
+        .ok_or_else(|| "unknown Kaspa network prefix".to_string())?;
+    apply_verified_status(&mut summary, wire_hex, network)?;
+    Ok(summary)
+}
+
+/// Signature counts and readiness come only from cryptographic verification,
+/// never from how many signature entries a document carries.
+fn apply_verified_status(
+    summary: &mut PsktSummary,
+    wire_hex: &str,
+    network: KaspaNetwork,
+) -> Result<(), String> {
+    let limits = Limits::grammar();
+    let verified = pipeline::verified_signature_counts(wire_hex, network, limits)?;
+    if verified.len() != summary.inputs.len() {
+        return Err("verified signature status/input count mismatch".to_string());
+    }
+    for (input, count) in summary.inputs.iter_mut().zip(verified) {
+        input.sigs_present = count;
+    }
+    summary.finalize_ready = pipeline::is_complete(wire_hex, network, limits)?;
+    Ok(())
 }
 
 fn parse_pskt_object(
@@ -54,7 +80,7 @@ fn parse_pskt_object(
         total_in_sompi: inputs.total_sompi,
         total_out_sompi: outputs.total_sompi,
         fee_sompi,
-        finalize_ready: inputs.all_ready,
+        finalize_ready: false,
     })
 }
 
@@ -76,18 +102,15 @@ fn parse_inputs(obj: &Map<String, Value>) -> Result<ParsedInputs, String> {
         .ok_or("missing inputs".to_string())?;
     let mut summaries = Vec::with_capacity(entries.len());
     let mut total_sompi = 0u64;
-    let mut all_ready = true;
     for (index, input) in entries.iter().enumerate() {
         let summary =
             parse_input_summary(input).map_err(|error| format!("input[{index}]: {error}"))?;
         total_sompi = checked_total(total_sompi, summary.amount_sompi, "input")?;
-        all_ready &= input_is_ready(input, &summary);
         summaries.push(summary);
     }
     Ok(ParsedInputs {
         summaries,
         total_sompi,
-        all_ready,
     })
 }
 
@@ -114,18 +137,6 @@ fn checked_total(total: u64, amount: u64, kind: &str) -> Result<u64, String> {
     total.checked_add(amount).ok_or(format!(
         "PSKT {kind} total exceeds supported monetary range"
     ))
-}
-
-fn input_is_ready(input: &Value, summary: &InputSummary) -> bool {
-    let minimum = input
-        .get("minimumSignatures")
-        .and_then(Value::as_u64)
-        .and_then(|value| u8::try_from(value).ok());
-    match (summary.multisig_m, minimum) {
-        (Some(required), _) => summary.sigs_present >= required,
-        (None, Some(0)) => true,
-        (None, _) => summary.sigs_present >= 1,
-    }
 }
 
 fn format_label(format: PsktFormat) -> String {

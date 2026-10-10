@@ -1,6 +1,8 @@
 use serde_json::{json, Value};
 
-use super::super::{parse_summary, review::find_pubkey_position_in_redeem};
+use super::super::{
+    parse_summary, pipeline::find_pubkey_position as find_pubkey_position_in_redeem,
+};
 
 fn p2pk(key: u8) -> Vec<u8> {
     let mut script = vec![0x20];
@@ -14,6 +16,7 @@ fn spk(script: &[u8]) -> String {
 }
 
 fn wire(body: Value) -> String {
+    let body = super::canonical_test_pskt(body);
     let mut encoded = b"PSKT".to_vec();
     encoded.extend_from_slice(hex::encode(serde_json::to_vec(&body).unwrap()).as_bytes());
     hex::encode(encoded)
@@ -23,7 +26,7 @@ fn wire(body: Value) -> String {
 fn review_summary_preserves_exact_version_outpoint_and_display_amounts() {
     let transaction_id = "12".repeat(32);
     let body = json!({
-        "global": {"txVersion": 0x1234_u64},
+        "global": {"txVersion": 1_u64},
         "inputs": [{
             "previousOutpoint": {"transactionId": transaction_id, "index": 0x1020_3040_u64},
             "utxoEntry": {"amount": "123456789", "scriptPublicKey": spk(&p2pk(0x31))},
@@ -33,7 +36,7 @@ fn review_summary_preserves_exact_version_outpoint_and_display_amounts() {
     });
 
     let summary = parse_summary(&wire(body), "kaspa").expect("review summary");
-    assert_eq!(summary.tx_version, 0x1234);
+    assert_eq!(summary.tx_version, 1);
     assert_eq!(summary.inputs[0].prev_tx_id, "12".repeat(32));
     assert_eq!(summary.inputs[0].prev_index, 0x1020_3040);
     assert_eq!(summary.inputs[0].amount_sompi, 123_456_789);

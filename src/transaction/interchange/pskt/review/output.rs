@@ -28,6 +28,12 @@ pub(crate) fn parse_output_summary(
         .ok_or_else(|| "missing scriptPublicKey".to_string())?;
     let (_spk_version, spk_script) = parse_spk_hex(spk_full)?;
     let (kind, address) = classify_output_script(&spk_script, network_prefix);
+    let derivation = match obj.get("proprietaries") {
+        None | Some(Value::Null) => None,
+        Some(proprietaries) => {
+            crate::transaction::interchange::pskt::pipeline::parse_derivation(proprietaries)?
+        }
+    };
 
     Ok(OutputSummary {
         amount_sompi,
@@ -35,5 +41,7 @@ pub(crate) fn parse_output_summary(
         script_kind: kind,
         script_hex: hex::encode(&spk_script),
         address,
+        derivation_branch: derivation.map(|(branch, _)| branch),
+        derivation_index: derivation.map(|(_, index)| index),
     })
 }

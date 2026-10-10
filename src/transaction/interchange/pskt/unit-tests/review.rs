@@ -1,10 +1,10 @@
 use serde_json::{json, Value};
 
 use super::super::parse_summary;
-use super::super::review::{
-    find_pubkey_position_in_redeem, parse_input_summary, parse_multisig_redeem,
-    parse_output_summary, parse_spk_hex,
+use super::super::pipeline::{
+    find_pubkey_position as find_pubkey_position_in_redeem, parse_multisig_redeem,
 };
+use super::super::review::{parse_input_summary, parse_output_summary, parse_spk_hex};
 
 fn p2pk(key: u8) -> Vec<u8> {
     let mut script = vec![0x20];
@@ -36,6 +36,7 @@ fn spk(script: &[u8]) -> String {
 }
 
 fn wire(magic: &[u8; 4], body: Value) -> String {
+    let body = super::canonical_test_pskt(body);
     let mut encoded = magic.to_vec();
     encoded.extend_from_slice(hex::encode(serde_json::to_vec(&body).unwrap()).as_bytes());
     hex::encode(encoded)
@@ -84,27 +85,21 @@ fn maximum_value_input() -> Value {
 
 #[test]
 fn script_classification_parses_standard_multisig_and_covenant_shapes() {
-    assert_eq!(
-        parse_spk_hex("00").unwrap_err(),
-        "scriptPublicKey too short: 2"
-    );
-    assert!(parse_spk_hex("zz00")
+    assert!(parse_spk_hex("00")
         .unwrap_err()
-        .contains("bad version hi"));
-    assert!(parse_spk_hex("00zz")
-        .unwrap_err()
-        .contains("bad version lo"));
-    assert!(parse_spk_hex("0000zz")
-        .unwrap_err()
-        .contains("bad script hex"));
+        .contains("at least 4 bytes"));
+    assert!(parse_spk_hex("zz00").is_err());
+    assert!(parse_spk_hex("00zz").is_err());
+    assert!(parse_spk_hex("0000zz").is_err());
     assert_eq!(parse_spk_hex(&spk(&p2pk(1))).unwrap(), (0, p2pk(1)));
 
     let redeem = multisig(&[1, 2], 2);
     assert_eq!(parse_multisig_redeem(&redeem), Some((2, 2)));
-    let maximum_keys: Vec<u8> = (1..=16).collect();
+    let over_limit_keys: Vec<u8> = (1..=6).collect();
     assert_eq!(
-        parse_multisig_redeem(&multisig(&maximum_keys, 16)),
-        Some((16, 16))
+        parse_multisig_redeem(&multisig(&over_limit_keys, 6)),
+        None,
+        "Companion must reject multisig scripts above the five-key signer limit",
     );
     assert_eq!(
         find_pubkey_position_in_redeem(&redeem, &format!("02{}", "02".repeat(32))),
@@ -171,12 +166,43 @@ fn input_and_output_review_validate_fields_and_partial_signatures() {
     assert!(parse_input_summary(&json!({"utxoEntry": {}})).is_err());
 
     let output = parse_output_summary(
-        &json!({"amount": "500", "scriptPublicKey": spk(&p2pk(9))}),
+        &json!({
+            "amount": "500",
+            "scriptPublicKey": spk(&p2pk(9)),
+            "proprietaries": {"kassignerDerivation": {"branch": 1, "index": "7"}},
+        }),
         "kaspa",
     )
     .unwrap();
     assert_eq!(output.script_kind, "p2pk");
     assert!(output.address.unwrap().starts_with("kaspa:"));
+    assert_eq!(output.derivation_branch, Some(1));
+    assert_eq!(output.derivation_index, Some(7));
+    // A malformed hint is refused, not silently dropped from the review.
+    for hint in [
+        json!({"branch": 2, "index": "7"}),
+        json!({"branch": 1, "index": "-1"}),
+        json!("not an object"),
+    ] {
+        assert!(parse_output_summary(
+            &json!({
+                "amount": "500",
+                "scriptPublicKey": spk(&p2pk(9)),
+                "proprietaries": {"kassignerDerivation": hint},
+            }),
+            "kaspa",
+        )
+        .is_err());
+    }
+    let plain = parse_output_summary(
+        &json!({"amount": "500", "scriptPublicKey": spk(&p2pk(9)), "proprietaries": null}),
+        "kaspa",
+    )
+    .unwrap();
+    assert_eq!(
+        (plain.derivation_branch, plain.derivation_index),
+        (None, None)
+    );
 
     let unknown = parse_output_summary(
         &json!({"amount": "1", "scriptPublicKey": spk(&[1, 2, 3])}),
@@ -191,54 +217,40 @@ fn input_and_output_review_validate_fields_and_partial_signatures() {
 
 #[test]
 fn multisig_readiness_accepts_exact_threshold_and_rejects_one_below() {
-    let redeem = multisig(&[1, 2], 2);
-    let first_key = format!("02{}", "01".repeat(32));
-    let second_key = format!("02{}", "02".repeat(32));
-    let mut signatures = serde_json::Map::new();
-    signatures.insert(first_key.clone(), json!({"schnorr": "aa".repeat(64)}));
-    signatures.insert(second_key.clone(), json!({"schnorr": "bb".repeat(64)}));
-    let signatures = Value::Object(signatures);
-    let exact = json!({
-        "global": {"txVersion": 1},
-        "inputs": [input(&p2sh(7), Some(&redeem), signatures, None)],
-        "outputs": [{"amount": "500", "scriptPublicKey": spk(&p2pk(3))}]
-    });
-    assert!(
-        parse_summary(&wire(b"PSKT", exact), "kaspa")
-            .unwrap()
-            .finalize_ready
-    );
+    let first_key = super::signing::test_compressed_key(1);
+    let second_key = super::signing::test_compressed_key(2);
+    let mut redeem = vec![0x52, 0x20];
+    redeem.extend_from_slice(&super::signing::test_xonly(1));
+    redeem.push(0x20);
+    redeem.extend_from_slice(&super::signing::test_xonly(2));
+    redeem.extend_from_slice(&[0x52, 0xae]);
 
-    let one_short = json!({
+    let document = json!([{
         "global": {"txVersion": 1},
-        "inputs": [input(
-            &p2sh(7),
-            Some(&redeem),
-            partial_sig_map(&first_key, "schnorr", &"aa".repeat(64)),
-            None,
-        )],
+        "inputs": [input(&p2sh(7), Some(&redeem), json!({}), None)],
         "outputs": [{"amount": "500", "scriptPublicKey": spk(&p2pk(3))}]
-    });
-    assert!(
-        !parse_summary(&wire(b"PSKT", one_short), "kaspa")
-            .unwrap()
-            .finalize_ready
-    );
+    }]);
+    let (_, exact, _) = super::signing::sign_first_input_document(document.clone(), &[1, 2]);
+    assert!(parse_summary(&exact, "kaspa").unwrap().finalize_ready);
+
+    let (_, one_short, _) = super::signing::sign_first_input_document(document, &[1]);
+    let summary = parse_summary(&one_short, "kaspa").unwrap();
+    assert!(!summary.finalize_ready);
+
+    let input = &summary.inputs[0];
+    assert_eq!(input.sigs_present, 1);
+    assert_eq!(input.multisig_m, Some(2));
+    assert_ne!(first_key, second_key);
 }
 
 #[test]
 fn summary_review_handles_pskb_pskt_readiness_and_checked_fee() {
-    let sig_key = format!("02{}", "01".repeat(32));
-    let signed = input(
-        &p2pk(1),
-        None,
-        partial_sig_map(&sig_key, "schnorr", &"aa".repeat(64)),
-        None,
-    );
-    let covenant = input(&p2sh(2), Some(&[0x63, 1]), json!({}), Some(0));
+    let unsigned = input(&p2pk(1), None, json!({}), None);
+    let mut second_unsigned = input(&p2pk(2), None, json!({}), None);
+    second_unsigned["previousOutpoint"]["index"] = Value::from(3u32);
     let document = json!({
-        "global": {"txVersion": 2},
-        "inputs": [signed, covenant],
+        "global": {"txVersion": 1},
+        "inputs": [unsigned, second_unsigned],
         "outputs": [{"amount": "1500", "scriptPublicKey": spk(&p2pk(3))}]
     });
 
@@ -248,7 +260,7 @@ fn summary_review_handles_pskb_pskt_readiness_and_checked_fee() {
     assert_eq!(single.total_in_sompi, 2_000);
     assert_eq!(single.total_out_sompi, 1_500);
     assert_eq!(single.fee_sompi, 500);
-    assert!(single.finalize_ready);
+    assert!(!single.finalize_ready);
 
     let bundle = parse_summary(&wire(b"PSKB", json!([document])), "kaspa").unwrap();
     assert_eq!(bundle.format, "pskb");
@@ -313,6 +325,30 @@ fn summary_review_rejects_invalid_envelopes_and_required_sections() {
     ] {
         assert!(parse_summary(&wire(b"PSKT", invalid), "kaspa").is_err());
     }
+}
+
+#[test]
+fn summary_review_network_prefix_mapping_covers_every_supported_network_and_rejects_unknown() {
+    let document = json!({
+        "global": {"txVersion": 1},
+        "inputs": [input(&p2pk(1), None, json!({}), None)],
+        "outputs": [{"amount": "500", "scriptPublicKey": spk(&p2pk(2))}]
+    });
+    let encoded = wire(b"PSKT", document);
+
+    for prefix in ["kaspa", "kaspatest", "kaspadev", "kaspasim"] {
+        let summary = parse_summary(&encoded, prefix).expect("supported network prefix");
+        assert!(summary.outputs[0]
+            .address
+            .as_deref()
+            .is_some_and(|address| address.starts_with(prefix)));
+    }
+
+    let error = match parse_summary(&encoded, "bitcoin") {
+        Err(error) => error,
+        Ok(_) => panic!("unknown Kaspa network prefix must be rejected"),
+    };
+    assert!(error.contains("unknown Kaspa network prefix"));
 }
 
 #[test]

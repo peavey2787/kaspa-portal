@@ -6,9 +6,7 @@ mod input;
 mod output;
 mod parser;
 
-#[cfg(test)]
-pub(crate) use classification::parse_multisig_redeem;
-pub(crate) use classification::{find_pubkey_position_in_redeem, parse_spk_hex};
+pub(crate) use classification::parse_spk_hex;
 pub(crate) use input::parse_input_summary;
 pub(crate) use output::parse_output_summary;
 pub use parser::parse_summary;

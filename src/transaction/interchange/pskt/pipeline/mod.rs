@@ -28,10 +28,12 @@ use crate::{
     },
 };
 
+pub(crate) use relay_fields::{find_pubkey_position, parse_multisig_redeem};
 pub use verified::{
     VerifiedCovenantRoute, VerifiedInput, VerifiedOutput, VerifiedSignature, VerifiedTransaction,
     VerifiedWitnessPlan,
 };
+pub(crate) use wire::parse_derivation;
 pub use wire::{MAX_PSKT_JSON_BYTES, MAX_PSKT_WIRE_HEX_CHARS};
 
 /// Translate a PSKT/PSKB into the compact KSPT the signer reviews.

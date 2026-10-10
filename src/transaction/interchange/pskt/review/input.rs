@@ -6,8 +6,9 @@ use crate::alloc_prelude::*;
 use serde_json::{Map, Value};
 
 use super::classification::classify_input_script;
-use super::{find_pubkey_position_in_redeem, parse_spk_hex};
+use super::parse_spk_hex;
 use crate::transaction::interchange::pskt::exact_json::parse_exact_u64;
+use crate::transaction::interchange::pskt::pipeline::find_pubkey_position;
 use crate::transaction::interchange::pskt::{InputSummary, PartialSigInfo};
 
 pub(crate) fn parse_input_summary(inp: &Value) -> Result<InputSummary, String> {
@@ -111,7 +112,7 @@ fn parse_partial_sig_entry(
 ) -> Result<PartialSigInfo, String> {
     validate_partial_pubkey(pubkey_hex)?;
     validate_partial_signature(signature)?;
-    let position = redeem.and_then(|script| find_pubkey_position_in_redeem(script, pubkey_hex));
+    let position = redeem.and_then(|script| find_pubkey_position(script, pubkey_hex));
     Ok(PartialSigInfo {
         pubkey_hex: pubkey_hex.to_string(),
         position,

@@ -39,6 +39,9 @@ pub struct OutputSummary {
     pub script_kind: String,
     pub script_hex: String,
     pub address: Option<String>,
+    /// Signer-wallet change derivation hint (`kassignerDerivation`), if any.
+    pub derivation_branch: Option<u8>,
+    pub derivation_index: Option<u32>,
 }
 
 /// Everything the UI needs to render a PSKT review screen.

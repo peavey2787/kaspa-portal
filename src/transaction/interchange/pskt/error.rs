@@ -7,8 +7,6 @@ use crate::alloc_prelude::*;
 pub(crate) enum PsktWireError {
     UnknownFormat,
     OuterHex(String),
-    TooShort,
     MagicMismatch,
-    InnerHex(String),
     Json(String),
 }

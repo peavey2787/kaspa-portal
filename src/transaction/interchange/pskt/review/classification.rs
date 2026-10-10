@@ -4,18 +4,18 @@ use crate::alloc_prelude::*;
 // License: GPL-3.0
 
 pub(crate) fn parse_spk_hex(s: &str) -> Result<(u16, Vec<u8>), String> {
-    if s.len() < 4 {
-        return Err(format!("scriptPublicKey too short: {}", s.len()));
+    let bytes = s.as_bytes();
+    if bytes.len() < 4 || !bytes.iter().all(u8::is_ascii_hexdigit) {
+        return Err(format!(
+            "scriptPublicKey must be ASCII hex and at least 4 bytes, got {}",
+            bytes.len()
+        ));
     }
-    // Version: 2 bytes BE = 4 hex chars.
-    let ver_hex = &s[..4];
-    let script_hex = &s[4..];
-    let v0 = u8::from_str_radix(&ver_hex[..2], 16).map_err(|e| format!("bad version hi: {}", e))?;
-    let v1 =
-        u8::from_str_radix(&ver_hex[2..4], 16).map_err(|e| format!("bad version lo: {}", e))?;
-    let version = u16::from_be_bytes([v0, v1]);
-    let script = hex::decode(script_hex).map_err(|e| format!("bad script hex: {}", e))?;
-    Ok((version, script))
+    // Validated ASCII hex: one decode yields the 2-byte BE version followed by
+    // the script; only an odd length can still fail.
+    let decoded = hex::decode(s).map_err(|e| format!("bad script hex: {}", e))?;
+    let version = u16::from_be_bytes([decoded[0], decoded[1]]);
+    Ok((version, decoded[2..].to_vec()))
 }
 
 pub(crate) fn classify_input_script(
@@ -43,7 +43,9 @@ fn classify_p2sh_redeem(redeem: Option<&[u8]>) -> (String, Option<u8>, Option<u8
     let Some(script) = redeem else {
         return ("p2sh".into(), None, None);
     };
-    if let Some((m, n)) = parse_multisig_redeem(script) {
+    if let Some((m, n)) =
+        crate::transaction::interchange::pskt::pipeline::parse_multisig_redeem(script)
+    {
         return ("p2sh-multisig".into(), Some(m), Some(n));
     }
     if script.first() == Some(&0x63) {
@@ -78,68 +80,4 @@ pub(crate) fn classify_output_script(spk: &[u8], network_prefix: &str) -> (Strin
         );
     }
     ("unknown".into(), None)
-}
-
-pub(crate) fn parse_multisig_redeem(rs: &[u8]) -> Option<(u8, u8)> {
-    let m = multisig_threshold(rs)?;
-    let (position, counted) = count_multisig_pubkeys(rs)?;
-    validate_multisig_tail(rs, position, counted, m)
-}
-
-fn multisig_threshold(script: &[u8]) -> Option<u8> {
-    if script.last() != Some(&0xAE) {
-        return None;
-    }
-    decode_small_int(*script.first()?)
-}
-
-fn decode_small_int(opcode: u8) -> Option<u8> {
-    match opcode {
-        0x51..=0x60 => Some(opcode - 0x50),
-        _ => None,
-    }
-}
-
-fn count_multisig_pubkeys(script: &[u8]) -> Option<(usize, u8)> {
-    let mut position = 1usize;
-    let mut count = 0u8;
-    while position < script.len().saturating_sub(2) {
-        if script.get(position) != Some(&0x20) {
-            return None;
-        }
-        position = position.checked_add(33)?;
-        count = count.saturating_add(1);
-    }
-    Some((position, count))
-}
-
-fn validate_multisig_tail(script: &[u8], position: usize, counted: u8, m: u8) -> Option<(u8, u8)> {
-    if position.checked_add(2)? != script.len() {
-        return None;
-    }
-    let n = decode_small_int(*script.get(position)?)?;
-    (counted == n && m <= n).then_some((m, n))
-}
-
-pub(crate) fn find_pubkey_position_in_redeem(rs: &[u8], pk_hex_66: &str) -> Option<u8> {
-    if pk_hex_66.len() != 66 {
-        return None;
-    }
-    // Strip SEC1 prefix (02/03) to get the 32-byte x-only key.
-    let xonly_hex = &pk_hex_66[2..];
-    let xonly = hex::decode(xonly_hex).ok()?;
-    // Walk redeem: OP_M, then repeated [OP_DATA_32, <32>].
-    let mut pos = 1usize;
-    let mut idx: u8 = 0;
-    while pos + 33 < rs.len() {
-        if rs[pos] != 0x20 {
-            return None;
-        }
-        if &rs[pos + 1..pos + 33] == xonly.as_slice() {
-            return Some(idx);
-        }
-        pos += 33;
-        idx = idx.saturating_add(1);
-    }
-    None
 }

@@ -17,38 +17,57 @@ pub(crate) enum ErrorStyle {
 
 /// Detect the outer PSKT/PSKB wire envelope without decoding the payload.
 pub fn detect_format_hex(hex_str: &str) -> PsktFormat {
-    if hex_str.len() < 8 {
+    let Some(prefix) = hex_str.as_bytes().get(..8) else {
         return PsktFormat::Unknown;
-    }
-
-    match hex_str[..8].to_ascii_lowercase().as_str() {
-        "50534b42" => PsktFormat::Pskb,
-        "50534b54" => PsktFormat::PsktSingle,
-        _ => PsktFormat::Unknown,
+    };
+    if prefix.eq_ignore_ascii_case(b"50534b42") {
+        PsktFormat::Pskb
+    } else if prefix.eq_ignore_ascii_case(b"50534b54") {
+        PsktFormat::PsktSingle
+    } else {
+        PsktFormat::Unknown
     }
 }
 
 fn decode_wire(wire_hex: &str) -> Result<(PsktFormat, Value), PsktWireError> {
+    validate_outer_hex(wire_hex)?;
     let format = detect_format_hex(wire_hex);
     if format == PsktFormat::Unknown {
         return Err(PsktWireError::UnknownFormat);
     }
 
     let wire = hex::decode(wire_hex).map_err(|error| PsktWireError::OuterHex(error.to_string()))?;
-    if wire.len() < 4 {
-        return Err(PsktWireError::TooShort);
-    }
-
     let expected_magic: &[u8; 4] = match format {
         PsktFormat::Pskb => PSKB_MAGIC,
         PsktFormat::PsktSingle => PSKT_MAGIC,
         PsktFormat::Unknown => return Err(PsktWireError::UnknownFormat),
     };
-    if &wire[..4] != expected_magic {
+    if wire.get(..4) != Some(expected_magic.as_slice()) {
         return Err(PsktWireError::MagicMismatch);
     }
 
     Ok((format, decode_json_body(&wire[4..])?))
+}
+
+/// The signer's resource ceiling and lowercase-hex rule apply before any
+/// allocation, exactly as on the verified pipeline's own decoder.
+fn validate_outer_hex(wire_hex: &str) -> Result<(), PsktWireError> {
+    if wire_hex.len() > crate::transaction::interchange::pskt::pipeline::MAX_PSKT_WIRE_HEX_CHARS {
+        return Err(PsktWireError::OuterHex(
+            "payload exceeds signer-compatible resource ceiling".to_string(),
+        ));
+    }
+    let bytes = wire_hex.as_bytes();
+    if !bytes.len().is_multiple_of(2)
+        || !bytes
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+    {
+        return Err(PsktWireError::OuterHex(
+            "outer PSKT/PSKB must be even-length lowercase hexadecimal".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn decode_root_with_style(
@@ -67,16 +86,8 @@ pub(crate) fn format_wire_error(error: PsktWireError, style: ErrorStyle) -> Stri
         (ErrorStyle::Review, PsktWireError::OuterHex(message)) => {
             format!("Bad outer hex: {message}")
         }
-        (ErrorStyle::Standard, PsktWireError::TooShort) => "payload too short".to_string(),
-        (ErrorStyle::Review, PsktWireError::TooShort) => "Payload too short".to_string(),
         (_, PsktWireError::MagicMismatch) => {
             "wire magic does not match detected format".to_string()
-        }
-        (ErrorStyle::Standard, PsktWireError::InnerHex(message)) => {
-            format!("inner hex: {message}")
-        }
-        (ErrorStyle::Review, PsktWireError::InnerHex(message)) => {
-            format!("Bad inner hex: {message}")
         }
         (_, PsktWireError::Json(message)) => format!("JSON parse: {message}"),
     }

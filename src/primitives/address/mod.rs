@@ -54,6 +54,13 @@ impl KaspaNetwork {
         }
     }
 
+    /// The network whose address prefix is `hrp` (`kaspa`, `kaspatest`, ...).
+    pub fn from_hrp(hrp: &str) -> Option<Self> {
+        [Self::Mainnet, Self::Testnet, Self::Devnet, Self::Simnet]
+            .into_iter()
+            .find(|network| network.hrp() == Some(hrp))
+    }
+
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "mainnet" => Some(Self::Mainnet),
