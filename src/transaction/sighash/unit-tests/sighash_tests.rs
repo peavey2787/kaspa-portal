@@ -302,3 +302,6 @@ fn final_sighash_binds_every_serialized_field_and_version_zero_sigops_only() {
         "every non-zero version excludes version-zero sig-op fields",
     );
 }
+
+#[path = "vectors.rs"]
+mod vectors;

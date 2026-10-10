@@ -141,3 +141,28 @@ fn sign_pskt_hands_the_relayed_transaction_to_the_signer_and_merges_its_result()
     );
     assert_eq!(refused, Err("signer declined".to_string()));
 }
+
+/// A compact KSPT flagged fully signed whose signature is a placeholder.
+const PLACEHOLDER_SIGNED_KSPT: &str = "4b53505401010000010000000100000000000000000000000000000000000000000000000000000000000000000000000000001111111111111111111111111111111111111111111111111111111111111111010000006400000000000000000000000000000001000022204444444444444444444444444444444444444444444444444444444444444444ac0100012222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222200005a00000000000000000022205555555555555555555555555555555555555555555555555555555555555555ac4e01";
+
+#[test]
+fn placeholder_signatures_and_unsupported_versions_never_reach_consensus_bytes() {
+    let bytes = hex::decode(PLACEHOLDER_SIGNED_KSPT).expect("fixture hex");
+    assert!(super::verify_complete_kspt(&bytes).is_err());
+
+    let mut future = bytes;
+    future[6..8].copy_from_slice(&2u16.to_le_bytes());
+    let error = super::verify_complete_kspt(&future)
+        .err()
+        .expect("future transaction version refused");
+    assert!(
+        error.to_ascii_lowercase().contains("version"),
+        "unexpected error: {error}"
+    );
+
+    let mut placeholder = unsigned_document(None, 0x11);
+    placeholder["inputs"][0]["partialSigs"] = json!({
+        format!("02{}", "11".repeat(32)): {"schnorr": "22".repeat(64)}
+    });
+    assert!(super::super::verify_for_broadcast(&pskb(&placeholder), SIGNER_TEST_LIMITS).is_err());
+}
