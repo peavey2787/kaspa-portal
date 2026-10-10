@@ -48,6 +48,13 @@ pub fn parse_compact_kspt(data: &[u8], tx: &mut Transaction) -> Result<(), PsktE
     validate_partial_signed(tx)
 }
 
+/// Parse a compact KSPT into freshly allocated default-capacity storage.
+pub fn decode_compact_kspt(data: &[u8]) -> Result<Transaction, PsktError> {
+    let mut tx = Transaction::try_new().map_err(|_| PsktError::StorageExhausted)?;
+    parse_compact_kspt(data, &mut tx)?;
+    Ok(tx)
+}
+
 /// Serialize a compact KSPT into a dynamically sized buffer. This is the
 /// preferred API for firmware/browser flows where input count is not bounded.
 pub fn serialize_compact_kspt_vec(tx: &Transaction) -> Result<alloc::vec::Vec<u8>, PsktError> {

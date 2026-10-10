@@ -6,6 +6,7 @@ mod keys;
 mod records;
 mod transaction_body;
 mod transcript;
+mod wire;
 
 use super::super::error::PsktError;
 
@@ -43,3 +44,4 @@ pub(super) use transcript::{
     added_signature_count, added_signatures_for_input, expected_added_sighash,
     validate_proof_position,
 };
+pub use wire::{validate_host_commitment_wire, verify_host_transcript_wire};

@@ -98,6 +98,23 @@ pub fn transaction_digest(transaction: &[u8]) -> [u8; 32] {
     domain_hash(TX_DOMAIN, &[transaction])
 }
 
+/// SIGHASH_ALL digest the claim pre-signature binds: the claim transaction
+/// is a compact KSPT spending exactly one input.
+pub fn claim_sighash(
+    compact_kspt: &[u8],
+) -> Result<[u8; 32], crate::transaction::interchange::kspt::PsktError> {
+    use crate::transaction::{
+        interchange::kspt::{decode_compact_kspt, PsktError},
+        model::SigHashType,
+        sighash::calculate_sighash,
+    };
+    let transaction = decode_compact_kspt(compact_kspt)?;
+    if transaction.num_inputs != 1 {
+        return Err(PsktError::InvalidModel);
+    }
+    Ok(calculate_sighash(&transaction, 0, SigHashType::All))
+}
+
 #[must_use]
 pub fn session_id(
     host_commitment: &[u8; 32],

@@ -761,6 +761,43 @@ fn anti_klepto_transaction_round_trip_verifies_and_rejects_mutations() {
     )
     .expect("verified transcript");
 
+    // The wire entry points decode the same bytes and reach the same verdicts.
+    let original_bytes = &original_wire[..original_len];
+    let signed_bytes = &signed_tx_wire[..signed_tx_len];
+    super::validate_host_commitment_wire(original_bytes, &commitment).expect("wire commitment");
+    super::verify_host_transcript_wire(
+        original_bytes,
+        signed_bytes,
+        &commitment,
+        &signed_message,
+        &host_secret,
+    )
+    .expect("wire transcript");
+    assert_eq!(
+        super::verify_host_transcript_wire(
+            original_bytes,
+            signed_bytes,
+            &commitment,
+            &signed_message,
+            &[0x52; 32],
+        ),
+        Err(AntiKleptoVerifyError::InvalidNonceRelation),
+    );
+    assert!(matches!(
+        super::validate_host_commitment_wire(b"KSPT", &commitment),
+        Err(AntiKleptoVerifyError::Pskt(_))
+    ));
+    assert!(matches!(
+        super::verify_host_transcript_wire(
+            original_bytes,
+            b"KSPT",
+            &commitment,
+            &signed_message,
+            &host_secret,
+        ),
+        Err(AntiKleptoVerifyError::Pskt(_))
+    ));
+
     // Compact unsigned KSPT does not serialize TransactionInput::sighash_type.
     // The verifier must therefore accept the normal unsigned -> SIGHASH_ALL transition
     // after parsing the request wire, while still rejecting signer-selected alternatives.

@@ -9,7 +9,9 @@ mod signing;
 mod validation;
 pub mod wire;
 
-pub use codec::{parse_compact_kspt, serialize_compact_kspt, serialize_compact_kspt_vec};
+pub use codec::{
+    decode_compact_kspt, parse_compact_kspt, serialize_compact_kspt, serialize_compact_kspt_vec,
+};
 pub use error::PsktError;
 /// Version byte of the compact KSPT envelope and its KSSN signature response.
 pub use format::{KSPT_VERSION_CURRENT as KSPT_VERSION, KSSN_VERSION_CURRENT as KSSN_VERSION};
@@ -28,7 +30,8 @@ pub use signing::{
     sign_transaction_multi_addr_with_entropy, sign_transaction_multisig,
     sign_transaction_multisig_accounts_with_entropy, sign_transaction_multisig_with_entropy,
     sign_transaction_with_entropy, signature_status, validate_host_commitment,
-    verify_host_transcript, AntiKleptoVerifyError,
+    validate_host_commitment_wire, verify_host_transcript, verify_host_transcript_wire,
+    AntiKleptoVerifyError,
 };
 pub(crate) use validation::checked_redeem_bytes;
 pub use validation::{transaction_amounts, validate_transaction_for_review};

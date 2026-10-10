@@ -38,7 +38,8 @@ pub use anti_klepto::{
     finalize_account_set_signatures, finalize_account_set_signatures_with_checkpoint,
     finalize_account_signatures, finalize_account_signatures_with_checkpoint,
     finalize_raw_key_signatures, initial_signature_counts, nonce_commitment_records, proof_records,
-    validate_host_commitment, verify_host_transcript, AntiKleptoVerifyError,
+    validate_host_commitment, validate_host_commitment_wire, verify_host_transcript,
+    verify_host_transcript_wire, AntiKleptoVerifyError,
 };
 pub use multi_address::{
     sign_account_input_with_entropy, sign_account_input_with_entropy_checkpointed,

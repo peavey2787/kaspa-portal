@@ -645,3 +645,35 @@ fn private_swap_wire_short_circuits_cover_each_parse_boundary() {
         Err(ProtocolError::InvalidLength),
     );
 }
+
+#[test]
+fn claim_sighash_is_the_single_input_sighash_all_digest() {
+    use crate::{
+        primitives::address::KaspaNetwork,
+        transaction::interchange::{
+            kspt::{wire::Limits, PsktError},
+            pskt::pipeline::{
+                encode_pskt,
+                test_support::{pskb, sighash_all_for_pskt, unsigned_document},
+            },
+        },
+    };
+
+    let one_input = pskb(&unsigned_document(None, 0x11));
+    let kspt =
+        encode_pskt(&one_input, KaspaNetwork::Mainnet, Limits::grammar()).expect("compact KSPT");
+    assert_eq!(
+        claim_sighash(&kspt),
+        Ok(sighash_all_for_pskt(&one_input, KaspaNetwork::Mainnet, 0).expect("pipeline sighash"))
+    );
+
+    let mut two = unsigned_document(None, 0x11);
+    let second = two["inputs"][0].clone();
+    two["inputs"].as_array_mut().expect("inputs").push(second);
+    two["inputs"][1]["previousOutpoint"]["index"] = serde_json::json!(8);
+    two["global"]["inputCount"] = serde_json::json!(2);
+    let kspt =
+        encode_pskt(&pskb(&two), KaspaNetwork::Mainnet, Limits::grammar()).expect("compact KSPT");
+    assert_eq!(claim_sighash(&kspt), Err(PsktError::InvalidModel));
+    assert!(claim_sighash(b"KSPT").is_err());
+}
