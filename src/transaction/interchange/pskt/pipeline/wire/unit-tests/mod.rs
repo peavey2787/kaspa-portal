@@ -90,6 +90,11 @@ fn sole_signature_fills_the_only_unsigned_input_once() {
         );
     }
     assert!(attach_sole_signature("00", &public_key, &[0x33; 64]).is_err());
+    let without_signatures = raw_pskb(&json!([{"global": {}, "inputs": [{}], "outputs": []}]));
+    assert_eq!(
+        attach_sole_signature(&without_signatures, &public_key, &[0x33; 64]),
+        Err("inputs[0].partialSigs must be an object".to_string())
+    );
 }
 
 /// The relay's strict reading: envelope, canonical JSON, document schema and

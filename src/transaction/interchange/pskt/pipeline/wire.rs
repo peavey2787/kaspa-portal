@@ -271,7 +271,10 @@ pub(crate) fn attach_sole_signature(
     let input = inputs[0]
         .as_object_mut()
         .ok_or_else(|| "inputs[0] not object".to_string())?;
-    let signatures = object_field_mut(input, "partialSigs")?;
+    let signatures = input
+        .get_mut("partialSigs")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| "inputs[0].partialSigs must be an object".to_string())?;
     if !signatures.is_empty() {
         return Err("input already carries a signature".to_string());
     }
