@@ -2,6 +2,14 @@
 use crate::alloc_prelude::*;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 
+use super::{
+    grammar::{
+        parse_multisig_descriptor, MultisigDescriptorError, MultisigDescriptorKind,
+        ParsedMultisigDescriptor,
+    },
+    MAX_MULTISIG_KEYS,
+};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Hd45AccountKey {
     pub public_key: [u8; 33],
@@ -15,6 +23,10 @@ pub enum MultisigDescriptor {
         threshold: u8,
         public_keys: Vec<[u8; 32]>,
     },
+    HierarchicalDeterministic44 {
+        threshold: u8,
+        account_keys: Vec<([u8; 33], [u8; 32])>,
+    },
     HierarchicalDeterministic45 {
         threshold: u8,
         account_keys: Vec<Hd45AccountKey>,
@@ -23,38 +35,77 @@ pub enum MultisigDescriptor {
 
 impl MultisigDescriptor {
     pub fn parse(value: &str) -> Result<Self, String> {
-        let value = descriptor_line(value.trim());
-        if value.starts_with("multi_hd45(") && value.ends_with(')') {
-            return parse_hd45(&value[11..value.len() - 1]);
+        let parsed = parse_multisig_descriptor::<MAX_MULTISIG_KEYS>(value.as_bytes())
+            .map_err(|error| descriptor_error(value, error))?;
+        Self::from_canonical(parsed)
+    }
+
+    fn from_canonical(parsed: ParsedMultisigDescriptor<MAX_MULTISIG_KEYS>) -> Result<Self, String> {
+        let count = usize::from(parsed.participant_count);
+        match parsed.kind {
+            MultisigDescriptorKind::Static => Ok(Self::Static {
+                threshold: parsed.threshold,
+                public_keys: parsed.static_public_keys[..count].to_vec(),
+            }),
+            MultisigDescriptorKind::Hd44 => {
+                let mut account_keys = Vec::with_capacity(count);
+                for (&public_key, &chain_code) in parsed.public_keys[..count]
+                    .iter()
+                    .zip(&parsed.chain_codes[..count])
+                {
+                    k256::PublicKey::from_sec1_bytes(&public_key)
+                        .map_err(|error| format!("Invalid compressed pubkey: {error}"))?;
+                    account_keys.push((public_key, chain_code));
+                }
+                Ok(Self::HierarchicalDeterministic44 {
+                    threshold: parsed.threshold,
+                    account_keys,
+                })
+            }
+            MultisigDescriptorKind::Hd45 => {
+                let mut account_keys = Vec::with_capacity(count);
+                for ((&public_key, &chain_code), &parent_fingerprint) in parsed.public_keys[..count]
+                    .iter()
+                    .zip(&parsed.chain_codes[..count])
+                    .zip(&parsed.parent_fingerprints[..count])
+                {
+                    k256::PublicKey::from_sec1_bytes(&public_key)
+                        .map_err(|error| format!("Invalid compressed pubkey: {error}"))?;
+                    account_keys.push(Hd45AccountKey {
+                        public_key,
+                        chain_code,
+                        parent_fingerprint,
+                    });
+                }
+                Ok(Self::HierarchicalDeterministic45 {
+                    threshold: parsed.threshold,
+                    account_keys,
+                })
+            }
         }
-        if value.starts_with("multi(") && value.ends_with(')') {
-            return parse_static(&value[6..value.len() - 1]);
-        }
-        Err("Descriptor must be multi(M,...) or multi_hd45(M,...)".into())
     }
 
     #[must_use]
     pub fn is_hd(&self) -> bool {
         !matches!(self, Self::Static { .. })
     }
-
     #[must_use]
     pub fn is_hd45(&self) -> bool {
         matches!(self, Self::HierarchicalDeterministic45 { .. })
     }
-
     #[must_use]
     pub fn participant_count(&self) -> usize {
         match self {
             Self::Static { public_keys, .. } => public_keys.len(),
+            Self::HierarchicalDeterministic44 { account_keys, .. } => account_keys.len(),
             Self::HierarchicalDeterministic45 { account_keys, .. } => account_keys.len(),
         }
     }
-
     #[must_use]
     pub fn threshold(&self) -> u8 {
         match self {
             Self::Static { threshold, .. }
+            | Self::HierarchicalDeterministic44 { threshold, .. }
             | Self::HierarchicalDeterministic45 { threshold, .. } => *threshold,
         }
     }
@@ -68,6 +119,14 @@ impl MultisigDescriptor {
         match self {
             Self::Static { public_keys, .. } => {
                 let mut keys = public_keys.clone();
+                keys.sort();
+                Ok(keys)
+            }
+            Self::HierarchicalDeterministic44 { account_keys, .. } => {
+                let mut keys = account_keys
+                    .iter()
+                    .map(|(pk, cc)| derive_44(pk, cc, address_index))
+                    .collect::<Result<Vec<_>, _>>()?;
                 keys.sort();
                 Ok(keys)
             }
@@ -111,97 +170,55 @@ impl MultisigDescriptor {
     }
 }
 
-fn descriptor_line(value: &str) -> &str {
-    value
-        .lines()
-        .find(|line| {
-            let line = line.trim();
-            line.starts_with("multi_hd45(") || line.starts_with("multi(")
-        })
-        .map(str::trim)
-        .unwrap_or(value)
-}
-
-fn parse_threshold(parts: &[&str]) -> Result<u8, String> {
-    if parts.len() < 3 {
-        return Err("Need at least M and 2 cosigners".into());
-    }
-    let threshold = parts[0]
-        .trim()
-        .parse::<u8>()
-        .map_err(|_| "Invalid M value in descriptor".to_string())?;
-    if threshold == 0 || threshold as usize > parts.len() - 1 {
-        return Err(format!("Invalid M={} for N={}", threshold, parts.len() - 1));
-    }
-    Ok(threshold)
-}
-
-fn parse_static(inner: &str) -> Result<MultisigDescriptor, String> {
-    let parts = inner.split(',').collect::<Vec<_>>();
-    let threshold = parse_threshold(&parts)?;
-    let mut public_keys = Vec::with_capacity(parts.len() - 1);
-    for value in &parts[1..] {
-        let value = value.trim();
-        if value.len() != 64 {
-            return Err(format!("Pubkey must be 64 hex chars, got {}", value.len()));
+fn descriptor_error(value: &str, error: MultisigDescriptorError) -> String {
+    match error {
+        MultisigDescriptorError::InvalidParticipantLength => participant_length_error(value),
+        MultisigDescriptorError::InvalidHex => invalid_hex_error(value),
+        MultisigDescriptorError::InvalidCompressedPublicKey => "Invalid compressed pubkey".into(),
+        MultisigDescriptorError::DuplicateParticipant => {
+            "Duplicate cosigner kpub in descriptor".into()
         }
-        let bytes = hex::decode(value).map_err(|error| format!("Invalid pubkey hex: {error}"))?;
-        public_keys.push(
-            bytes.try_into().map_err(|bytes: Vec<u8>| {
-                format!("Pubkey must be 32 bytes, got {}", bytes.len())
-            })?,
-        );
+        other => other.message().into(),
     }
-    Ok(MultisigDescriptor::Static {
-        threshold,
-        public_keys,
-    })
 }
 
-fn parse_hd45(inner: &str) -> Result<MultisigDescriptor, String> {
-    let parts = inner.split(',').collect::<Vec<_>>();
-    let threshold = parse_threshold(&parts)?;
-    let encoded = sorted_unique_kpubs(&parts[1..])?;
-    let mut account_keys = Vec::with_capacity(encoded.len());
-    for kpub in encoded {
-        account_keys.push(parse_hd45_account_key(kpub)?);
+fn participant_length_error(value: &str) -> String {
+    let length = descriptor_participant_length(value);
+    if value.contains("multi_hd45(") {
+        format!(
+            "45' cosigner kpub must be {} characters of canonical kpub1 text, got {length}",
+            crate::wallet::key::account::ACCOUNT_KEY_TEXT_LEN
+        )
+    } else if value.contains("multi_hd(") {
+        format!("Cosigner xpub must be 130 hex chars, got {length}")
+    } else {
+        format!("Pubkey must be 64 hex chars, got {length}")
     }
-    Ok(MultisigDescriptor::HierarchicalDeterministic45 {
-        threshold,
-        account_keys,
-    })
 }
 
-fn sorted_unique_kpubs<'a>(parts: &'a [&str]) -> Result<Vec<&'a str>, String> {
-    let mut encoded = parts.iter().map(|value| value.trim()).collect::<Vec<_>>();
-    encoded.sort_unstable();
-    if encoded.windows(2).any(|pair| pair[0] == pair[1]) {
-        return Err("Duplicate cosigner kpub in descriptor".into());
+fn invalid_hex_error(value: &str) -> String {
+    if value.contains("multi_hd(") {
+        "Invalid xpub hex".into()
+    } else {
+        "Invalid pubkey hex".into()
     }
-    Ok(encoded)
 }
 
-fn parse_hd45_account_key(kpub: &str) -> Result<Hd45AccountKey, String> {
-    let mut payload = [0u8; crate::wallet::key::account::ACCOUNT_KEY_PAYLOAD_LEN];
-    crate::wallet::key::xpub::decode_kpub_or_xpub(kpub.as_bytes(), &mut payload)
-        .map_err(|_| "Invalid 45' cosigner account key".to_string())?;
-    if payload[4] != 3 {
-        return Err("45' cosigner kpub must be an account key at depth 3".into());
-    }
-    let public_key: [u8; 33] = payload[45..78]
-        .try_into()
-        .map_err(|_| "Invalid kpub public key".to_string())?;
-    k256::PublicKey::from_sec1_bytes(&public_key)
-        .map_err(|error| format!("Invalid compressed pubkey: {error}"))?;
-    Ok(Hd45AccountKey {
-        public_key,
-        chain_code: payload[13..45]
-            .try_into()
-            .map_err(|_| "Invalid kpub chain code".to_string())?,
-        parent_fingerprint: payload[5..9]
-            .try_into()
-            .map_err(|_| "Invalid kpub fingerprint".to_string())?,
-    })
+fn descriptor_participant_length(value: &str) -> usize {
+    let line = value
+        .lines()
+        .find(|line| line.trim_start().starts_with("multi"))
+        .map(str::trim)
+        .unwrap_or(value.trim());
+    let Some(comma) = line.find(',') else {
+        return 0;
+    };
+    let rest = &line[comma + 1..];
+    rest.split([',', ')'])
+        .next()
+        .map(str::trim)
+        .map(str::len)
+        .unwrap_or(0)
 }
 
 fn parent(
@@ -215,7 +232,16 @@ fn parent(
         depth: 3,
     })
 }
-
+fn derive_44(
+    public_key: &[u8; 33],
+    chain_code: &[u8; 32],
+    address_index: u32,
+) -> Result<[u8; 32], String> {
+    let child = parent(public_key, chain_code)?
+        .derive_child(0)?
+        .derive_child(address_index)?;
+    xonly(&child.key)
+}
 fn derived_45_compressed(
     entry: &Hd45AccountKey,
     cosigner: u32,
@@ -233,7 +259,6 @@ fn derived_45_compressed(
         .try_into()
         .map_err(|_| "Derived public key has invalid length".to_string())
 }
-
 fn derive_45(
     entry: &Hd45AccountKey,
     cosigner: u32,
@@ -242,6 +267,11 @@ fn derive_45(
 ) -> Result<[u8; 32], String> {
     let compressed = derived_45_compressed(entry, cosigner, chain, address_index)?;
     compressed[1..33]
+        .try_into()
+        .map_err(|_| "Derived public key has invalid length".to_string())
+}
+fn xonly(key: &k256::PublicKey) -> Result<[u8; 32], String> {
+    key.to_encoded_point(true).as_bytes()[1..33]
         .try_into()
         .map_err(|_| "Derived public key has invalid length".to_string())
 }
