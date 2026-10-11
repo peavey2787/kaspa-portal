@@ -108,6 +108,20 @@ fn relay_field_parsers_cover_multisig_positions_ms45_and_derivation_boundaries()
     );
     assert!(parse_ms45(&json!({"key": {"derivationPath": "m/45'/111111'/0'/2/2/9"}})).is_err());
     assert!(parse_ms45(&json!({"key": {"derivationPath": "m/45'/111111'/0'/2'/1/9"}})).is_err());
+    // A signer key without a key source carries no path; a present source
+    // still needs one.
+    assert_eq!(parse_ms45(&json!({"key": null})), Ok(None));
+    assert_eq!(
+        parse_ms45(&json!({
+            "signer": null,
+            "cosigner": {"derivationPath": "m/45'/111111'/0'/2/1/9"}
+        })),
+        Ok(Some((2, 1, 9)))
+    );
+    assert_eq!(
+        parse_ms45(&json!({"key": {}})),
+        Err("bip32Derivations entry is missing derivationPath".to_string())
+    );
 
     assert_eq!(
         parse_derivation(&json!({"kassignerDerivation": {"branch": 0, "index": "7"}})),

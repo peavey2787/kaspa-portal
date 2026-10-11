@@ -77,6 +77,11 @@ pub(crate) fn parse_ms45(value: &Value) -> Result<Option<(u32, u32, u32)>, Strin
 }
 
 pub(crate) fn parse_ms45_entry(entry: &Value) -> Result<Option<(u32, u32, u32)>, String> {
+    // A key listed without a key source (rusty-kaspa `Option<KeySource>`)
+    // names no derivation path; signers record their key this way.
+    if entry.is_null() {
+        return Ok(None);
+    }
     let path = entry
         .get("derivationPath")
         .and_then(Value::as_str)
