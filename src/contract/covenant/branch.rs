@@ -11,6 +11,8 @@
 //! `duplicate_key_binding_on_the_same_branch_is_rejected` and
 //! `reused_key_requires_branch_disambiguation_and_malformed_flow_is_rejected`.
 
+use core::num::NonZeroUsize;
+
 pub const MAX_COVENANT_BRANCH_DEPTH: usize = 16;
 pub const MAX_COVENANT_BRANCH_KEYS: usize = 16;
 
@@ -147,8 +149,15 @@ struct BranchParser {
     next_branch: u32,
     decision_mask: u16,
     if_mask: u16,
-    offset: usize,
 }
+
+/// Width of every opcode the resolver consumes as a single byte.
+const ONE_BYTE: NonZeroUsize = NonZeroUsize::MIN;
+/// Width of a 32-byte key push: its length byte plus the key.
+const KEY_PUSH: NonZeroUsize = match NonZeroUsize::new(33) {
+    Some(width) => width,
+    None => unreachable!(),
+};
 
 impl BranchParser {
     fn new() -> Self {
@@ -166,17 +175,16 @@ impl BranchParser {
             next_branch: 0,
             decision_mask: 0,
             if_mask: 0,
-            offset: 0,
         }
     }
 
     fn enter_branch(&mut self, opcode: u8) -> Result<(), BranchResolveError> {
-        if self.depth >= MAX_COVENANT_BRANCH_DEPTH || self.next_branch >= 16 {
+        // Selector bits are a u16, so at most 16 branches exist in total; open
+        // branches never outnumber entered ones, so this also bounds nesting.
+        if self.next_branch >= MAX_COVENANT_BRANCH_DEPTH as u32 {
             return Err(BranchResolveError::BranchDepthExceeded);
         }
-        let bit = 1u16
-            .checked_shl(self.next_branch)
-            .ok_or(BranchResolveError::BranchDepthExceeded)?;
+        let bit = 1u16 << self.next_branch;
         self.next_branch += 1;
         self.out.selector_mask |= bit;
         self.frames[self.depth] = Frame {
@@ -190,75 +198,65 @@ impl BranchParser {
         } else {
             self.if_mask &= !bit;
         }
-        self.offset += 1;
         Ok(())
     }
 
     fn enter_else(&mut self) -> Result<(), BranchResolveError> {
-        if self.depth == 0 {
-            return Err(BranchResolveError::MalformedScript);
-        }
-        let frame = &mut self.frames[self.depth - 1];
+        let frame = self
+            .depth
+            .checked_sub(1)
+            .map(|top| &mut self.frames[top])
+            .ok_or(BranchResolveError::MalformedScript)?;
         if frame.in_else {
             return Err(BranchResolveError::MalformedScript);
         }
         frame.in_else = true;
         self.if_mask ^= frame.bit;
-        self.offset += 1;
         Ok(())
     }
 
     fn leave_branch(&mut self) -> Result<(), BranchResolveError> {
-        if self.depth == 0 {
-            return Err(BranchResolveError::MalformedScript);
-        }
-        self.depth -= 1;
+        self.depth = self
+            .depth
+            .checked_sub(1)
+            .ok_or(BranchResolveError::MalformedScript)?;
         let frame = self.frames[self.depth];
         self.decision_mask &= !frame.bit;
         self.if_mask &= !frame.bit;
-        self.offset += 1;
         Ok(())
     }
 
-    fn inspect_key_push(&mut self, script: &[u8]) -> Result<(), BranchResolveError> {
-        let end = self
-            .offset
-            .checked_add(33)
+    /// Record a 32-byte key push that a CHECKSIG(VERIFY) consumes.
+    fn inspect_key_push(&mut self, rest: &[u8]) -> Result<(), BranchResolveError> {
+        let key = rest
+            .get(1..KEY_PUSH.get())
             .ok_or(BranchResolveError::MalformedScript)?;
-        if end > script.len() {
-            return Err(BranchResolveError::MalformedScript);
-        }
-        if matches!(script.get(end), Some(0xac | 0xad)) {
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&script[self.offset + 1..end]);
+        if matches!(rest.get(KEY_PUSH.get()), Some(0xac | 0xad)) {
             self.out.push(BranchKey {
-                key,
+                key: key
+                    .try_into()
+                    .map_err(|_| BranchResolveError::MalformedScript)?,
                 decision_mask: self.decision_mask,
                 if_mask: self.if_mask,
             })?;
         }
-        self.offset = end;
         Ok(())
     }
 
-    fn advance_pushdata(&mut self, script: &[u8], opcode: u8) -> Result<(), BranchResolveError> {
-        let (header_len, payload_len) = pushdata_lengths(script, self.offset, opcode)?;
-        self.offset = advance_push(script, self.offset, header_len, payload_len)?;
-        Ok(())
-    }
-
-    fn step(&mut self, script: &[u8]) -> Result<(), BranchResolveError> {
-        let opcode = script[self.offset];
+    /// Interpret the opcode at the start of `rest` and return how many bytes
+    /// it spans.
+    fn step(&mut self, rest: &[u8], opcode: u8) -> Result<NonZeroUsize, BranchResolveError> {
         match opcode {
-            0x63 | 0x64 => self.enter_branch(opcode),
-            0x67 => self.enter_else(),
-            0x68 => self.leave_branch(),
-            0x20 => self.inspect_key_push(script),
-            0x01..=0x4e => self.advance_pushdata(script, opcode),
-            _ => {
-                self.offset += 1;
-                Ok(())
+            0x63 | 0x64 => self.enter_branch(opcode).map(|()| ONE_BYTE),
+            0x67 => self.enter_else().map(|()| ONE_BYTE),
+            0x68 => self.leave_branch().map(|()| ONE_BYTE),
+            0x20 => self.inspect_key_push(rest).map(|()| KEY_PUSH),
+            0x01..=0x4e => {
+                let (header, payload) = pushdata_lengths(rest, 0, opcode)?;
+                let end = advance_push(rest, 0, header, payload)?;
+                NonZeroUsize::new(end).ok_or(BranchResolveError::MalformedScript)
             }
+            _ => Ok(ONE_BYTE),
         }
     }
 
@@ -273,13 +271,17 @@ impl BranchParser {
 /// Resolve canonical covenant signature keys and their structural branch paths.
 pub fn resolve_covenant_branches(script: &[u8]) -> Result<BranchResolution, BranchResolveError> {
     let mut parser = BranchParser::new();
-    while parser.offset < script.len() {
-        parser.step(script)?;
+    let mut rest = script;
+    while let Some(&opcode) = rest.first() {
+        let width = parser.step(rest, opcode)?;
+        rest = rest
+            .get(width.get()..)
+            .ok_or(BranchResolveError::MalformedScript)?;
     }
     parser.finish()
 }
 
-pub(super) fn pushdata_lengths(
+pub(crate) fn pushdata_lengths(
     script: &[u8],
     offset: usize,
     opcode: u8,
@@ -313,7 +315,7 @@ pub(super) fn pushdata_lengths(
     }
 }
 
-pub(super) fn advance_push(
+pub(crate) fn advance_push(
     script: &[u8],
     offset: usize,
     header: usize,
@@ -323,7 +325,8 @@ pub(super) fn advance_push(
         .checked_add(header)
         .and_then(|v| v.checked_add(payload))
         .ok_or(BranchResolveError::MalformedScript)?;
-    if next > script.len() || next <= offset {
+    // Every push header is at least one byte, so `next` always moves forward.
+    if next > script.len() {
         return Err(BranchResolveError::MalformedScript);
     }
     Ok(next)

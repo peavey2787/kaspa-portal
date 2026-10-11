@@ -1099,3 +1099,33 @@ fn oracle_v1_binding_rejects_every_layout_and_commitment_boundary() {
         &other_oracle,
     ));
 }
+
+#[test]
+fn key_scan_finds_the_key_in_every_push_form_after_other_opcodes() {
+    let key = [0x5c; 32];
+    let headers: [&[u8]; 4] = [
+        &[0x20],
+        &[0x4c, 0x20],
+        &[0x4d, 0x20, 0x00],
+        &[0x4e, 0x20, 0, 0, 0],
+    ];
+    for header in headers {
+        let mut script = vec![0x76, 0x01, 0x07];
+        script.extend_from_slice(header);
+        script.extend_from_slice(&key);
+        script.push(0xac);
+        assert!(script_contains_xonly_key(&script, &key), "{header:02x?}");
+        let other = [0x5d; 32];
+        assert!(!script_contains_xonly_key(&script, &other));
+        // A truncated push ends the scan without a match.
+        assert!(!script_contains_xonly_key(
+            &script[..script.len() - 2],
+            &key
+        ));
+    }
+    // The key inside a longer push is not a binding.
+    let mut longer = vec![0x21, 0x00];
+    longer.extend_from_slice(&key);
+    assert!(!script_contains_xonly_key(&longer, &key));
+    assert!(!script_contains_xonly_key(&[], &key));
+}

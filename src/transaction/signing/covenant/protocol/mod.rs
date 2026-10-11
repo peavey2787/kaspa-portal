@@ -311,42 +311,27 @@ pub fn recompute_known_commitment(scheme: KnownScheme, context: &[u8]) -> Option
 /// occurrence inside a larger payload is not a binding.
 #[must_use]
 pub fn script_contains_xonly_key(script: &[u8], pubkey_x: &[u8; 32]) -> bool {
-    let mut cursor = 0usize;
-    while cursor < script.len() {
-        let Some((payload, next)) = next_push(script, cursor) else {
-            return false;
+    use crate::contract::covenant::branch::{advance_push, pushdata_lengths};
+
+    let mut rest = script;
+    while let Some(&opcode) = rest.first() {
+        let width = if (0x01..=0x4e).contains(&opcode) {
+            let Ok((header, payload)) = pushdata_lengths(rest, 0, opcode) else {
+                return false;
+            };
+            let Ok(end) = advance_push(rest, 0, header, payload) else {
+                return false;
+            };
+            if &rest[header..end] == pubkey_x.as_slice() {
+                return true;
+            }
+            end
+        } else {
+            1
         };
-        if payload == Some(pubkey_x.as_slice()) {
-            return true;
-        }
-        cursor = next;
+        rest = &rest[width..];
     }
     false
-}
-
-/// Decode the opcode at `cursor`. Returns the pushed payload (`None` for a
-/// non-push opcode) and the following cursor, or `None` when truncated.
-fn next_push(script: &[u8], cursor: usize) -> Option<(Option<&[u8]>, usize)> {
-    let opcode = *script.get(cursor)?;
-    let (payload_len, start) = match opcode {
-        0x01..=0x4b => (usize::from(opcode), cursor + 1),
-        0x4c => (usize::from(*script.get(cursor + 1)?), cursor + 2),
-        0x4d => {
-            let length = script.get(cursor + 1..cursor + 3)?;
-            (
-                usize::from(u16::from_le_bytes([length[0], length[1]])),
-                cursor + 3,
-            )
-        }
-        0x4e => {
-            let length = script.get(cursor + 1..cursor + 5)?;
-            let length = u32::from_le_bytes([length[0], length[1], length[2], length[3]]);
-            (usize::try_from(length).ok()?, cursor + 5)
-        }
-        _ => return Some((None, cursor + 1)),
-    };
-    let end = start.checked_add(payload_len)?;
-    Some((Some(script.get(start..end)?), end))
 }
 
 #[must_use]
