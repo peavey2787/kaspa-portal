@@ -4,21 +4,11 @@ use crate::alloc_prelude::*;
 // License: GPL-3.0
 
 pub(crate) fn push_data_item(ss: &mut Vec<u8>, data: &[u8]) -> Result<(), String> {
-    let len = data.len();
-    if len == 0 {
-        ss.push(0x00); // OP_0 = empty
-    } else if len <= 75 {
-        ss.push(len as u8);
-    } else if len <= 255 {
-        ss.push(0x4C);
-        ss.push(len as u8);
-    } else if len <= 65535 {
-        ss.push(0x4D);
-        ss.extend_from_slice(&(len as u16).to_le_bytes());
-    } else {
+    // Signature-script items never need OP_PUSHDATA4.
+    if data.len() > usize::from(u16::MAX) {
         return Err("data item too large".into());
     }
-    ss.extend_from_slice(data);
+    crate::contract::script::push_data(ss, data);
     Ok(())
 }
 

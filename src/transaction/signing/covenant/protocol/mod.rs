@@ -9,10 +9,8 @@
 use sha2::{Digest, Sha256};
 
 pub mod private_swap;
-mod script_int;
 mod validation;
 
-use script_int::canonical_u64_push;
 pub use validation::expected_known_binding;
 use validation::{
     array16, array32, parse_binding, parse_kind, parse_scheme, request_total_len,
@@ -389,6 +387,11 @@ fn fixed_checksigfromstack_pattern(commitment: &[u8; 32], pubkey_x: &[u8; 32]) -
     pattern[34..66].copy_from_slice(pubkey_x);
     pattern[66] = 0xd7;
     pattern
+}
+
+/// Whether `push` is exactly one canonical non-negative script integer.
+fn canonical_u64_push(push: &[u8]) -> bool {
+    crate::contract::script::read_canonical_u64(push, 0).is_some_and(|(_, end)| end == push.len())
 }
 
 fn oracle_v1_script_binds(script: &[u8], commitment: &[u8; 32], oracle: &[u8; 32]) -> bool {

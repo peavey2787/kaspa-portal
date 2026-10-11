@@ -7,6 +7,7 @@ pub mod walk;
 
 pub use locktime::{extract_cltv_locktime, extract_csv_sequence};
 pub use number::push_int;
+pub(crate) use number::read_canonical_u64;
 pub use push::{push_data, push_pubkey};
 
 #[cfg(test)]

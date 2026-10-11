@@ -36,9 +36,7 @@ impl UtcDateTime {
         if self.year < MIN_YEAR || self.year > MAX_YEAR {
             return Err(PolicyError::DateOutOfRange);
         }
-        if self.month == 0 || self.month > 12 {
-            return Err(PolicyError::InvalidDate);
-        }
+        // A month outside 1..=12 has no days, so every day is rejected.
         let max_day = days_in_month(self.year, self.month);
         if self.day == 0
             || self.day > max_day
@@ -276,14 +274,14 @@ pub enum PolicyError {
 }
 
 pub fn parse_utc_yyyymmddhhmm(input: &[u8]) -> Result<UtcDateTime, PolicyError> {
-    if input.len() != 12 || input.iter().any(|byte| !byte.is_ascii_digit()) {
+    if input.len() != 12 {
         return Err(PolicyError::InvalidFormat);
     }
-    let year = decimal4(&input[0..4])?;
-    let month = decimal2(&input[4..6])? as u8;
-    let day = decimal2(&input[6..8])? as u8;
-    let hour = decimal2(&input[8..10])? as u8;
-    let minute = decimal2(&input[10..12])? as u8;
+    let year = decimal(&input[0..4])?;
+    let month = decimal(&input[4..6])? as u8;
+    let day = decimal(&input[6..8])? as u8;
+    let hour = decimal(&input[8..10])? as u8;
+    let minute = decimal(&input[10..12])? as u8;
     let value = UtcDateTime::new(year, month, day, hour, minute, 0);
     value.validate()?;
     Ok(value)
@@ -295,7 +293,7 @@ pub fn parse_weekly_windows(
     input: &[u8],
 ) -> Result<([SigningWindow; MAX_WEEKLY_WINDOWS], u8), PolicyError> {
     let (mut windows, count) = parse_window_list(input)?;
-    sort_windows(&mut windows, count);
+    windows[..count].sort_unstable_by_key(|window| (window.weekday, window.start_minute));
     reject_adjacent_overlaps(&windows, count)?;
     Ok((windows, count as u8))
 }
@@ -306,7 +304,7 @@ fn parse_window_list(
     let mut windows = [SigningWindow::EMPTY; MAX_WEEKLY_WINDOWS];
     let mut count = 0usize;
     for raw in input.split(|byte| *byte == b';') {
-        let part = trim_ascii(raw);
+        let part = raw.trim_ascii();
         if part.is_empty() {
             return Err(PolicyError::InvalidFormat);
         }
@@ -316,23 +314,8 @@ fn parse_window_list(
         windows[count] = parse_window(part)?;
         count += 1;
     }
-    if count == 0 {
-        Err(PolicyError::InvalidFormat)
-    } else {
-        Ok((windows, count))
-    }
-}
-
-fn sort_windows(windows: &mut [SigningWindow; MAX_WEEKLY_WINDOWS], count: usize) {
-    for index in 1..count {
-        let current = windows[index];
-        let mut cursor = index;
-        while cursor > 0 && window_key(current) < window_key(windows[cursor - 1]) {
-            windows[cursor] = windows[cursor - 1];
-            cursor -= 1;
-        }
-        windows[cursor] = current;
-    }
+    // `split` yields at least one part, and an empty part is rejected above.
+    Ok((windows, count))
 }
 
 fn reject_adjacent_overlaps(
@@ -350,11 +333,14 @@ fn reject_adjacent_overlaps(
 }
 
 fn parse_window(input: &[u8]) -> Result<SigningWindow, PolicyError> {
-    if input.len() < 14 || !input[3].is_ascii_whitespace() {
+    let Some((day, rest)) = input.split_at_checked(3) else {
+        return Err(PolicyError::InvalidFormat);
+    };
+    if !rest.first().is_some_and(u8::is_ascii_whitespace) {
         return Err(PolicyError::InvalidFormat);
     }
-    let weekday = parse_weekday(&input[..3])?;
-    let (start_minute, end_minute) = parse_time_range(trim_ascii(&input[3..]))?;
+    let weekday = parse_weekday(day)?;
+    let (start_minute, end_minute) = parse_time_range(rest.trim_ascii())?;
     let value = SigningWindow {
         weekday,
         start_minute,
@@ -374,32 +360,22 @@ fn parse_time_range(input: &[u8]) -> Result<(u16, u16), PolicyError> {
 }
 
 fn parse_hhmm(hour: &[u8], minute: &[u8]) -> Result<u16, PolicyError> {
-    let hour = decimal2(hour)?;
-    let minute = decimal2(minute)?;
+    let hour = decimal(hour)?;
+    let minute = decimal(minute)?;
     if hour > 23 || minute > 59 {
         return Err(PolicyError::InvalidWindow);
     }
     Ok(hour * 60 + minute)
 }
 
+const WEEKDAY_NAMES: [&[u8]; 7] = [b"MON", b"TUE", b"WED", b"THU", b"FRI", b"SAT", b"SUN"];
+
 fn parse_weekday(input: &[u8]) -> Result<u8, PolicyError> {
-    if eq_ascii_case(input, b"MON") {
-        Ok(0)
-    } else if eq_ascii_case(input, b"TUE") {
-        Ok(1)
-    } else if eq_ascii_case(input, b"WED") {
-        Ok(2)
-    } else if eq_ascii_case(input, b"THU") {
-        Ok(3)
-    } else if eq_ascii_case(input, b"FRI") {
-        Ok(4)
-    } else if eq_ascii_case(input, b"SAT") {
-        Ok(5)
-    } else if eq_ascii_case(input, b"SUN") {
-        Ok(6)
-    } else {
-        Err(PolicyError::InvalidFormat)
-    }
+    WEEKDAY_NAMES
+        .iter()
+        .position(|name| input.eq_ignore_ascii_case(name))
+        .map(|index| index as u8)
+        .ok_or(PolicyError::InvalidFormat)
 }
 
 fn windows_overlap(left: SigningWindow, right: SigningWindow) -> bool {
@@ -408,43 +384,15 @@ fn windows_overlap(left: SigningWindow, right: SigningWindow) -> bool {
         && right.start_minute < left.end_minute
 }
 
-const fn window_key(value: SigningWindow) -> u32 {
-    value.weekday as u32 * 2_000 + value.start_minute as u32
-}
-
-fn decimal2(input: &[u8]) -> Result<u16, PolicyError> {
-    if input.len() != 2 || input.iter().any(|byte| !byte.is_ascii_digit()) {
-        return Err(PolicyError::InvalidFormat);
-    }
-    Ok(u16::from(input[0] - b'0') * 10 + u16::from(input[1] - b'0'))
-}
-
-fn decimal4(input: &[u8]) -> Result<u16, PolicyError> {
-    if input.len() != 4 || input.iter().any(|byte| !byte.is_ascii_digit()) {
-        return Err(PolicyError::InvalidFormat);
-    }
-    Ok(u16::from(input[0] - b'0') * 1000
-        + u16::from(input[1] - b'0') * 100
-        + u16::from(input[2] - b'0') * 10
-        + u16::from(input[3] - b'0'))
-}
-
-fn trim_ascii(mut input: &[u8]) -> &[u8] {
-    while input.first().is_some_and(|byte| byte.is_ascii_whitespace()) {
-        input = &input[1..];
-    }
-    while input.last().is_some_and(|byte| byte.is_ascii_whitespace()) {
-        input = &input[..input.len() - 1];
-    }
-    input
-}
-
-fn eq_ascii_case(left: &[u8], right: &[u8]) -> bool {
-    left.len() == right.len()
-        && left
-            .iter()
-            .zip(right)
-            .all(|(a, b)| a.eq_ignore_ascii_case(b))
+/// Parse ASCII decimal digits; any other byte is a format error.
+fn decimal(input: &[u8]) -> Result<u16, PolicyError> {
+    input.iter().try_fold(0u16, |value, byte| {
+        if byte.is_ascii_digit() {
+            Ok(value * 10 + u16::from(byte - b'0'))
+        } else {
+            Err(PolicyError::InvalidFormat)
+        }
+    })
 }
 
 const fn is_leap_year(year: u16) -> bool {
@@ -478,3 +426,7 @@ fn days_before_month(year: u16, month: u8) -> u64 {
     }
     total
 }
+
+#[cfg(test)]
+#[path = "unit-tests/time.rs"]
+mod unit_tests;

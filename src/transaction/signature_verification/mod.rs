@@ -39,29 +39,33 @@ fn required_for_input(tx: &Transaction, input_index: usize) -> Option<u8> {
 }
 
 fn covenant_required_for_execution(tx: &Transaction, input_index: usize) -> Option<u8> {
-    let input = tx.inputs.get(input_index)?;
-    let resolved = resolved_execution_branches(tx, input_index, input)?;
+    let (input, resolved) = resolved_execution(tx, input_index).ok()?;
     let count = active_execution_key_count(input, &resolved)?;
     (count > 0 && usize::from(count) <= MAX_SIGS_PER_INPUT).then_some(count)
 }
 
-fn resolved_execution_branches(
+/// Resolve the covenant branches of `input_index` and check that the input's
+/// declared execution selectors exactly cover them.
+fn resolved_execution(
     tx: &Transaction,
     input_index: usize,
-    input: &crate::transaction::model::TransactionInput,
-) -> Option<crate::contract::covenant::branch::BranchResolution> {
-    if !input.covenant_execution_present {
-        return None;
-    }
-    if input.covenant_execution_true_mask & !input.covenant_execution_mask != 0 {
-        return None;
-    }
-    let redeem = checked_redeem_bytes(tx, input_index).ok()?;
-    let resolved = crate::contract::covenant::branch::resolve_covenant_branches(redeem).ok()?;
-    if input.covenant_execution_mask != resolved.selector_mask() {
-        return None;
-    }
-    Some(resolved)
+) -> Result<
+    (
+        &crate::transaction::model::TransactionInput,
+        crate::contract::covenant::branch::BranchResolution,
+    ),
+    SignatureValidationError,
+> {
+    let input = tx
+        .inputs
+        .get(input_index)
+        .ok_or(SignatureValidationError::InvalidModel)?;
+    let redeem = checked_redeem_bytes(tx, input_index)
+        .map_err(|_| SignatureValidationError::InvalidModel)?;
+    let resolved = crate::contract::covenant::branch::resolve_covenant_branches(redeem)
+        .map_err(|_| SignatureValidationError::InvalidBinding)?;
+    validate_covenant_execution_binding(input, resolved.selector_mask())?;
+    Ok((input, resolved))
 }
 
 fn active_execution_key_count(
@@ -86,22 +90,7 @@ fn covenant_position_matches_execution(
     input_index: usize,
     position: u8,
 ) -> Result<(), SignatureValidationError> {
-    let input = tx
-        .inputs
-        .get(input_index)
-        .ok_or(SignatureValidationError::InvalidModel)?;
-    if !input.covenant_execution_present {
-        return Err(SignatureValidationError::InvalidBinding);
-    }
-    let redeem = checked_redeem_bytes(tx, input_index)
-        .map_err(|_| SignatureValidationError::InvalidModel)?;
-    let resolved = crate::contract::covenant::branch::resolve_covenant_branches(redeem)
-        .map_err(|_| SignatureValidationError::InvalidBinding)?;
-    if input.covenant_execution_true_mask & !input.covenant_execution_mask != 0
-        || input.covenant_execution_mask != resolved.selector_mask()
-    {
-        return Err(SignatureValidationError::InvalidBinding);
-    }
+    let (input, resolved) = resolved_execution(tx, input_index)?;
     let binding = resolved
         .key_at(position)
         .map_err(|_| SignatureValidationError::InvalidBinding)?;
@@ -266,15 +255,7 @@ fn position_for_covenant_key(
     input_index: usize,
     key: &[u8; 32],
 ) -> Result<u8, SignatureValidationError> {
-    let redeem = checked_redeem_bytes(tx, input_index)
-        .map_err(|_| SignatureValidationError::InvalidModel)?;
-    let resolved = crate::contract::covenant::branch::resolve_covenant_branches(redeem)
-        .map_err(|_| SignatureValidationError::InvalidBinding)?;
-    let input = tx
-        .inputs
-        .get(input_index)
-        .ok_or(SignatureValidationError::InvalidModel)?;
-    validate_covenant_execution_binding(input, resolved.selector_mask())?;
+    let (input, resolved) = resolved_execution(tx, input_index)?;
     resolved
         .position_for_key_with_selectors(
             key,

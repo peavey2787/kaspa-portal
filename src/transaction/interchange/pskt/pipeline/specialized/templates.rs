@@ -1,10 +1,10 @@
 //! Recognizers for the specialized covenant script templates.
 
 use super::{
-    OP_0, OP_1, OP_BLAKE2B, OP_CAT, OP_CHECKLOCKTIMEVERIFY, OP_CHECKSIGFROMSTACK,
-    OP_CHECKSIGVERIFY, OP_DROP, OP_DUP, OP_ELSE, OP_ENDIF, OP_EQUALVERIFY, OP_GREATERTHANOREQUAL,
-    OP_IF, OP_LESSTHANOREQUAL, OP_NUMEQUALVERIFY, OP_SUB, OP_SWAP, OP_TX_INPUT_AMOUNT,
-    OP_TX_INPUT_COUNT, OP_TX_OUTPUT_AMOUNT, OP_TX_OUTPUT_COUNT, OP_TX_OUTPUT_SPK, OP_VERIFY,
+    OP_1, OP_BLAKE2B, OP_CAT, OP_CHECKLOCKTIMEVERIFY, OP_CHECKSIGFROMSTACK, OP_CHECKSIGVERIFY,
+    OP_DROP, OP_DUP, OP_ELSE, OP_ENDIF, OP_EQUALVERIFY, OP_GREATERTHANOREQUAL, OP_IF,
+    OP_LESSTHANOREQUAL, OP_NUMEQUALVERIFY, OP_SUB, OP_SWAP, OP_TX_INPUT_AMOUNT, OP_TX_INPUT_COUNT,
+    OP_TX_OUTPUT_AMOUNT, OP_TX_OUTPUT_COUNT, OP_TX_OUTPUT_SPK, OP_VERIFY,
     PRIVATE_SWAP_MAX_FEE_SOMPI,
 };
 #[cfg(not(feature = "std"))]
@@ -42,8 +42,13 @@ impl<'a> Cursor<'a> {
         Ok(())
     }
 
+    /// Consume a direct push of exactly `length` (1..=75) bytes.
     fn push(&mut self, length: usize) -> Result<&'a [u8], String> {
-        if length > 75 || self.script.get(self.at).copied() != u8::try_from(length).ok() {
+        debug_assert!(
+            (1..=75).contains(&length),
+            "direct pushes carry 1..=75 bytes"
+        );
+        if self.script.get(self.at).copied().map(usize::from) != Some(length) {
             return Err(format!("expected canonical PUSH{length} at {}", self.at));
         }
         let start = self.at + 1;
@@ -59,24 +64,10 @@ impl<'a> Cursor<'a> {
     }
 
     fn integer(&mut self) -> Result<u64, String> {
-        let opcode = *self
-            .script
-            .get(self.at)
-            .ok_or_else(|| "missing script integer".to_string())?;
-        if let Some(value) = small_script_integer(opcode) {
-            self.at += 1;
-            return Ok(value);
-        }
-        let data = self.integer_push(opcode)?;
-        decode_script_integer(data)
-    }
-
-    fn integer_push(&mut self, opcode: u8) -> Result<&'a [u8], String> {
-        let length = usize::from(opcode);
-        if length == 0 || length > 9 || length > 75 {
-            return Err("non-canonical script integer".to_string());
-        }
-        self.push(length)
+        let (value, next) = crate::contract::script::read_canonical_u64(self.script, self.at)
+            .ok_or_else(|| format!("expected canonical script integer at {}", self.at))?;
+        self.at = next;
+        Ok(value)
     }
 
     fn finish(self) -> Result<(), String> {
@@ -86,31 +77,6 @@ impl<'a> Cursor<'a> {
             Err(format!("unexpected trailing script bytes at {}", self.at))
         }
     }
-}
-
-pub(crate) fn small_script_integer(opcode: u8) -> Option<u64> {
-    if opcode == OP_0 {
-        return Some(0);
-    }
-    (OP_1..=0x60)
-        .contains(&opcode)
-        .then(|| u64::from(opcode - 0x50))
-}
-
-pub(crate) fn decode_script_integer(data: &[u8]) -> Result<u64, String> {
-    if data.last() == Some(&0) && data.len() > 1 && data[data.len() - 2] & 0x80 == 0 {
-        return Err("non-minimal script integer".to_string());
-    }
-    if data.last().is_some_and(|byte| byte & 0x80 != 0) {
-        return Err("negative script integer not permitted".to_string());
-    }
-    if data.len() == 9 && data[8] != 0 {
-        return Err("script integer exceeds u64".to_string());
-    }
-    let mut bytes = [0u8; 8];
-    let count = data.len().min(8);
-    bytes[..count].copy_from_slice(&data[..count]);
-    Ok(u64::from_le_bytes(bytes))
 }
 
 pub(crate) fn recognize_private_swap(script: &[u8]) -> Result<(), String> {

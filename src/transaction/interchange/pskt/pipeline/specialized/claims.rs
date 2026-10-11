@@ -19,7 +19,6 @@ pub(crate) fn bind_private_swap(
     signature: &Signature,
 ) -> Result<(SpecializedRoute, Vec<u8>), String> {
     require_true(fields, "privateSwapClaim", index)?;
-    require_only_route_fields(fields, &["privateSwapClaim"], index)?;
     recognize_private_swap(&input.redeem)
         .map_err(|error| format!("input[{index}] private-swap template mismatch: {error}"))?;
     if mask != 0b1 || truth != 0b1 {
@@ -43,7 +42,6 @@ pub(crate) fn bind_oracle_v1(
     signature: &Signature,
 ) -> Result<(SpecializedRoute, Vec<u8>), String> {
     require_true(fields, "oracleV1Claim", index)?;
-    require_only_route_fields(fields, &["oracleV1Claim", "oracleV1Signature"], index)?;
     let oracle_signature = required_hex(fields, "oracleV1Signature", Some(64), index)?;
     let template = recognize_oracle_v1(&input.redeem)
         .map_err(|error| format!("input[{index}] oracle-v1 template mismatch: {error}"))?;
@@ -110,7 +108,6 @@ pub(crate) fn commit_reveal_parts(
     fields: &Map<String, Value>,
     index: usize,
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
-    require_only_route_fields(fields, &["commitPartA", "commitPartB"], index)?;
     let part_a = required_hex(fields, "commitPartA", None, index)?;
     let part_b = required_hex(fields, "commitPartB", None, index)?;
     Ok((part_a, part_b))
@@ -163,7 +160,6 @@ pub(crate) fn bind_merkle(
     truth: u16,
     signature: &Signature,
 ) -> Result<(SpecializedRoute, Vec<u8>), String> {
-    require_only_route_fields(fields, &["merkleProof", "merkleDestSpk"], index)?;
     let dest_spk = required_hex(fields, "merkleDestSpk", None, index)?;
     let proof = parse_merkle_proof(fields.get("merkleProof"), index)?;
     let template = recognize_merkle(&input.redeem)
@@ -188,18 +184,14 @@ pub(crate) fn validate_merkle_claim(
             template.depth
         ));
     }
-    let expected_mask = if template.depth == 15 {
-        u16::MAX
-    } else {
-        (1u16 << (u32::from(template.depth) + 1)) - 1
-    };
-    if mask != expected_mask || truth & 1 != 0 {
+    // The claim branch selector plus one direction selector per level.
+    let expected_mask = u16::MAX >> (15 - template.depth);
+    if mask != expected_mask {
         return Err(format!(
             "input[{index}] merkle covenantExecution does not select the claim branch"
         ));
     }
-    let expected_truth = merkle_truth_from_proof(proof)?;
-    if truth != expected_truth {
+    if truth != merkle_truth_from_proof(proof) {
         return Err(format!(
             "input[{index}] merkle proof directions do not match covenantExecution"
         ));
@@ -207,19 +199,13 @@ pub(crate) fn validate_merkle_claim(
     Ok(())
 }
 
-pub(crate) fn merkle_truth_from_proof(proof: &[MerkleProofItem]) -> Result<u16, String> {
-    let mut expected_truth = 0u16;
-    for (level, item) in proof.iter().enumerate() {
-        if item.direction == 1 {
-            let shift =
-                u32::try_from(level + 1).map_err(|_| "merkle selector overflow".to_string())?;
-            let bit = 1u16
-                .checked_shl(shift)
-                .ok_or_else(|| "merkle selector overflow".to_string())?;
-            expected_truth |= bit;
-        }
-    }
-    Ok(expected_truth)
+/// The true-selector bits the proof directions imply: bit 0 (the claim
+/// branch) stays false and level `n` sets bit `n + 1`. Proofs are at most 15
+/// levels deep, so every bit fits.
+pub(crate) fn merkle_truth_from_proof(proof: &[MerkleProofItem]) -> u16 {
+    proof.iter().enumerate().fold(0, |truth, (level, item)| {
+        truth | (u16::from(item.direction) << (level + 1))
+    })
 }
 
 pub(crate) fn verify_merkle_root(
@@ -282,28 +268,6 @@ pub(crate) fn require_true(
     }
 }
 
-pub(crate) fn require_only_route_fields(
-    fields: &Map<String, Value>,
-    allowed: &[&str],
-    index: usize,
-) -> Result<(), String> {
-    for key in fields.keys() {
-        if crate::transaction::interchange::pskt::schema::is_specialized_covenant_routing_field(key)
-            && !allowed.contains(&key.as_str())
-        {
-            return Err(format!(
-                "input[{index}].proprietaries.{key} conflicts with the selected typed covenant route"
-            ));
-        }
-    }
-    for key in allowed {
-        if !fields.contains_key(*key) {
-            return Err(format!("input[{index}].proprietaries.{key} is required"));
-        }
-    }
-    Ok(())
-}
-
 pub(crate) fn required_hex(
     fields: &Map<String, Value>,
     key: &str,
@@ -314,18 +278,8 @@ pub(crate) fn required_hex(
         .get(key)
         .and_then(Value::as_str)
         .ok_or_else(|| format!("input[{index}].proprietaries.{key} must be lowercase hex"))?;
-    let bytes = text.as_bytes();
-    if bytes.len() % 2 != 0
-        || !bytes
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
-    {
-        return Err(format!(
-            "input[{index}].proprietaries.{key} must be lowercase hex"
-        ));
-    }
     let decoded =
-        hex::decode(text).map_err(|_| format!("input[{index}].proprietaries.{key} invalid hex"))?;
+        super::super::wire::decode_lower_hex(text, &format!("input[{index}].proprietaries.{key}"))?;
     if exact_len.is_some_and(|length| decoded.len() != length) {
         return Err(format!(
             "input[{index}].proprietaries.{key} must be {} bytes",
@@ -339,14 +293,12 @@ pub(crate) fn exactly_one_signature(
     index: usize,
     signatures: &[Signature],
 ) -> Result<&Signature, String> {
-    if signatures.len() != 1 {
-        return Err(format!(
+    match signatures {
+        [signature] => Ok(signature),
+        _ => Err(format!(
             "input[{index}] typed specialized covenant requires exactly one verified transaction signature"
-        ));
+        )),
     }
-    signatures
-        .first()
-        .ok_or_else(|| format!("input[{index}] missing signature"))
 }
 
 fn push_signature(script: &mut Vec<u8>, signature: &Signature) -> Result<(), String> {

@@ -14,15 +14,10 @@ pub const MAX_PSKT_JSON_BYTES: usize = u16::MAX as usize;
 pub const MAX_PSKT_WIRE_HEX_CHARS: usize = 2 * (4 + 2 * MAX_PSKT_JSON_BYTES);
 
 pub(crate) fn decode_lower_hex(text: &str, field: &str) -> Result<Vec<u8>, String> {
-    let bytes = text.as_bytes();
-    if !bytes.len().is_multiple_of(2)
-        || !bytes
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
-    {
-        return Err(format!("{field} must be even-length lowercase hexadecimal"));
-    }
-    hex::decode(text).map_err(|error| format!("{field}: {error}"))
+    let mut bytes = vec![0u8; text.len() / 2];
+    crate::primitives::bytes::decode_lower_hex(text.as_bytes(), &mut bytes)
+        .map(|_| bytes)
+        .ok_or_else(|| format!("{field} must be even-length lowercase hexadecimal"))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

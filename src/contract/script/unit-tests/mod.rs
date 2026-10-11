@@ -1,4 +1,4 @@
-use super::{extract_cltv_locktime, extract_csv_sequence, push_data, push_int};
+use super::{extract_cltv_locktime, extract_csv_sequence, push_data, push_int, read_canonical_u64};
 
 #[test]
 fn locktime_extractors_share_the_same_integer_parser() {
@@ -314,4 +314,56 @@ fn allowance_builders_cover_absent_optional_locktimes() {
         extract_cltv_locktime(&global).expect("global allowance CLTV"),
         None
     );
+}
+
+#[test]
+fn canonical_integers_round_trip_every_encoding_width() {
+    for value in [
+        0,
+        1,
+        16,
+        17,
+        0x7f,
+        0x80,
+        0x1234,
+        0x80_0000,
+        u64::from(u32::MAX),
+        1 << 63,
+        u64::MAX,
+    ] {
+        let mut script = alloc::vec![0xab];
+        push_int(&mut script, value);
+        script.push(0xcd);
+        assert_eq!(
+            read_canonical_u64(&script, 1),
+            Some((value, script.len() - 1)),
+            "{value}"
+        );
+    }
+}
+
+#[test]
+fn canonical_integers_reject_non_minimal_negative_and_truncated_pushes() {
+    assert_eq!(read_canonical_u64(&[0x00], 0), Some((0, 1)));
+    assert_eq!(read_canonical_u64(&[0x51], 0), Some((1, 1)));
+    assert_eq!(read_canonical_u64(&[0x60], 0), Some((16, 1)));
+    assert_eq!(
+        read_canonical_u64(&[0x02, 0x34, 0x12], 0),
+        Some((0x1234, 3))
+    );
+    assert_eq!(read_canonical_u64(&[0x02, 0x80, 0x00], 0), Some((0x80, 3)));
+    for rejected in [
+        &[][..],
+        &[0x61],
+        &[0x4f],
+        &[0x01, 0x10],
+        &[0x01, 0x80],
+        &[0x02, 0x01, 0x00],
+        &[0x02, 0x11],
+        &[0x09, 1, 2, 3, 4, 5, 6, 7, 8, 1],
+        &[0x0a, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0],
+    ] {
+        assert_eq!(read_canonical_u64(rejected, 0), None, "{rejected:02x?}");
+    }
+    assert_eq!(read_canonical_u64(&[0x51], 1), None);
 }

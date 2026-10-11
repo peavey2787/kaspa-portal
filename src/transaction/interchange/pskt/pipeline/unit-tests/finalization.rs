@@ -5,6 +5,8 @@ use super::super::test_support::{
     multisig, pskb as wrap_pskb, sign_first_input, unsigned_document, xonly,
 };
 use super::{finalize_json, pskt_verified_signature_counts, Network};
+use crate::contract::script::{push_data, push_int};
+use crate::transaction::interchange::pskt::pipeline::specialized::blake2b32;
 
 #[test]
 fn generic_finalizer_covers_p2pk_globals_defaults_and_explicit_covenants() {
@@ -214,7 +216,14 @@ fn supported_specialized_covenants_are_template_bound_and_mutation_hardened_end_
     // Private swap claim: branch selector, route metadata, signature, redeem
     // template and signed transaction fields are independently bound.
     let private = private_swap_claim_document();
-    assert_specialized_success(&private, "private swap");
+    assert_specialized_success(&private, "private swap", &[], &[0x51]);
+    // The refund key may not spend through the claim route.
+    let mut refund = private_swap_claim_document_signed_by(0x42);
+    refund["inputs"][0]["covenantExecution"]["suppliedTrueMask"] = json!("0");
+    assert_specialized_failure(
+        &sign_first_input(refund, &[0x42]),
+        "private swap refund path",
+    );
     assert_selector_mutation_fails(&private, "private swap");
     let mut private_route = private.clone();
     private_route["inputs"][0]["proprietaries"]["privateSwapClaim"] = json!(false);
@@ -228,7 +237,22 @@ fn supported_specialized_covenants_are_template_bound_and_mutation_hardened_end_
     // Oracle-v1 claim: the external oracle attestation is cryptographically
     // checked against the key and commitment frozen into the recognized script.
     let oracle = oracle_v1_claim_document();
-    assert_specialized_success(&oracle, "oracle-v1");
+    let oracle_signature = hex::decode(
+        oracle["inputs"][0]["proprietaries"]["oracleV1Signature"]
+            .as_str()
+            .expect("oracle attestation"),
+    )
+    .expect("oracle attestation hex");
+    assert_specialized_success(&oracle, "oracle-v1", &pushed(&[&oracle_signature]), &[0x00]);
+    let mut oracle_refund = oracle_v1_claim_document_signed_by(0x51);
+    oracle_refund["inputs"][0]["covenantExecution"]["suppliedTrueMask"] = json!("1");
+    assert_specialized_failure(
+        &sign_first_input(oracle_refund, &[0x51]),
+        "oracle-v1 refund path",
+    );
+    let mut oracle_short = oracle.clone();
+    oracle_short["inputs"][0]["proprietaries"]["oracleV1Signature"] = json!("00");
+    assert_specialized_failure(&oracle_short, "oracle-v1 short attestation");
     assert_selector_mutation_fails(&oracle, "oracle-v1");
     let mut oracle_route = oracle.clone();
     oracle_route["inputs"][0]["proprietaries"]["oracleV1Claim"] = json!(false);
@@ -246,7 +270,16 @@ fn supported_specialized_covenants_are_template_bound_and_mutation_hardened_end_
     // Commit/reveal claim: the supplied preimage is checked against the exact
     // commitment embedded in the recognized redeem script.
     let commit = commit_reveal_claim_document();
-    assert_specialized_success(&commit, "commit/reveal");
+    assert_specialized_success(
+        &commit,
+        "commit/reveal",
+        &pushed(&[b"commit-", b"reveal"]),
+        &[0x00],
+    );
+    let mut commit_uppercase = commit.clone();
+    commit_uppercase["inputs"][0]["proprietaries"]["commitPartA"] =
+        json!(hex::encode(b"commit-").to_uppercase());
+    assert_specialized_failure(&commit_uppercase, "commit/reveal uppercase hex");
     assert_selector_mutation_fails(&commit, "commit/reveal");
     let mut commit_route = commit.clone();
     commit_route["inputs"][0]["proprietaries"]["commitPartB"] = json!("ff");
@@ -261,7 +294,22 @@ fn supported_specialized_covenants_are_template_bound_and_mutation_hardened_end_
     // Merkle claim: proof sibling, direction and covenantExecution selector bits
     // all describe one branch and must agree with the root frozen in the script.
     let merkle = merkle_claim_document();
-    assert_specialized_success(&merkle, "merkle");
+    let destination = [0x00, 0x00, 0x51];
+    let merkle_before = |direction: u8| {
+        let mut before = pushed(&[&destination, &[0x72; 32]]);
+        before.push(0x51 * direction);
+        before.extend_from_slice(&pushed(&[&destination]));
+        before
+    };
+    assert_specialized_success(&merkle, "merkle", &merkle_before(0), &[0x00]);
+    let right = merkle_claim_document_with_direction(1);
+    assert_specialized_success(&right, "merkle right sibling", &merkle_before(1), &[0x00]);
+    for (mask, truth) in [("1", "0"), ("3", "1"), ("7", "0")] {
+        let mut selector = merkle.clone();
+        selector["inputs"][0]["covenantExecution"] =
+            json!({"suppliedMask": mask, "suppliedTrueMask": truth});
+        assert_specialized_failure(&selector, &format!("merkle selector {mask}/{truth}"));
+    }
     let mut merkle_selector = merkle.clone();
     merkle_selector["inputs"][0]["covenantExecution"]["suppliedTrueMask"] = json!("2");
     assert_specialized_failure(&merkle_selector, "merkle selector mutation");
@@ -307,14 +355,38 @@ fn unsupported_and_zero_signature_covenant_routes_are_disabled_at_public_finaliz
     );
 }
 
-fn assert_specialized_success(document: &Value, label: &str) {
+/// Finalize `document` and require exactly the claim witness
+/// `before, <signature || SIGHASH_ALL>, after, <redeem>`.
+fn assert_specialized_success(document: &Value, label: &str, before: &[u8], after: &[u8]) {
     let finalized = finalize_json(&pskb(document.clone()))
         .unwrap_or_else(|error| panic!("{label} public finalization failed: {}", error));
     let value: Value = serde_json::from_str(&finalized).expect("specialized finalized JSON");
     let script = value["inputs"][0]["signatureScript"]
         .as_str()
         .unwrap_or_else(|| panic!("{label} missing signatureScript"));
-    assert!(!script.is_empty(), "{label} produced empty signatureScript");
+    let signature = document["inputs"][0]["partialSigs"]
+        .as_object()
+        .and_then(|partials| partials.values().next())
+        .and_then(|entry| entry["schnorr"].as_str())
+        .expect("one fixture signature");
+    let mut expected = before.to_vec();
+    let mut signature = hex::decode(signature).expect("signature hex");
+    signature.push(0x01);
+    push_data(&mut expected, &signature);
+    expected.extend_from_slice(after);
+    let redeem = document["inputs"][0]["redeemScript"]
+        .as_str()
+        .expect("redeem hex");
+    push_data(&mut expected, &hex::decode(redeem).expect("redeem bytes"));
+    assert_eq!(script, hex::encode(expected), "{label} witness");
+}
+
+fn pushed(items: &[&[u8]]) -> Vec<u8> {
+    let mut script = Vec::new();
+    for item in items {
+        push_data(&mut script, item);
+    }
+    script
 }
 
 fn assert_specialized_failure(document: &Value, label: &str) {
@@ -374,42 +446,52 @@ fn mutate_redeem_byte(document: &mut Value, byte_index: usize) {
 }
 
 fn private_swap_claim_document() -> Value {
+    sign_first_input(private_swap_claim_document_signed_by(0x41), &[0x41])
+}
+
+/// The unsigned private-swap claim document with `signer` as the PSKT signer.
+fn private_swap_claim_document_signed_by(signer: u8) -> Value {
     let claimer = 0x41;
     let owner = 0x42;
     let mut redeem = Vec::new();
-    push_test_data(&mut redeem, &[0x01; 16]);
+    push_data(&mut redeem, &[0x01; 16]);
     redeem.extend_from_slice(&[0x75, 0x63]); // DROP IF
-    push_test_data(&mut redeem, &xonly(claimer));
+    push_data(&mut redeem, &xonly(claimer));
     redeem.extend_from_slice(&[0xad, 0xb3]); // CHECKSIGVERIFY TX_INPUT_COUNT
-    push_test_int(&mut redeem, 1);
+    push_int(&mut redeem, 1);
     redeem.extend_from_slice(&[0x9d, 0xb4]); // NUMEQUALVERIFY TX_OUTPUT_COUNT
-    push_test_int(&mut redeem, 1);
+    push_int(&mut redeem, 1);
     redeem.push(0x9d);
-    push_test_int(&mut redeem, 0);
+    push_int(&mut redeem, 0);
     redeem.push(0xc3); // TX_OUTPUT_SPK
-    push_test_data(&mut redeem, &[0x00, 0x00, 0x51, 0x51, 0x51]);
+    push_data(&mut redeem, &[0x00, 0x00, 0x51, 0x51, 0x51]);
     redeem.push(0x88); // EQUALVERIFY
-    push_test_int(&mut redeem, 0);
+    push_int(&mut redeem, 0);
     redeem.extend_from_slice(&[0xbe, 0x76]); // TX_INPUT_AMOUNT DUP
-    push_test_int(&mut redeem, 0);
+    push_int(&mut redeem, 0);
     redeem.extend_from_slice(&[0xc2, 0xa2, 0x69]); // TX_OUTPUT_AMOUNT >= VERIFY
-    push_test_int(&mut redeem, 0);
+    push_int(&mut redeem, 0);
     redeem.extend_from_slice(&[0xc2, 0x94]); // TX_OUTPUT_AMOUNT SUB
-    push_test_int(&mut redeem, 500_000_000);
+    push_int(&mut redeem, 500_000_000);
     redeem.extend_from_slice(&[0xa1, 0x69, 0x51, 0x67]); // <= VERIFY TRUE ELSE
-    push_test_data(&mut redeem, &xonly(owner));
+    push_data(&mut redeem, &xonly(owner));
     redeem.push(0xad);
-    push_test_int(&mut redeem, 1);
+    push_int(&mut redeem, 1);
     redeem.extend_from_slice(&[0xb0, 0x51, 0x68]); // CLTV TRUE ENDIF
 
-    let mut document = unsigned_document(Some(&redeem), claimer);
+    let mut document = unsigned_document(Some(&redeem), signer);
     document["inputs"][0]["covenantExecution"] =
         json!({"suppliedMask": "1", "suppliedTrueMask": "1"});
     document["inputs"][0]["proprietaries"] = json!({"privateSwapClaim": true});
-    sign_first_input(document, &[claimer])
+    document
 }
 
 fn oracle_v1_claim_document() -> Value {
+    sign_first_input(oracle_v1_claim_document_signed_by(0x52), &[0x52])
+}
+
+/// The unsigned oracle-v1 claim document with `signer` as the PSKT signer.
+fn oracle_v1_claim_document_signed_by(signer: u8) -> Value {
     let refund = 0x51;
     let claimer = 0x52;
     let oracle = SigningKey::from_bytes(&[0x53; 32]).expect("oracle signing key");
@@ -419,27 +501,27 @@ fn oracle_v1_claim_document() -> Value {
         .expect("oracle attestation signature");
 
     let mut redeem = Vec::new();
-    push_test_data(&mut redeem, &[0x02; 16]);
+    push_data(&mut redeem, &[0x02; 16]);
     redeem.extend_from_slice(&[0x75, 0x63]);
-    push_test_data(&mut redeem, &xonly(refund));
+    push_data(&mut redeem, &xonly(refund));
     redeem.push(0xad);
-    push_test_int(&mut redeem, 1);
+    push_int(&mut redeem, 1);
     redeem.extend_from_slice(&[0xb0, 0x51, 0x67]);
-    push_test_data(&mut redeem, &xonly(claimer));
+    push_data(&mut redeem, &xonly(claimer));
     redeem.push(0xad);
-    push_test_data(&mut redeem, &commitment);
+    push_data(&mut redeem, &commitment);
     let oracle_key: [u8; 32] = oracle.verifying_key().to_bytes().into();
-    push_test_data(&mut redeem, &oracle_key);
+    push_data(&mut redeem, &oracle_key);
     redeem.extend_from_slice(&[0xd7, 0x69, 0x51, 0x68]);
 
-    let mut document = unsigned_document(Some(&redeem), claimer);
+    let mut document = unsigned_document(Some(&redeem), signer);
     document["inputs"][0]["covenantExecution"] =
         json!({"suppliedMask": "1", "suppliedTrueMask": "0"});
     document["inputs"][0]["proprietaries"] = json!({
         "oracleV1Claim": true,
         "oracleV1Signature": hex::encode(oracle_signature.to_bytes())
     });
-    sign_first_input(document, &[claimer])
+    document
 }
 
 fn commit_reveal_claim_document() -> Value {
@@ -448,16 +530,16 @@ fn commit_reveal_claim_document() -> Value {
     let part_b = b"reveal".to_vec();
     let mut preimage = part_a.clone();
     preimage.extend_from_slice(&part_b);
-    let commitment = test_blake2b32(&preimage);
+    let commitment = blake2b32(&preimage);
 
     let mut redeem = vec![0x63]; // IF
-    push_test_data(&mut redeem, &xonly(owner));
+    push_data(&mut redeem, &xonly(owner));
     redeem.push(0xad);
-    push_test_int(&mut redeem, 1);
+    push_int(&mut redeem, 1);
     redeem.extend_from_slice(&[0xb0, 0x51, 0x67]);
-    push_test_data(&mut redeem, &xonly(owner));
+    push_data(&mut redeem, &xonly(owner));
     redeem.extend_from_slice(&[0xad, 0x7e, 0xaa]); // CHECKSIGVERIFY CAT BLAKE2B
-    push_test_data(&mut redeem, &commitment);
+    push_data(&mut redeem, &commitment);
     redeem.extend_from_slice(&[0x88, 0x51, 0x68]);
 
     let mut document = unsigned_document(Some(&redeem), owner);
@@ -471,64 +553,46 @@ fn commit_reveal_claim_document() -> Value {
 }
 
 fn merkle_claim_document() -> Value {
+    merkle_claim_document_with_direction(0)
+}
+
+/// A one-level Merkle claim whose sibling sits left (0) or right (1) of the leaf.
+fn merkle_claim_document_with_direction(direction: u8) -> Value {
     let owner = 0x71;
     let destination = vec![0x00, 0x00, 0x51];
     let sibling = [0x72; 32];
-    let leaf = test_blake2b32(&destination);
+    let leaf = blake2b32(&destination);
+    let (left, right) = if direction == 0 {
+        (sibling, leaf)
+    } else {
+        (leaf, sibling)
+    };
     let mut pair = [0u8; 64];
-    pair[..32].copy_from_slice(&sibling);
-    pair[32..].copy_from_slice(&leaf);
-    let root = test_blake2b32(&pair);
+    pair[..32].copy_from_slice(&left);
+    pair[32..].copy_from_slice(&right);
+    let root = blake2b32(&pair);
 
     let mut redeem = vec![0x63];
-    push_test_data(&mut redeem, &xonly(owner));
+    push_data(&mut redeem, &xonly(owner));
     redeem.push(0xad);
-    push_test_int(&mut redeem, 1);
+    push_int(&mut redeem, 1);
     redeem.extend_from_slice(&[0xb0, 0x51, 0x67]);
-    push_test_data(&mut redeem, &xonly(owner));
+    push_data(&mut redeem, &xonly(owner));
     redeem.extend_from_slice(&[0xad, 0xaa]); // CHECKSIGVERIFY BLAKE2B
     redeem.extend_from_slice(&[0x7c, 0x63, 0x7c, 0x68, 0x7e, 0xaa]);
-    push_test_data(&mut redeem, &root);
+    push_data(&mut redeem, &root);
     redeem.extend_from_slice(&[0x88, 0x00, 0xc3, 0x88, 0x51, 0x68]);
 
     let mut document = unsigned_document(Some(&redeem), owner);
-    document["inputs"][0]["covenantExecution"] =
-        json!({"suppliedMask": "3", "suppliedTrueMask": "0"});
+    document["inputs"][0]["covenantExecution"] = json!({
+        "suppliedMask": "3",
+        "suppliedTrueMask": (u16::from(direction) << 1).to_string()
+    });
     document["inputs"][0]["proprietaries"] = json!({
         "merkleDestSpk": hex::encode(destination),
-        "merkleProof": [{"sibling": hex::encode(sibling), "direction": 0}]
+        "merkleProof": [{"sibling": hex::encode(sibling), "direction": direction}]
     });
     sign_first_input(document, &[owner])
-}
-
-fn push_test_data(script: &mut Vec<u8>, data: &[u8]) {
-    assert!(data.len() <= 75, "test helper only emits direct pushes");
-    script.push(u8::try_from(data.len()).expect("test push length"));
-    script.extend_from_slice(data);
-}
-
-fn push_test_int(script: &mut Vec<u8>, value: u64) {
-    match value {
-        0 => script.push(0x00),
-        1..=16 => script.push(0x50 + u8::try_from(value).expect("small script integer")),
-        _ => {
-            let mut bytes = value.to_le_bytes().to_vec();
-            while bytes.last() == Some(&0) {
-                bytes.pop();
-            }
-            if bytes.last().is_some_and(|byte| byte & 0x80 != 0) {
-                bytes.push(0);
-            }
-            push_test_data(script, &bytes);
-        }
-    }
-}
-
-fn test_blake2b32(data: &[u8]) -> [u8; 32] {
-    let hash = blake2b_simd::Params::new().hash_length(32).hash(data);
-    let mut out = [0u8; 32];
-    out.copy_from_slice(hash.as_bytes());
-    out
 }
 
 fn pskb(document: Value) -> String {

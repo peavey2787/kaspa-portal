@@ -278,56 +278,10 @@ fn read_bounded_direct_push<'a>(
 }
 
 fn read_script_int(script: &[u8], pos: &mut usize) -> Result<u64, PrivateSwapError> {
-    let opcode = *script.get(*pos).ok_or(PrivateSwapError::InvalidScript)?;
-    *pos = (*pos)
-        .checked_add(1)
+    let (value, next) = crate::contract::script::read_canonical_u64(script, *pos)
         .ok_or(PrivateSwapError::InvalidScript)?;
-    if opcode == OP_0 {
-        return Ok(0);
-    }
-    if (OP_1..=0x60).contains(&opcode) {
-        return Ok(u64::from(opcode - 0x50));
-    }
-    read_script_int_bytes(script, pos, usize::from(opcode))
-}
-
-fn read_script_int_bytes(
-    script: &[u8],
-    pos: &mut usize,
-    len: usize,
-) -> Result<u64, PrivateSwapError> {
-    if len == 0 || len > 9 || len > 75 {
-        return Err(PrivateSwapError::InvalidScript);
-    }
-    let end = (*pos)
-        .checked_add(len)
-        .ok_or(PrivateSwapError::InvalidScript)?;
-    let data = script
-        .get(*pos..end)
-        .ok_or(PrivateSwapError::InvalidScript)?;
-    *pos = end;
-    if !is_canonical_positive_script_int(data) {
-        return Err(PrivateSwapError::InvalidScript);
-    }
-    let mut value = 0u64;
-    for (index, byte) in data.iter().take(8).enumerate() {
-        value |= u64::from(*byte) << (index * 8);
-    }
-    if value <= 16 {
-        return Err(PrivateSwapError::InvalidScript);
-    }
+    *pos = next;
     Ok(value)
-}
-
-fn is_canonical_positive_script_int(data: &[u8]) -> bool {
-    if data.is_empty() {
-        return false;
-    }
-    let last = data[data.len() - 1];
-    if last & 0x80 != 0 {
-        return false;
-    }
-    data.len() == 1 || last != 0 || data[data.len() - 2] & 0x80 != 0
 }
 
 fn expect(script: &[u8], pos: &mut usize, expected: u8) -> Result<(), PrivateSwapError> {

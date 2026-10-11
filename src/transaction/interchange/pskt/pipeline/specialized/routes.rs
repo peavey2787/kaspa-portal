@@ -165,7 +165,6 @@ pub(crate) fn validate_route_binding(
     })?;
     let branches = crate::contract::covenant::branch::resolve_covenant_branches(&input.redeem)
         .map_err(|error| format!("input[{index}] invalid covenant branch structure: {error:?}"))?;
-    validate_selector_assignment(index, mask, truth, branches.selector_mask())?;
     let signature = exactly_one_signature(index, &input.signatures)?;
     let binding = branches
         .key_at(signature.position)
@@ -176,20 +175,6 @@ pub(crate) fn validate_route_binding(
         ));
     }
     Ok((mask, truth, signature))
-}
-
-pub(crate) fn validate_selector_assignment(
-    index: usize,
-    mask: u16,
-    truth: u16,
-    expected_mask: u16,
-) -> Result<(), String> {
-    if truth & !mask != 0 || mask != expected_mask {
-        return Err(format!(
-            "input[{index}] covenantExecution is not a complete selector assignment"
-        ));
-    }
-    Ok(())
 }
 
 pub(crate) fn dispatch_route(

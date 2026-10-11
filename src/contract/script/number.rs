@@ -23,6 +23,45 @@ pub fn push_int(script: &mut Vec<u8>, value: u64) {
     script.extend_from_slice(&bytes);
 }
 
+/// Read the minimally encoded non-negative script integer starting at `at`,
+/// exactly as [`push_int`] writes it: `OP_0`, `OP_1..=OP_16`, or a direct push
+/// of 1..=9 bytes holding a value above 16 with no redundant sign byte.
+/// Returns the value and the position after it.
+pub(crate) fn read_canonical_u64(script: &[u8], at: usize) -> Option<(u64, usize)> {
+    let opcode = *script.get(at)?;
+    if opcode == opcode::OP_0 {
+        return Some((0, at + 1));
+    }
+    if (opcode::OP_1..=opcode::OP_16).contains(&opcode) {
+        return Some((u64::from(opcode - 0x50), at + 1));
+    }
+    let length = usize::from(opcode);
+    if !(1..=9).contains(&length) {
+        return None;
+    }
+    let end = at + 1 + length;
+    let value = canonical_positive_u64(script.get(at + 1..end)?)?;
+    (value > 16).then_some((value, end))
+}
+
+/// Decode little-endian script-number bytes that are positive, minimal and
+/// fit in a `u64`.
+fn canonical_positive_u64(data: &[u8]) -> Option<u64> {
+    let (&last, prefix) = data.split_last()?;
+    let significant = if last == 0 {
+        // A zero sign byte is minimal only when it separates a set top bit.
+        (prefix.last()? & 0x80 != 0).then_some(prefix)?
+    } else {
+        (last & 0x80 == 0).then_some(data)?
+    };
+    (significant.len() <= 8).then(|| {
+        significant
+            .iter()
+            .rev()
+            .fold(0, |value, byte| (value << 8) | u64::from(*byte))
+    })
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ScriptItem {
     Opcode,

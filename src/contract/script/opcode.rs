@@ -41,3 +41,4 @@ pub const OP_COV_OUTPUT_IDX: u8 = 0xd3;
 pub const OP_OUTPUT_COVENANT_ID: u8 = 0xd5;
 pub const OP_CHECKSIGFROMSTACK: u8 = 0xd7;
 pub const OP_1: u8 = 0x51;
+pub const OP_16: u8 = 0x60;

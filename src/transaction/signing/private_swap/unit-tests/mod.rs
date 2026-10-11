@@ -155,12 +155,6 @@ fn canonical_private_swap_script_roundtrips_and_rejects_noncanonical_shapes() {
 
 #[test]
 fn script_integer_and_direct_push_readers_reject_noncanonical_encodings() {
-    assert!(is_canonical_positive_script_int(&[17]));
-    assert!(is_canonical_positive_script_int(&[0x80, 0x00]));
-    assert!(!is_canonical_positive_script_int(&[]));
-    assert!(!is_canonical_positive_script_int(&[0x80]));
-    assert!(!is_canonical_positive_script_int(&[1, 0]));
-
     let mut pos = 0;
     assert_eq!(read_script_int(&[OP_0], &mut pos), Ok(0));
     pos = 0;
