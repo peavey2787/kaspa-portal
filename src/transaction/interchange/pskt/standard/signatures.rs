@@ -1,5 +1,7 @@
 //! PSKT signature merge and UI status helpers.
 
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use crate::transaction::model::{
     IncomingPartialSig, Transaction, TransactionInput, MAX_SIGS_PER_INPUT,
 };

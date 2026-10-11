@@ -111,6 +111,15 @@ call :run cargo test --manifest-path qa\Cargo.toml --all-targets
 if errorlevel 1 exit /b 1
 call :run cargo clippy --all-targets --all-features -- -D warnings
 if errorlevel 1 exit /b 1
+call :run cargo clippy --manifest-path qa\Cargo.toml --all-targets -- -D warnings
+if errorlevel 1 exit /b 1
+rem no_std signing core on the bare-metal target, as CI checks it.
+call :run rustup target add thumbv7em-none-eabihf
+if errorlevel 1 exit /b 1
+call :run cargo clippy --no-default-features --target thumbv7em-none-eabihf -- -D warnings
+if errorlevel 1 exit /b 1
+call :run cargo clippy --no-default-features --features self-test,kdf-benchmark --target thumbv7em-none-eabihf -- -D warnings
+if errorlevel 1 exit /b 1
 call :run cargo test --manifest-path qa\benches\Cargo.toml --no-run
 if errorlevel 1 exit /b 1
 call :run cargo check --manifest-path qa\tests\fuzz\Cargo.toml
@@ -126,6 +135,8 @@ echo ==^> WASM compile QA
 call :run rustup target add wasm32-unknown-unknown
 if errorlevel 1 exit /b 1
 call :run cargo check --target wasm32-unknown-unknown --features wasm
+if errorlevel 1 exit /b 1
+call :run cargo check --target wasm32-unknown-unknown --features browser
 if errorlevel 1 exit /b 1
 
 :formatting_qa

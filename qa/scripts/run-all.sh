@@ -45,6 +45,11 @@ if [[ "$resume_stage" == "full" ]]; then
   cargo test --doc
   cargo test --manifest-path qa/Cargo.toml --all-targets
   cargo clippy --all-targets --all-features -- -D warnings
+  cargo clippy --manifest-path qa/Cargo.toml --all-targets -- -D warnings
+  # no_std signing core on the bare-metal target, as CI checks it.
+  rustup target add thumbv7em-none-eabihf
+  cargo clippy --no-default-features --target thumbv7em-none-eabihf -- -D warnings
+  cargo clippy --no-default-features --features self-test,kdf-benchmark --target thumbv7em-none-eabihf -- -D warnings
   cargo test --manifest-path qa/benches/Cargo.toml --no-run
   cargo check --manifest-path qa/tests/fuzz/Cargo.toml
 fi
