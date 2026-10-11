@@ -6,9 +6,9 @@ use crate::alloc_prelude::*;
 use serde_json::{Map, Value};
 
 use super::classification::classify_input_script;
-use super::parse_spk_hex;
 use crate::transaction::interchange::pskt::exact_json::parse_exact_u64;
 use crate::transaction::interchange::pskt::pipeline::find_pubkey_position;
+use crate::transaction::interchange::pskt::pipeline::parse_spk;
 use crate::transaction::interchange::pskt::{InputSummary, PartialSigInfo};
 
 pub(crate) fn parse_input_summary(inp: &Value) -> Result<InputSummary, String> {
@@ -52,7 +52,7 @@ fn summary_utxo(obj: &Map<String, Value>) -> Result<(u64, Vec<u8>), String> {
         .get("scriptPublicKey")
         .and_then(Value::as_str)
         .ok_or_else(|| "missing scriptPublicKey".to_string())?;
-    parse_spk_hex(spk_full).map(|(_, script)| (amount_sompi, script))
+    parse_spk(spk_full).map(|(_, script)| (amount_sompi, script))
 }
 
 fn summary_outpoint(obj: &Map<String, Value>) -> Result<(String, u32), String> {

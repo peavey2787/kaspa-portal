@@ -3,21 +3,6 @@ use crate::alloc_prelude::*;
 // Kaspa Portal — organized PSKT subsystem
 // License: GPL-3.0
 
-pub(crate) fn parse_spk_hex(s: &str) -> Result<(u16, Vec<u8>), String> {
-    let bytes = s.as_bytes();
-    if bytes.len() < 4 || !bytes.iter().all(u8::is_ascii_hexdigit) {
-        return Err(format!(
-            "scriptPublicKey must be ASCII hex and at least 4 bytes, got {}",
-            bytes.len()
-        ));
-    }
-    // Validated ASCII hex: one decode yields the 2-byte BE version followed by
-    // the script; only an odd length can still fail.
-    let decoded = hex::decode(s).map_err(|e| format!("bad script hex: {}", e))?;
-    let version = u16::from_be_bytes([decoded[0], decoded[1]]);
-    Ok((version, decoded[2..].to_vec()))
-}
-
 pub(crate) fn classify_input_script(
     spk: &[u8],
     redeem: Option<&[u8]>,

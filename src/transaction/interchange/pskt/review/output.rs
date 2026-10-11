@@ -6,8 +6,8 @@ use crate::alloc_prelude::*;
 use serde_json::Value;
 
 use super::classification::classify_output_script;
-use super::parse_spk_hex;
 use crate::transaction::interchange::pskt::exact_json::parse_exact_u64;
+use crate::transaction::interchange::pskt::pipeline::parse_spk;
 use crate::transaction::interchange::pskt::OutputSummary;
 
 pub(crate) fn parse_output_summary(
@@ -26,7 +26,7 @@ pub(crate) fn parse_output_summary(
         .get("scriptPublicKey")
         .and_then(|v| v.as_str())
         .ok_or_else(|| "missing scriptPublicKey".to_string())?;
-    let (_spk_version, spk_script) = parse_spk_hex(spk_full)?;
+    let (_spk_version, spk_script) = parse_spk(spk_full)?;
     let (kind, address) = classify_output_script(&spk_script, network_prefix);
     let derivation = match obj.get("proprietaries") {
         None | Some(Value::Null) => None,

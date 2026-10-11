@@ -1,10 +1,11 @@
 use serde_json::{json, Value};
 
 use super::super::parse_summary;
+use super::super::pipeline::parse_spk;
 use super::super::pipeline::{
     find_pubkey_position as find_pubkey_position_in_redeem, parse_multisig_redeem,
 };
-use super::super::review::{parse_input_summary, parse_output_summary, parse_spk_hex};
+use super::super::review::{parse_input_summary, parse_output_summary};
 
 fn p2pk(key: u8) -> Vec<u8> {
     let mut script = vec![0x20];
@@ -85,13 +86,12 @@ fn maximum_value_input() -> Value {
 
 #[test]
 fn script_classification_parses_standard_multisig_and_covenant_shapes() {
-    assert!(parse_spk_hex("00")
-        .unwrap_err()
-        .contains("at least 4 bytes"));
-    assert!(parse_spk_hex("zz00").is_err());
-    assert!(parse_spk_hex("00zz").is_err());
-    assert!(parse_spk_hex("0000zz").is_err());
-    assert_eq!(parse_spk_hex(&spk(&p2pk(1))).unwrap(), (0, p2pk(1)));
+    assert!(parse_spk("00").unwrap_err().contains("2-byte version"));
+    assert!(parse_spk("ABCD").is_err());
+    assert!(parse_spk("zz00").is_err());
+    assert!(parse_spk("00zz").is_err());
+    assert!(parse_spk("0000zz").is_err());
+    assert_eq!(parse_spk(&spk(&p2pk(1))).unwrap(), (0, p2pk(1)));
 
     let redeem = multisig(&[1, 2], 2);
     assert_eq!(parse_multisig_redeem(&redeem), Some((2, 2)));
@@ -353,8 +353,8 @@ fn summary_review_network_prefix_mapping_covers_every_supported_network_and_reje
 
 #[test]
 fn classification_boundaries_are_byte_exact() {
-    assert_eq!(parse_spk_hex("1234").unwrap(), (0x1234, Vec::new()));
-    assert_eq!(parse_spk_hex("00ff51").unwrap(), (0x00ff, vec![0x51]));
+    assert_eq!(parse_spk("1234").unwrap(), (0x1234, Vec::new()));
+    assert_eq!(parse_spk("00ff51").unwrap(), (0x00ff, vec![0x51]));
 
     let valid_p2sh = p2sh(0x41);
     assert_eq!(

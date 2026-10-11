@@ -32,7 +32,9 @@ fn host_pskt_parser_rejects_duplicate_keys_escapes_unicode_and_excess_nesting() 
 #[test]
 fn host_pskt_outer_wire_decode_covers_resource_hex_magic_and_both_formats() {
     assert!(decode("").unwrap_err().contains("payload too short"));
-    assert!(decode("0").unwrap_err().contains("even-length ASCII hex"));
+    assert!(decode("0")
+        .unwrap_err()
+        .contains("even-length lowercase hexadecimal"));
     assert!(decode("GG").unwrap_err().contains("outer PSKT/PSKB hex"));
     assert!(decode(&hex::encode(b"NOPE"))
         .unwrap_err()
@@ -52,6 +54,36 @@ fn host_pskt_outer_wire_decode_covers_resource_hex_magic_and_both_formats() {
 
     let oversized = "00".repeat(super::super::test_support::MAX_PSKT_WIRE_HEX_CHARS / 2 + 1);
     assert!(decode(&oversized).unwrap_err().contains("resource ceiling"));
+}
+
+/// A JSON string value of exactly `bytes` encoded bytes.
+fn json_string_of(bytes: usize) -> Value {
+    Value::String("a".repeat(bytes - 2))
+}
+
+#[test]
+fn the_largest_signer_compatible_body_round_trips_and_one_more_byte_fails() {
+    let max = super::super::MAX_PSKT_JSON_BYTES;
+    let body = super::super::encode_json_body(&json_string_of(max)).expect("max body");
+    assert_eq!(body.len(), 2 * max);
+    assert_eq!(
+        super::super::decode_json_body(&body),
+        Ok(json_string_of(max))
+    );
+    let mut pskt = Vec::from(*b"PSKT");
+    pskt.extend_from_slice(&body);
+    let wire = hex::encode(pskt);
+    assert_eq!(wire.len(), super::super::MAX_PSKT_WIRE_HEX_CHARS);
+    assert_eq!(decode(&wire).map(|(_, root)| root), Ok(json_string_of(max)));
+
+    assert!(super::super::encode_json_body(&json_string_of(max + 1))
+        .unwrap_err()
+        .contains("signer-compatible size"));
+    let mut longer = body;
+    longer.extend_from_slice(b"00");
+    assert!(super::super::decode_json_body(&longer)
+        .unwrap_err()
+        .contains("signer-compatible size"));
 }
 
 #[test]

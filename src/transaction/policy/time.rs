@@ -417,14 +417,11 @@ fn days_before_year(year: u16) -> u64 {
     before - base
 }
 
+/// Days in the months before `month` (1..=12, already validated).
 fn days_before_month(year: u16, month: u8) -> u64 {
-    let mut total = 0u64;
-    let mut current = 1u8;
-    while current < month {
-        total += days_in_month(year, current) as u64;
-        current += 1;
-    }
-    total
+    const BEFORE: [u16; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    let leap_day = u64::from(month > 2 && is_leap_year(year));
+    u64::from(BEFORE[usize::from(month - 1)]) + leap_day
 }
 
 #[cfg(test)]

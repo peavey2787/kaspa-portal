@@ -155,3 +155,44 @@ fn decode_address_accepts_only_p2pk_and_p2sh_versions() {
         }
     }
 }
+
+#[test]
+fn only_defined_versions_with_their_exact_lengths_are_addresses() {
+    for (version, length) in [(0x00, 32), (0x01, 33), (0x08, 32)] {
+        let valid = encode_address_bytes(&vec![0x42; length], version, "kaspa");
+        assert!(validate_kaspa_address(valid.as_bytes()), "{version:#x}");
+        for wrong in [length - 1, length + 1] {
+            let address = encode_address_bytes(&vec![0x42; wrong], version, "kaspa");
+            assert!(!validate_kaspa_address(address.as_bytes()));
+        }
+    }
+    for version in [0x02, 0x07, 0x09, 0xff] {
+        let address = encode_address_bytes(&[0x42; 32], version, "kaspa");
+        assert!(!validate_kaspa_address(address.as_bytes()), "{version:#x}");
+    }
+    let ecdsa = encode_address_bytes(&[0x42; 33], 0x01, "kaspa");
+    assert!(address_to_script_pubkey(&ecdsa)
+        .unwrap_err()
+        .contains("Unsupported script version"));
+}
+
+#[test]
+fn the_longest_address_fits_the_output_buffer() {
+    let mut out = [0u8; MAX_ADDR_LEN];
+    let length = encode_address_for_network(
+        &[0x42; 33],
+        AddressType::P2pkEcdsa,
+        KaspaNetwork::Testnet,
+        &mut out,
+    );
+    assert_eq!(length, 73);
+    assert_eq!(
+        encode_address_for_network(
+            &[0x42; 32],
+            AddressType::P2pkEcdsa,
+            KaspaNetwork::Testnet,
+            &mut out
+        ),
+        0
+    );
+}

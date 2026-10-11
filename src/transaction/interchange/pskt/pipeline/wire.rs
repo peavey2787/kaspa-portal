@@ -49,9 +49,7 @@ fn validate_outer_wire_hex(wire_hex: &str) -> Result<(), String> {
     if wire_hex.len() > MAX_PSKT_WIRE_HEX_CHARS {
         return Err("PSKT/PSKB payload exceeds host resource ceiling".to_string());
     }
-    if !wire_hex.is_ascii() || !wire_hex.len().is_multiple_of(2) {
-        return Err("outer PSKT/PSKB must be even-length ASCII hex".to_string());
-    }
+    // Hex syntax is checked by the decoder.
     Ok(())
 }
 
@@ -72,15 +70,13 @@ fn decoded_wire_format(wire: &[u8]) -> Result<Format, String> {
 /// Decode the ASCII-hex JSON body using the exact canonical grammar shared by
 /// the Companion and the offline signer boundary.
 pub(crate) fn decode_json_body_hex(body_hex: &[u8]) -> Result<Value, String> {
-    if !body_hex.len().is_multiple_of(2) || body_hex.len() > MAX_PSKT_JSON_BYTES * 2 {
-        return Err("PSKT JSON hex body has invalid size".to_string());
-    }
-    let inner_text = core::str::from_utf8(body_hex)
-        .map_err(|_| "inner PSKT JSON hex must be ASCII".to_string())?;
-    let inner = decode_lower_hex(inner_text, "inner PSKT JSON hex")?;
-    if inner.len() > MAX_PSKT_JSON_BYTES {
+    if body_hex.len() > MAX_PSKT_JSON_BYTES * 2 {
         return Err("PSKT JSON exceeds signer-compatible size".to_string());
     }
+    let mut inner = vec![0u8; body_hex.len() / 2];
+    crate::primitives::bytes::decode_lower_hex(body_hex, &mut inner).ok_or_else(|| {
+        "inner PSKT JSON hex must be even-length lowercase hexadecimal".to_string()
+    })?;
     parse_strict_json(&inner)
 }
 
@@ -176,25 +172,14 @@ fn parse_legacy_number(number: &Number, field: &str) -> Result<u64, String> {
 }
 
 pub(crate) fn parse_spk(value: &str) -> Result<(u16, Vec<u8>), String> {
-    let bytes = value.as_bytes();
-    if bytes.len() < 4
-        || !bytes
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
-    {
+    let bytes = decode_lower_hex(value, "scriptPublicKey")?;
+    let Some((version, script)) = bytes.split_first_chunk::<2>() else {
         return Err(format!(
-            "scriptPublicKey must be ASCII hex and at least 4 bytes, got {}",
+            "scriptPublicKey must start with a 2-byte version, got {} bytes",
             bytes.len()
         ));
-    }
-    let version_text = core::str::from_utf8(&bytes[..4])
-        .map_err(|_| "scriptPublicKey version is not ASCII".to_string())?;
-    let script_text = core::str::from_utf8(&bytes[4..])
-        .map_err(|_| "scriptPublicKey body is not ASCII".to_string())?;
-    let version = u16::from_str_radix(version_text, 16)
-        .map_err(|error| format!("bad script version: {error}"))?;
-    let script = decode_lower_hex(script_text, "scriptPublicKey body")?;
-    Ok((version, script))
+    };
+    Ok((u16::from_be_bytes(*version), script.to_vec()))
 }
 
 pub fn attach_input_derivation(

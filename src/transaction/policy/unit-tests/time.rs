@@ -39,6 +39,7 @@ fn dates_convert_to_and_from_unix_seconds_exactly() {
         (date(2001, 3, 1, 0, 0, 0), 983_404_800, 3),
         (date(2023, 12, 31, 23, 59, 59), 1_704_067_199, 6),
         (date(2024, 2, 29, 13, 47, 29), 1_709_214_449, 3),
+        (date(2024, 3, 1, 0, 0, 0), 1_709_251_200, 4),
         (date(2061, 7, 15, 8, 5, 9), 2_888_640_309, 4),
         (date(2099, 12, 31, 23, 59, 59), MAX_UNIX, 3),
     ];
@@ -227,6 +228,13 @@ fn weekly_windows_parse_sort_and_reject_overlaps() {
             Err(PolicyError::InvalidWindow)
         );
     }
+    // Out-of-range hours and minutes fail even when the minute span would fit.
+    for out_of_range in [&b"MON 08:60-09:30"[..], b"MON 23:00-24:00"] {
+        assert_eq!(
+            parse_weekly_windows(out_of_range),
+            Err(PolicyError::InvalidWindow)
+        );
+    }
     assert_eq!(
         parse_weekly_windows(b"MON 23:59-23:59"),
         Err(PolicyError::InvalidWindow)
@@ -305,6 +313,11 @@ fn policy_validation_rejects_malformed_window_sets_and_times() {
     assert_eq!(
         weekly(&[window(0, 0, 60), window(1, 0, 60), window(0, 59, 90)]).validate(),
         Err(PolicyError::OverlappingWindow)
+    );
+    // Touching windows in either order do not overlap.
+    assert_eq!(
+        weekly(&[window(0, 60, 120), window(0, 0, 60)]).validate(),
+        Ok(())
     );
     assert_eq!(
         weekly(&[window(0, 59, 90), window(0, 0, 60)]).validate(),

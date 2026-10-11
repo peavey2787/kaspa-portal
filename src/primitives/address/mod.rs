@@ -114,13 +114,11 @@ pub fn encode_address_for_network(
     let Some(prefix) = network.hrp() else {
         return 0;
     };
-    if !valid_payload_length(addr_type as u8, pubkey.len()) {
+    if payload_length_for_version(addr_type as u8) != Some(pubkey.len()) {
         return 0;
     }
+    // The longest address (testnet, 33-byte ECDSA key) is 73 characters.
     let text = encode_address_bytes(pubkey, addr_type as u8, prefix);
-    if text.len() > out.len() {
-        return 0;
-    }
     out[..text.len()].copy_from_slice(text.as_bytes());
     text.len()
 }
@@ -183,27 +181,23 @@ pub fn validate_kaspa_address(addr: &[u8]) -> bool {
 
 pub fn address_to_script_pubkey(addr: &str) -> Result<Vec<u8>, String> {
     let decoded = decode_address_bytes(addr)?;
+    // The decoder has already bound the payload length to the version.
     match decoded.version {
-        0x00 if decoded.payload.len() == 32 => {
+        0x00 => {
             let mut script = Vec::with_capacity(34);
             script.push(0x20);
             script.extend_from_slice(&decoded.payload);
             script.push(0xac);
             Ok(script)
         }
-        0x08 if decoded.payload.len() == 32 => {
+        0x08 => {
             let mut script = Vec::with_capacity(35);
             script.extend_from_slice(&[0xaa, 0x20]);
             script.extend_from_slice(&decoded.payload);
             script.push(0x87);
             Ok(script)
         }
-        0x00 | 0x08 => Err(format!(
-            "Invalid payload length {} for address version {:#x}",
-            decoded.payload.len(),
-            decoded.version
-        )),
-        version => Err(format!("Unknown version: {version:#x}")),
+        version => Err(format!("Unsupported script version: {version:#x}")),
     }
 }
 
@@ -224,7 +218,9 @@ fn decode_address_bytes(addr: &str) -> Result<DecodedAddress, String> {
     let Some((&version, payload)) = decoded.split_first() else {
         return Err("Address payload is empty".into());
     };
-    if !valid_payload_length(version, payload.len()) {
+    let expected = payload_length_for_version(version)
+        .ok_or_else(|| format!("Unknown version: {version:#x}"))?;
+    if payload.len() != expected {
         return Err(format!(
             "Invalid payload length {} for address version {version:#x}",
             payload.len()
@@ -236,11 +232,13 @@ fn decode_address_bytes(addr: &str) -> Result<DecodedAddress, String> {
     })
 }
 
-fn valid_payload_length(version: u8, payload_len: usize) -> bool {
+/// The payload length of each defined address version: Schnorr P2PK and
+/// P2SH carry 32 bytes, ECDSA P2PK 33. Other versions are not addresses.
+fn payload_length_for_version(version: u8) -> Option<usize> {
     match version {
-        0x00 | 0x08 => payload_len == 32,
-        0x01 => payload_len == 33,
-        _ => payload_len == 32 || payload_len == 33,
+        0x00 | 0x08 => Some(32),
+        0x01 => Some(33),
+        _ => None,
     }
 }
 
@@ -330,7 +328,7 @@ pub(crate) fn polymod(values: impl Iterator<Item = u8>) -> u64 {
 }
 
 fn convert_bits(data: &[u8], from: u8, to: u8, pad: bool) -> Result<Vec<u8>, String> {
-    let mut output = Vec::with_capacity((data.len() * usize::from(from)).div_ceil(usize::from(to)));
+    let mut output = Vec::new();
     let mut accumulator = 0u32;
     let mut bits = 0u8;
     let max_value = (1u32 << to) - 1;

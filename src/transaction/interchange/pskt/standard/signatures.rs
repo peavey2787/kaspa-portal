@@ -1,6 +1,8 @@
 //! PSKT signature merge and UI status helpers.
 
-use crate::transaction::model::{Transaction, MAX_SIGS_PER_INPUT};
+use crate::transaction::model::{
+    IncomingPartialSig, Transaction, TransactionInput, MAX_SIGS_PER_INPUT,
+};
 
 use super::PskError;
 
@@ -26,114 +28,50 @@ use super::PskError;
 /// Does not mutate `sigs[]` — KSPT emission on the same tx still works
 /// if the caller picks that path instead. Designed to be idempotent:
 /// calling this twice is a no-op on the second call.
-fn incoming_signature_for_pubkey(
-    input: &crate::transaction::model::TransactionInput,
-    pubkey: [u8; 33],
-) -> Option<[u8; 64]> {
-    input.incoming_partial_sigs[..input.incoming_partial_sigs_count as usize]
-        .iter()
-        .find(|entry| entry.pubkey == pubkey)
-        .map(|entry| entry.signature)
-}
+type PartialSigs = ([IncomingPartialSig; MAX_SIGS_PER_INPUT], u8);
 
-fn preflight_ksp_signatures(
-    input: &crate::transaction::model::TransactionInput,
-) -> Result<(), PskError> {
-    let mut additions = 0usize;
-    for slot_index in 0..input.sig_count as usize {
-        if preflight_slot_adds_signature(input, slot_index)? {
-            additions += 1;
-        }
-    }
-    let existing = input.incoming_partial_sigs_count as usize;
-    if existing.saturating_add(additions) > MAX_SIGS_PER_INPUT {
-        return Err(PskError::TooManyPartialSigs);
-    }
-    Ok(())
-}
-
-fn preflight_slot_adds_signature(
-    input: &crate::transaction::model::TransactionInput,
-    slot_index: usize,
-) -> Result<bool, PskError> {
-    let slot = &input.sigs[slot_index];
-    if !slot.present || slot.pubkey_compressed == [0u8; 33] {
-        return Ok(false);
-    }
-    if let Some(existing) = incoming_signature_for_pubkey(input, slot.pubkey_compressed) {
-        if existing != slot.signature {
-            return Err(PskError::SignatureConflict);
-        }
-        return Ok(false);
-    }
-    Ok(prior_signature_for_pubkey(input, slot_index, slot)?.is_none())
-}
-
-fn prior_signature_for_pubkey(
-    input: &crate::transaction::model::TransactionInput,
-    slot_index: usize,
-    slot: &crate::transaction::model::InputSig,
-) -> Result<Option<[u8; 64]>, PskError> {
-    let mut found = None;
-    for prior in &input.sigs[..slot_index] {
-        if !prior.present
-            || prior.pubkey_compressed == [0u8; 33]
-            || prior.pubkey_compressed != slot.pubkey_compressed
-        {
-            continue;
-        }
-        if prior.signature != slot.signature {
-            return Err(PskError::SignatureConflict);
-        }
-        found = Some(prior.signature);
-    }
-    Ok(found)
-}
-
-fn append_ksp_signatures(
-    input: &mut crate::transaction::model::TransactionInput,
-) -> Result<(), PskError> {
-    for slot_index in 0..input.sig_count as usize {
-        let slot = input.sigs[slot_index].clone();
+/// The input's incoming partial signatures with its new `sigs[]` merged in.
+fn merged_partial_sigs(input: &TransactionInput) -> Result<PartialSigs, PskError> {
+    let mut merged = input.incoming_partial_sigs;
+    let original = usize::from(input.incoming_partial_sigs_count);
+    let mut count = original;
+    for slot in input.sigs.iter().take(usize::from(input.sig_count)) {
         if !slot.present || slot.pubkey_compressed == [0u8; 33] {
             continue;
         }
-        if let Some(existing) = incoming_signature_for_pubkey(input, slot.pubkey_compressed) {
-            if existing != slot.signature {
-                return Err(PskError::SignatureConflict);
+        match merged[..count]
+            .iter()
+            .find(|entry| entry.pubkey == slot.pubkey_compressed)
+        {
+            Some(entry) if entry.signature != slot.signature => {
+                return Err(PskError::SignatureConflict)
             }
-            continue;
+            Some(_) => continue,
+            None => {}
         }
-        let next = input.incoming_partial_sigs_count as usize;
-        if next >= MAX_SIGS_PER_INPUT {
-            return Err(PskError::TooManyPartialSigs);
-        }
-        input.incoming_partial_sigs[next].pubkey = slot.pubkey_compressed;
-        input.incoming_partial_sigs[next].signature = slot.signature;
-        input.incoming_partial_sigs[next].present = true;
-        input.incoming_partial_sigs_count = (next + 1) as u8;
+        *merged.get_mut(count).ok_or(PskError::TooManyPartialSigs)? = IncomingPartialSig {
+            pubkey: slot.pubkey_compressed,
+            signature: slot.signature,
+            present: true,
+        };
+        count += 1;
     }
-    Ok(())
-}
-
-fn sort_incoming_signatures(input: &mut crate::transaction::model::TransactionInput) {
-    let count = input.incoming_partial_sigs_count as usize;
-    input.incoming_partial_sigs[..count].sort_unstable_by_key(|entry| entry.pubkey);
+    if count != original {
+        merged[..count].sort_unstable_by_key(|entry| entry.pubkey);
+    }
+    Ok((merged, count as u8))
 }
 
 pub fn move_ksp_sigs_to_pskt(tx: &mut Transaction) -> Result<(), PskError> {
-    // Preflight every input before mutating any of them so a late conflict or
-    // capacity error cannot leave the transaction half-merged.
-    for input_index in 0..tx.num_inputs {
-        preflight_ksp_signatures(&tx.inputs[input_index])?;
-    }
-    for input_index in 0..tx.num_inputs {
-        let input = &mut tx.inputs[input_index];
-        let base = input.incoming_partial_sigs_count;
-        append_ksp_signatures(input)?;
-        if input.incoming_partial_sigs_count != base {
-            sort_incoming_signatures(input);
-        }
+    // Merge every input into a copy first so a late conflict or capacity
+    // error cannot leave the transaction half-merged.
+    let merged = tx.inputs[..tx.num_inputs]
+        .iter()
+        .map(merged_partial_sigs)
+        .collect::<Result<Vec<_>, _>>()?;
+    for (input, (sigs, count)) in tx.inputs.iter_mut().zip(merged) {
+        input.incoming_partial_sigs = sigs;
+        input.incoming_partial_sigs_count = count;
     }
     Ok(())
 }
