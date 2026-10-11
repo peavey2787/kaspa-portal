@@ -10,7 +10,8 @@ use kaspa_portal::{
     primitives::NetworkId,
     transaction::{
         builder::{
-            CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding, MultisigConsolidationRequest,
+            CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding,
+            MultisigConsolidationRequest,
         },
         consensus::ConsensusTransaction,
         interchange::{
