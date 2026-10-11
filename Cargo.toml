@@ -52,6 +52,8 @@ std = [
     "dep:ark-snark",
     "dep:tokio",
     "dep:tokio-tungstenite",
+    "dep:rustls",
+    "dep:webpki-roots",
     "dep:futures-util",
     "dep:reqwest",
 ]
@@ -100,7 +102,9 @@ ark-snark = { version = "0.5", default-features = false, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["net", "time", "rt", "sync", "macros"], optional = true }
-tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"], optional = true }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "__rustls-tls"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+webpki-roots = { version = "1", optional = true }
 futures-util = { version = "0.3", features = ["sink"], optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
 

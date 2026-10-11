@@ -6,7 +6,7 @@ use std::time::Duration;
 use futures_util::SinkExt;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::Instant;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::Message};
 
 use crate::network::{
     error::NetworkError,
@@ -336,7 +336,9 @@ async fn connect_stream(
 ) -> Result<NativeStream, NetworkError> {
     let mut retry = 0u8;
     loop {
-        let result = tokio::time::timeout(timeout, connect_async(endpoint)).await;
+        let connect =
+            connect_async_tls_with_config(endpoint, None, false, Some(super::tls::connector()?));
+        let result = tokio::time::timeout(timeout, connect).await;
         match result {
             Ok(Ok((stream, _))) => return Ok(stream),
             Ok(Err(_)) if retry < max_retries => {

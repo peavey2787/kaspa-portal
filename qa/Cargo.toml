@@ -16,6 +16,9 @@ getrandom = "0.2"
 zeroize = "1.8.2"
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# Both rustls backends, as real applications end up with (libp2p QUIC brings
+# aws-lc-rs, reqwest brings ring); Portal must not rely on the process default.
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "ring"] }
 
 [[test]]
 name = "conformance-rfc9381"
@@ -52,6 +55,10 @@ path = "tests/randomness/vrf/public_api.rs"
 [[test]]
 name = "randomness-beacon"
 path = "tests/randomness/beacon/public_api.rs"
+
+[[test]]
+name = "regression-tls-crypto-provider"
+path = "tests/regression/tls_crypto_provider.rs"
 
 [[test]]
 name = "regression-anti-klepto-v1"
