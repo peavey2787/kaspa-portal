@@ -1,4 +1,7 @@
-use super::{extract_cltv_locktime, extract_csv_sequence, push_data, push_int, read_canonical_u64};
+use super::{
+    extract_cltv_locktime, extract_csv_sequence, p2pk_xonly, p2sh_hash, push_data, push_int,
+    read_canonical_u64,
+};
 
 #[test]
 fn locktime_extractors_share_the_same_integer_parser() {
@@ -366,4 +369,38 @@ fn canonical_integers_reject_non_minimal_negative_and_truncated_pushes() {
         assert_eq!(read_canonical_u64(rejected, 0), None, "{rejected:02x?}");
     }
     assert_eq!(read_canonical_u64(&[0x51], 1), None);
+}
+
+#[test]
+fn standard_script_recognizers_require_the_exact_shape() {
+    let mut p2pk = alloc::vec![0x20];
+    p2pk.extend_from_slice(&[7; 32]);
+    p2pk.push(0xac);
+    assert_eq!(p2pk_xonly(&p2pk), Some([7; 32]));
+    let mut p2sh = alloc::vec![0xaa, 0x20];
+    p2sh.extend_from_slice(&[9; 32]);
+    p2sh.push(0x87);
+    assert_eq!(p2sh_hash(&p2sh), Some([9; 32]));
+    assert_eq!(p2pk_xonly(&p2sh), None);
+    assert_eq!(p2sh_hash(&p2pk), None);
+
+    for script in [&p2pk, &p2sh] {
+        for index in 0..script.len() {
+            let mut altered = script.clone();
+            altered[index] ^= 0x01;
+            let is_payload = if script.len() == 34 {
+                (1..33).contains(&index)
+            } else {
+                (2..34).contains(&index)
+            };
+            let recognized = p2pk_xonly(&altered).is_some() || p2sh_hash(&altered).is_some();
+            assert_eq!(recognized, is_payload, "byte {index} of {script:02x?}");
+        }
+        assert_eq!(p2pk_xonly(&script[..script.len() - 1]), None);
+        assert_eq!(p2sh_hash(&script[..script.len() - 1]), None);
+        let mut longer = script.clone();
+        longer.push(0);
+        assert_eq!(p2pk_xonly(&longer), None);
+        assert_eq!(p2sh_hash(&longer), None);
+    }
 }

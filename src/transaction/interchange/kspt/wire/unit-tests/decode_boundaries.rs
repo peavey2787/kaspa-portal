@@ -429,3 +429,42 @@ fn canonical_decoder_rejects_covenant_execution_beyond_the_inputs() {
         WireError::InvalidTrailer,
     );
 }
+
+/// Offset of the first input's `sig_op_count` byte in the one-input vector.
+fn sig_op_count_offset(wire: &[u8]) -> usize {
+    let sequence_then_count = [4, 0, 0, 0, 0, 0, 0, 0, 1];
+    wire.windows(sequence_then_count.len())
+        .position(|window| window == sequence_then_count)
+        .expect("one-input vector carries sequence 4 and sig_op_count 1")
+        + 8
+}
+
+#[test]
+fn input_sig_op_count_is_bounded_by_the_signature_capacity() {
+    let mut wire = one_input_with_trailers(&[NETWORK_MARKER, 1]);
+    let offset = sig_op_count_offset(&wire);
+    wire[offset] = MAX_SIGNATURE_RECORDS as u8;
+    assert!(decode(&wire, &mut CaptureSink::default()).is_ok());
+    wire[offset] = MAX_SIGNATURE_RECORDS as u8 + 1;
+    assert_wire_error(&wire, WireError::TooManySignatures);
+}
+
+#[test]
+fn declared_inputs_may_exactly_fill_the_remaining_bytes() {
+    let mut wire = one_input_with_trailers(&[NETWORK_MARKER, 1]);
+    let inputs_start = wire
+        .windows(32)
+        .position(|window| window == [0x22; 32])
+        .expect("first input transaction id");
+    // Pad so the remaining bytes are an exact multiple of the input minimum.
+    while !(wire.len() - inputs_start).is_multiple_of(59) {
+        wire.push(0);
+    }
+    let count = ((wire.len() - inputs_start) / 59) as u32;
+    wire[8..12].copy_from_slice(&count.to_le_bytes());
+    let result = decode(&wire, &mut CaptureSink::default());
+    assert!(result.is_err());
+    assert_ne!(result, Err(DecodeError::Wire(WireError::CountOverflow)));
+    wire[8..12].copy_from_slice(&(count + 1).to_le_bytes());
+    assert_wire_error(&wire, WireError::CountOverflow);
+}

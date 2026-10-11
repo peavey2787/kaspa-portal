@@ -261,32 +261,32 @@ fn decode_live_transaction(transaction: &[u8]) -> Result<BlockAddedTransaction<'
     })
 }
 
+/// The transaction id from a serialized `Option<RpcTransactionVerboseData>`;
+/// `None` when the option is empty or malformed.
 fn transaction_id_from_verbose(optional: &[u8]) -> Option<String> {
     let mut option = WireReader::new(optional);
-    match option.read_u8().ok()? {
-        0 => None,
-        1 => {
-            // workflow_serializer::Serializer for Option<T> stores tag=1 then
-            // a Payload<T>. RpcTransactionVerboseData begins with u8 version 1
-            // followed by the 32-byte transaction id.
-            let verbose = option.read_bytes(MAX_WRPC_BLOB_BYTES).ok()?;
-            if !option.remaining().is_empty() {
-                return None;
-            }
-            let mut verbose_reader = WireReader::new(verbose);
-            if verbose_reader.read_u8().ok()? != 1 {
-                return None;
-            }
-            let transaction_id = hex::encode(verbose_reader.read_exact(32).ok()?);
-            verbose_reader.read_exact(32).ok()?; // transaction hash
-            verbose_reader.read_u64().ok()?; // compute mass
-            verbose_reader.read_exact(32).ok()?; // block hash
-            verbose_reader.read_u64().ok()?; // block time
-            if !verbose_reader.remaining().is_empty() {
-                return None;
-            }
-            Some(transaction_id)
-        }
-        _ => None,
+    // workflow_serializer::Serializer for Option<T> stores tag=1 then a
+    // Payload<T>; tag 0 is None.
+    if option.read_u8().ok()? != 1 {
+        return None;
     }
+    let verbose = option.read_bytes(MAX_WRPC_BLOB_BYTES).ok()?;
+    if !option.remaining().is_empty() {
+        return None;
+    }
+    // RpcTransactionVerboseData begins with u8 version 1 followed by the
+    // 32-byte transaction id.
+    let mut verbose_reader = WireReader::new(verbose);
+    if verbose_reader.read_u8().ok()? != 1 {
+        return None;
+    }
+    let transaction_id = hex::encode(verbose_reader.read_exact(32).ok()?);
+    verbose_reader.read_exact(32).ok()?; // transaction hash
+    verbose_reader.read_u64().ok()?; // compute mass
+    verbose_reader.read_exact(32).ok()?; // block hash
+    verbose_reader.read_u64().ok()?; // block time
+    verbose_reader
+        .remaining()
+        .is_empty()
+        .then_some(transaction_id)
 }

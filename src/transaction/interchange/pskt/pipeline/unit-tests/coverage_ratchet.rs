@@ -468,3 +468,85 @@ fn base_document(partials: Value, redeem: Option<&[u8]>) -> Value {
 fn encode_pskb(document: Value) -> String {
     pskb(&document)
 }
+
+/// An unsigned P2PK document owned by test signer `marker`.
+fn p2pk_document(marker: u8) -> Value {
+    let mut document = base_document(json!({}), None);
+    document["inputs"][0]["utxoEntry"]["scriptPublicKey"] =
+        json!(format!("000020{}ac", hex::encode(xonly(marker))));
+    document
+}
+
+#[test]
+fn merging_requires_the_signed_kspt_to_describe_the_same_transaction() {
+    let original = encode_pskb(p2pk_document(0x11));
+    let signed = |document: Value, network: Network| {
+        encode_pskt(&encode_pskb(sign_first_input(document, &[0x11])), network)
+            .expect("signed KSPT")
+    };
+
+    let merged = merge_signed_kspt(
+        &original,
+        &signed(p2pk_document(0x11), Network::Mainnet),
+        Network::Mainnet,
+    )
+    .expect("same transaction merges");
+    let (format, root) = super::super::test_support::decode(&merged).expect("decode merged");
+    let partials = document(&root, format).unwrap()["inputs"][0]["partialSigs"].clone();
+    let key = format!("02{}", hex::encode(xonly(0x11)));
+    assert!(partials[&key]["schnorr"].is_string(), "{partials}");
+
+    let mut other = p2pk_document(0x11);
+    other["outputs"][0]["amount"] = json!("89999");
+    assert!(merge_signed_kspt(
+        &original,
+        &signed(other, Network::Mainnet),
+        Network::Mainnet
+    )
+    .unwrap_err()
+    .contains("transaction body"));
+    assert!(merge_signed_kspt(
+        &original,
+        &signed(p2pk_document(0x11), Network::Testnet),
+        Network::Mainnet
+    )
+    .is_err());
+    // A KSPT without any signature is not a signer response.
+    let unsigned = encode_pskt(&original, Network::Mainnet).expect("unsigned KSPT");
+    assert!(merge_signed_kspt(&original, &unsigned, Network::Mainnet)
+        .unwrap_err()
+        .contains("no signatures"));
+}
+
+#[test]
+fn p2pk_merge_accepts_only_one_sighash_all_signature_at_position_zero() {
+    use super::super::compact::{self, merge_p2pk};
+
+    let signed_kspt = encode_pskt(
+        &encode_pskb(sign_first_input(p2pk_document(0x11), &[0x11])),
+        Network::Mainnet,
+    )
+    .expect("signed KSPT");
+    let transaction = compact::parse(&signed_kspt, super::super::test_support::SIGNER_TEST_LIMITS)
+        .expect("signed KSPT parses");
+    let input = &transaction.inputs[0];
+    let mut partials = serde_json::Map::new();
+    merge_p2pk(&mut partials, input, 0).expect("valid P2PK merge");
+    assert_eq!(partials.len(), 1);
+
+    let rejected = |change: &dyn Fn(&mut super::super::compact::Input)| {
+        let mut changed = input.clone();
+        change(&mut changed);
+        merge_p2pk(&mut serde_json::Map::new(), &changed, 0).is_err()
+    };
+    assert!(rejected(&|input| input.script.truncate(33)));
+    assert!(rejected(&|input| input.script[0] = 0x21));
+    assert!(rejected(&|input| input.script[33] = 0xad));
+    assert!(rejected(&|input| input.signatures.clear()));
+    assert!(rejected(&|input| {
+        let extra = input.signatures[0].clone();
+        input.signatures.push(extra);
+    }));
+    assert!(rejected(&|input| input.signatures[0].position = 1));
+    assert!(rejected(&|input| input.signatures[0].sighash = 0x02));
+}

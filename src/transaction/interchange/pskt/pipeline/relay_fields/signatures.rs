@@ -124,10 +124,7 @@ pub(crate) fn collect_p2pk_signature(fields: &InputFields) -> Result<Vec<Signatu
 }
 
 pub(crate) fn validate_p2pk_script(fields: &InputFields) -> Result<(), String> {
-    let valid = fields.script_public_key.len() == 34
-        && fields.script_public_key.first() == Some(&0x20)
-        && fields.script_public_key.get(33) == Some(&0xac);
-    if !valid {
+    if crate::contract::script::p2pk_xonly(&fields.script_public_key).is_none() {
         return Err(
             "partial signature is present for a non-P2PK input without redeemScript".to_string(),
         );

@@ -21,6 +21,7 @@ pub const OP_ZK_PRECOMPILE: u8 = 0xa6;
 pub const OP_SHA256: u8 = 0xa8;
 pub const OP_BLAKE2B: u8 = 0xaa;
 pub const OP_CHECKSIG: u8 = 0xac;
+pub const OP_DATA_32: u8 = 0x20;
 pub const OP_CHECKSIGVERIFY: u8 = 0xad;
 pub const OP_CHECKLOCKTIMEVERIFY: u8 = 0xb0;
 pub const OP_CHECKSEQUENCEVERIFY: u8 = 0xb1;

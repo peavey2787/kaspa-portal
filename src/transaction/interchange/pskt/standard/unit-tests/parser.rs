@@ -1063,3 +1063,85 @@ fn top_level_dispatch_covers_preserved_extension_and_known_field_fail_closed_pat
     let malformed_known = "{\"global\":{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1},\"inputs\":null,\"outputs\":[{\"amount\":1,\"scriptPublicKey\":\"0000\"}]}".to_string();
     assert!(parse_json(PSKT_MAGIC, malformed_known.as_bytes()).is_err());
 }
+
+fn parse_global(global_extra: &str) -> Result<Transaction, PskError> {
+    parse_json(PSKT_MAGIC, &transaction_json(global_extra, "", "")).map(|(tx, _, _)| tx)
+}
+
+#[test]
+fn global_transaction_fields_map_null_number_and_string_forms_exactly() {
+    let defaults = parse_global("").unwrap();
+    assert_eq!(defaults.locktime, 0);
+    assert_eq!(defaults.gas, 0);
+    assert!(defaults.payload.is_empty());
+
+    let nulls =
+        parse_global(r#","fallbackLockTime":null,"subnetworkId":null,"gas":null,"txPayload":null"#)
+            .unwrap();
+    assert_eq!(nulls.locktime, 0);
+    assert_eq!(nulls.subnetwork_id, [0; 20]);
+    assert_eq!(nulls.gas, 0);
+    assert!(nulls.payload.is_empty());
+
+    let numbers = parse_global(&format!(
+        r#","fallbackLockTime":7,"gas":5,"subnetworkId":"{}","txPayload":"aabb""#,
+        "01".repeat(20)
+    ))
+    .unwrap();
+    assert_eq!(numbers.locktime, 7);
+    assert_eq!(numbers.gas, 5);
+    assert_eq!(numbers.subnetwork_id, [1; 20]);
+    assert_eq!(numbers.payload, [0xaa, 0xbb]);
+
+    let strings = parse_global(r#","fallbackLockTime":"8","gas":"6""#).unwrap();
+    assert_eq!((strings.locktime, strings.gas), (8, 6));
+
+    for (field, expected) in [
+        (
+            format!(r#","subnetworkId":"{}""#, "01".repeat(19)),
+            PskError::InvalidScriptLen,
+        ),
+        (
+            r#","subnetworkId":1"#.to_string(),
+            PskError::UnexpectedToken,
+        ),
+        (r#","gas":true"#.to_string(), PskError::UnexpectedToken),
+        (r#","txPayload":1"#.to_string(), PskError::UnexpectedToken),
+        (
+            r#","fallbackLockTime":true"#.to_string(),
+            PskError::UnexpectedToken,
+        ),
+    ] {
+        assert_eq!(parse_global(&field).err(), Some(expected), "{field}");
+    }
+}
+
+#[test]
+fn global_payload_and_input_count_limits_are_exact() {
+    let limits = Transaction::try_new().unwrap().limits;
+    let max_payload = "ab".repeat(limits.max_payload_bytes);
+    assert_eq!(
+        parse_global(&format!(r#","txPayload":"{max_payload}""#))
+            .unwrap()
+            .payload
+            .len(),
+        limits.max_payload_bytes
+    );
+    assert_eq!(
+        parse_global(&format!(r#","txPayload":"{max_payload}ab""#)).err(),
+        Some(PskError::InvalidScriptLen)
+    );
+
+    let declared = |count: usize| {
+        String::from_utf8(transaction_json("", "", ""))
+            .unwrap()
+            .replace(r#""inputCount":1"#, &format!(r#""inputCount":{count}"#))
+    };
+    let at_limit = parse_json(PSKT_MAGIC, declared(limits.max_inputs).as_bytes()).err();
+    assert!(at_limit.is_some());
+    assert_ne!(at_limit, Some(PskError::TooManyInputs));
+    assert_eq!(
+        parse_json(PSKT_MAGIC, declared(limits.max_inputs + 1).as_bytes()).err(),
+        Some(PskError::TooManyInputs)
+    );
+}

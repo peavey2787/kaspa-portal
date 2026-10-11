@@ -176,13 +176,11 @@ pub(crate) fn copy_signature(signature: &compact::Signature) -> VerifiedSignatur
 }
 
 pub(crate) fn require_p2pk_script(index: usize, script: &[u8]) -> Result<(), String> {
-    if script.len() == 34 && script.first() == Some(&0x20) && script.get(33) == Some(&0xac) {
-        Ok(())
-    } else {
-        Err(format!(
-            "input[{index}] signature without redeemScript is not canonical P2PK"
-        ))
-    }
+    crate::contract::script::p2pk_xonly(script)
+        .map(|_| ())
+        .ok_or_else(|| {
+            format!("input[{index}] signature without redeemScript is not canonical P2PK")
+        })
 }
 
 pub(crate) fn require_p2sh_redeem_binding(
@@ -190,17 +188,10 @@ pub(crate) fn require_p2sh_redeem_binding(
     script: &[u8],
     redeem: &[u8],
 ) -> Result<(), String> {
-    if script.len() != 35
-        || script.first() != Some(&0xaa)
-        || script.get(1) != Some(&0x20)
-        || script.get(34) != Some(&0x87)
-    {
-        return Err(format!(
-            "input[{index}] redeemScript is present but scriptPublicKey is not canonical P2SH"
-        ));
-    }
-    let hash = blake2b_simd::Params::new().hash_length(32).hash(redeem);
-    if script.get(2..34) != Some(hash.as_bytes()) {
+    let committed = crate::contract::script::p2sh_hash(script).ok_or_else(|| {
+        format!("input[{index}] redeemScript is present but scriptPublicKey is not canonical P2SH")
+    })?;
+    if committed != crate::primitives::address::script_hash(redeem) {
         return Err(format!(
             "input[{index}] redeemScript hash does not match scriptPublicKey"
         ));

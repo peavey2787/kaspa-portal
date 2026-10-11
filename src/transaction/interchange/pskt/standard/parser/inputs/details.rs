@@ -4,9 +4,7 @@ use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope
 use crate::transaction::model::TransactionInput;
 
 use super::super::super::{
-    hex_decode_strict,
-    preservation::{capture_unknown, capture_unknown_keyed},
-    PskError, Tok, Tokenizer,
+    hex_decode_strict, preservation::capture_unknown, PskError, Tok, Tokenizer,
 };
 use super::super::helpers::{
     consume_object_separator, expect, expect_bool, expect_string, expect_u64, mark_schema_field,
@@ -132,7 +130,7 @@ impl UtxoParser<'_> {
         let scope = PsktUnknownScope::input_utxo(
             u32::try_from(self.input_index).map_err(|_| PskError::CountMismatch)?,
         );
-        capture_unknown_keyed(self.parsed, scope, tok.source(), key_start, tok.position())
+        capture_unknown(self.parsed, scope, key_start, tok.position())
     }
 
     fn capture_when(
@@ -221,7 +219,7 @@ impl OutpointParser<'_> {
         let scope = PsktUnknownScope::input_outpoint(
             u32::try_from(self.input_index).map_err(|_| PskError::CountMismatch)?,
         );
-        capture_unknown_keyed(self.parsed, scope, tok.source(), key_start, tok.position())
+        capture_unknown(self.parsed, scope, key_start, tok.position())
     }
 
     fn require_fields(&self) -> Result<(), PskError> {

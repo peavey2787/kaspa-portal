@@ -9,7 +9,7 @@ mod outputs;
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
 use crate::transaction::model::Transaction;
 
-use super::preservation::capture_unknown_keyed;
+use super::preservation::capture_unknown;
 use super::{
     hex_decode_strict, strip_pskt_magic, validate_monetary_shape, PskError, Tok, Tokenizer,
     PSKB_MAGIC, PSKT_MAGIC,
@@ -168,10 +168,9 @@ fn preserve_unknown_top_level(
     key_start: usize,
 ) -> Result<(), PskError> {
     skip_value(tok)?;
-    capture_unknown_keyed(
+    capture_unknown(
         parsed,
         PsktUnknownScope::top_level(),
-        tok.source(),
         key_start,
         tok.position(),
     )

@@ -7,21 +7,13 @@ pub(crate) fn classify_input_script(
     spk: &[u8],
     redeem: Option<&[u8]>,
 ) -> (String, Option<u8>, Option<u8>) {
-    if is_p2sh_script(spk) {
+    if crate::contract::script::p2sh_hash(spk).is_some() {
         return classify_p2sh_redeem(redeem);
     }
-    if is_p2pk_script(spk) {
+    if crate::contract::script::p2pk_xonly(spk).is_some() {
         return ("p2pk".into(), None, None);
     }
     ("unknown".into(), None, None)
-}
-
-fn is_p2sh_script(spk: &[u8]) -> bool {
-    spk.len() == 35 && spk[0] == 0xAA && spk[1] == 0x20 && spk[34] == 0x87
-}
-
-fn is_p2pk_script(spk: &[u8]) -> bool {
-    spk.len() == 34 && spk[0] == 0x20 && spk[33] == 0xAC
 }
 
 fn classify_p2sh_redeem(redeem: Option<&[u8]>) -> (String, Option<u8>, Option<u8>) {
@@ -41,9 +33,7 @@ fn classify_p2sh_redeem(redeem: Option<&[u8]>) -> (String, Option<u8>, Option<u8
 
 pub(crate) fn classify_output_script(spk: &[u8], network_prefix: &str) -> (String, Option<String>) {
     // P2SH
-    if spk.len() == 35 && spk[0] == 0xAA && spk[1] == 0x20 && spk[34] == 0x87 {
-        let mut hash = [0u8; 32];
-        hash.copy_from_slice(&spk[2..34]);
+    if let Some(hash) = crate::contract::script::p2sh_hash(spk) {
         return (
             "p2sh".into(),
             Some(crate::primitives::address::encode_p2sh_address(
@@ -53,9 +43,7 @@ pub(crate) fn classify_output_script(spk: &[u8], network_prefix: &str) -> (Strin
         );
     }
     // P2PK
-    if spk.len() == 34 && spk[0] == 0x20 && spk[33] == 0xAC {
-        let mut pk = [0u8; 32];
-        pk.copy_from_slice(&spk[1..33]);
+    if let Some(pk) = crate::contract::script::p2pk_xonly(spk) {
         return (
             "p2pk".into(),
             Some(crate::primitives::address::encode_p2pk_address(

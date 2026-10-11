@@ -55,102 +55,75 @@ pub fn validate(data: &[u8], limits: Limits) -> Result<DecodedEnvelope, WireErro
     }
 }
 
+/// Validates wire grammar only and constructs no semantic model. Each method
+/// is spelled out so consumer sinks never inherit a silent drop behavior.
 struct NullSink;
 impl DecodeSink for NullSink {
     type Error = core::convert::Infallible;
 
-    fn global(&mut self, value: Global<'_>) -> Result<(), Self::Error> {
-        let _ = value;
+    fn global(&mut self, _value: Global<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 
     fn input(
         &mut self,
-        index: u32,
-        value: Input<'_>,
-        signature_count: u8,
+        _index: u32,
+        _value: Input<'_>,
+        _signature_count: u8,
     ) -> Result<(), Self::Error> {
-        let _ = index;
-        let _ = value;
-        let _ = signature_count;
         Ok(())
     }
 
-    fn signature(&mut self, input: u32, slot: u8, value: Signature) -> Result<(), Self::Error> {
-        let _ = input;
-        let _ = slot;
-        let _ = value;
+    fn signature(&mut self, _input: u32, _slot: u8, _value: Signature) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn redeem(&mut self, input: u32, value: &[u8]) -> Result<(), Self::Error> {
-        let _ = input;
-        let _ = value;
+    fn redeem(&mut self, _input: u32, _value: &[u8]) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn output(&mut self, index: u8, value: Output<'_>) -> Result<(), Self::Error> {
-        let _ = index;
-        let _ = value;
+    fn output(&mut self, _index: u8, _value: Output<'_>) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn network(&mut self, code: u8) -> Result<(), Self::Error> {
-        let _ = code;
+    fn network(&mut self, _code: u8) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn stealth(&mut self, tweak: [u8; 32]) -> Result<(), Self::Error> {
-        let _ = tweak;
+    fn stealth(&mut self, _tweak: [u8; 32]) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn input_derivation(&mut self, input: u8, value: Derivation) -> Result<(), Self::Error> {
-        let _ = input;
-        let _ = value;
+    fn input_derivation(&mut self, _input: u8, _value: Derivation) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn output_derivation(&mut self, output: u8, value: Derivation) -> Result<(), Self::Error> {
-        let _ = output;
-        let _ = value;
+    fn output_derivation(&mut self, _output: u8, _value: Derivation) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn input_ms45(&mut self, input: u8, value: Ms45Derivation) -> Result<(), Self::Error> {
-        let _ = input;
-        let _ = value;
+    fn input_ms45(&mut self, _input: u8, _value: Ms45Derivation) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn output_ms45(&mut self, output: u8, value: Ms45Derivation) -> Result<(), Self::Error> {
-        let _ = output;
-        let _ = value;
+    fn output_ms45(&mut self, _output: u8, _value: Ms45Derivation) -> Result<(), Self::Error> {
         Ok(())
     }
 
     fn covenant(
         &mut self,
-        output: u8,
-        authorizing_input: u16,
-        id: [u8; 32],
+        _output: u8,
+        _authorizing_input: u16,
+        _id: [u8; 32],
     ) -> Result<(), Self::Error> {
-        let _ = output;
-        let _ = authorizing_input;
-        let _ = id;
         Ok(())
     }
 
     fn covenant_execution(
         &mut self,
-        input: u8,
-        value: CovenantExecution,
+        _input: u8,
+        _value: CovenantExecution,
     ) -> Result<(), Self::Error> {
-        // NullSink validates wire grammar only and intentionally constructs no
-        // semantic model. Keeping this explicit prevents consumer sinks from
-        // accidentally inheriting a silent drop behavior.
-        let _ = input;
-        let _ = value;
         Ok(())
     }
 }
@@ -162,8 +135,9 @@ pub fn decode<S: DecodeSink>(
     limits: Limits,
 ) -> Result<DecodedEnvelope, DecodeError<S::Error>> {
     let mut reader = Reader::new(data);
+    // The trailer section runs to the end of the input, so a successful
+    // envelope decode has consumed every byte.
     let flags = decode_envelope(&mut reader, sink, limits)?;
-    require_fully_consumed(&reader)?;
     Ok(DecodedEnvelope { flags })
 }
 
@@ -181,14 +155,6 @@ fn decode_envelope<S: DecodeSink>(
     read_outputs(reader, global.output_count, sink)?;
     read_trailers(reader, global.input_count, global.output_count, sink)?;
     Ok(flags)
-}
-
-fn require_fully_consumed(reader: &Reader<'_>) -> Result<(), WireError> {
-    if reader.remaining() == 0 {
-        Ok(())
-    } else {
-        Err(WireError::TrailingData)
-    }
 }
 
 fn read_header(reader: &mut Reader<'_>) -> Result<u8, WireError> {

@@ -175,11 +175,13 @@ fn sign_raw_if_matching(
 }
 
 fn input_matches_xonly(tx: &Transaction, input_index: usize, xonly: &[u8]) -> bool {
-    let script = &tx.inputs[input_index].utxo_entry.script_public_key;
-    script.script_len == 34
-        && script.script[0] == 0x20
-        && script.script[33] == 0xac
-        && &script.script[1..33] == xonly
+    crate::contract::script::p2pk_xonly(
+        tx.inputs[input_index]
+            .utxo_entry
+            .script_public_key
+            .script_bytes(),
+    )
+    .is_some_and(|key| key == xonly)
 }
 
 fn sign_matching_input(

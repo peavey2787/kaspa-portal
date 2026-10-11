@@ -103,11 +103,10 @@ fn resumable_twenty_four_word_seed_matches_normal_seed() {
     let mut work = SeedDerivation::from_mnemonic_24(&mnemonic, "KaspaPortal-24");
     assert!(work.advance(0).is_none());
     assert_eq!(work.progress_percent(), 0);
-    let mut stepped = loop {
-        if let Some(seed) = work.advance(17) {
-            break seed;
-        }
-    };
+    // 2048 rounds complete within this many bounded steps.
+    let mut stepped = (0..=2048 / 17)
+        .find_map(|_| work.advance(17))
+        .expect("derivation completes");
     let mut normal = seed_from_mnemonic_24(&mnemonic, "KaspaPortal-24");
     assert_eq!(stepped.bytes, normal.bytes);
     assert_eq!(work.progress_percent(), 100);
@@ -121,11 +120,10 @@ fn resumable_seed_derivation_matches_normal_seed() {
     let mut work = SeedDerivation::from_mnemonic_12(&mnemonic, "KaspaPortal");
     assert!(work.advance(8).is_none());
     assert!(work.progress_percent() > 0);
-    let mut stepped = loop {
-        if let Some(seed) = work.advance(8) {
-            break seed;
-        }
-    };
+    // 2048 rounds complete within this many bounded steps.
+    let mut stepped = (0..=2048 / 8)
+        .find_map(|_| work.advance(8))
+        .expect("derivation completes");
     let mut normal = seed_from_mnemonic_12(&mnemonic, "KaspaPortal");
     assert_eq!(stepped.bytes, normal.bytes);
     assert_eq!(work.progress_percent(), 100);

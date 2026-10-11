@@ -42,9 +42,7 @@ pub(crate) fn required_signature_count(
 }
 
 pub(crate) fn canonical_p2pk(input: &Input) -> bool {
-    input.script.len() == 34
-        && input.script.first() == Some(&0x20)
-        && input.script.get(33) == Some(&0xac)
+    crate::contract::script::p2pk_xonly(&input.script).is_some()
 }
 
 /// A generic covenant is complete when it carries exactly the signatures the
@@ -236,14 +234,11 @@ pub(crate) fn p2pk_bound_key(
     input_index: usize,
     position: u8,
 ) -> Result<[u8; 32], String> {
-    if position != 0 || !canonical_p2pk(input) {
-        return Err(format!(
-            "input[{input_index}] signature is not bound to a canonical P2PK key"
-        ));
-    }
-    input.script[1..33].try_into().map_err(|_| {
-        format!("input[{input_index}] signature position {position} has no bound public key")
-    })
+    crate::contract::script::p2pk_xonly(&input.script)
+        .filter(|_| position == 0)
+        .ok_or_else(|| {
+            format!("input[{input_index}] signature is not bound to a canonical P2PK key")
+        })
 }
 
 pub(crate) fn covenant_bound_key(

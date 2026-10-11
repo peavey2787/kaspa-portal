@@ -3,7 +3,7 @@
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
 use crate::transaction::model::{ScriptPublicKey, MAX_SCRIPT_SIZE};
 
-use super::super::preservation::{capture_unknown, capture_unknown_keyed};
+use super::super::preservation::capture_unknown;
 
 use super::super::{hex_decode_strict, parse_u64_num, PskError, Tok, Tokenizer};
 
@@ -443,12 +443,6 @@ pub(super) trait ScopedPreservation {
     ) -> Result<(), PskError> {
         skip_value(tok)?;
         let scope = self.preservation_scope();
-        capture_unknown_keyed(
-            self.preservation(),
-            scope,
-            tok.source(),
-            key_start,
-            tok.position(),
-        )
+        capture_unknown(self.preservation(), scope, key_start, tok.position())
     }
 }

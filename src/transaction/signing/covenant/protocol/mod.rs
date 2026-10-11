@@ -322,7 +322,7 @@ pub fn script_contains_xonly_key(script: &[u8], pubkey_x: &[u8; 32]) -> bool {
             let Ok(end) = advance_push(rest, 0, header, payload) else {
                 return false;
             };
-            if &rest[header..end] == pubkey_x.as_slice() {
+            if &rest[header.get()..end] == pubkey_x.as_slice() {
                 return true;
             }
             end

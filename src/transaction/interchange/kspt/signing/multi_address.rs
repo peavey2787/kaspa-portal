@@ -336,13 +336,12 @@ fn sign_account_input(
 }
 
 fn p2pk_target(tx: &Transaction, input_index: usize) -> Option<[u8; 32]> {
-    let script = &tx.inputs[input_index].utxo_entry.script_public_key;
-    if script.script_len != 34 || script.script[0] != 0x20 || script.script[33] != 0xac {
-        return None;
-    }
-    let mut target = [0u8; 32];
-    target.copy_from_slice(&script.script[1..33]);
-    Some(target)
+    crate::contract::script::p2pk_xonly(
+        tx.inputs[input_index]
+            .utxo_entry
+            .script_public_key
+            .script_bytes(),
+    )
 }
 
 fn signed_count_result(signed_count: usize) -> Result<usize, PsktError> {

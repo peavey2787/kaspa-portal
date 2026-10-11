@@ -151,13 +151,18 @@ struct BranchParser {
     if_mask: u16,
 }
 
+/// A compile-time non-zero byte width.
+const fn width(bytes: usize) -> NonZeroUsize {
+    match NonZeroUsize::new(bytes) {
+        Some(width) => width,
+        None => panic!("widths are non-zero"),
+    }
+}
+
 /// Width of every opcode the resolver consumes as a single byte.
-const ONE_BYTE: NonZeroUsize = NonZeroUsize::MIN;
+const ONE_BYTE: NonZeroUsize = width(1);
 /// Width of a 32-byte key push: its length byte plus the key.
-const KEY_PUSH: NonZeroUsize = match NonZeroUsize::new(33) {
-    Some(width) => width,
-    None => unreachable!(),
-};
+const KEY_PUSH: NonZeroUsize = width(33);
 
 impl BranchParser {
     fn new() -> Self {
@@ -193,10 +198,9 @@ impl BranchParser {
         };
         self.depth += 1;
         self.decision_mask |= bit;
+        // A fresh selector bit starts clear in `if_mask`; only OP_IF sets it.
         if opcode == 0x63 {
             self.if_mask |= bit;
-        } else {
-            self.if_mask &= !bit;
         }
         Ok(())
     }
@@ -253,8 +257,9 @@ impl BranchParser {
             0x20 => self.inspect_key_push(rest).map(|()| KEY_PUSH),
             0x01..=0x4e => {
                 let (header, payload) = pushdata_lengths(rest, 0, opcode)?;
-                let end = advance_push(rest, 0, header, payload)?;
-                NonZeroUsize::new(end).ok_or(BranchResolveError::MalformedScript)
+                // Bounds-check the push; it spans its non-zero header plus payload.
+                advance_push(rest, 0, header, payload)?;
+                Ok(header.saturating_add(payload))
             }
             _ => Ok(ONE_BYTE),
         }
@@ -281,15 +286,16 @@ pub fn resolve_covenant_branches(script: &[u8]) -> Result<BranchResolution, Bran
     parser.finish()
 }
 
+/// The header width (never zero) and payload length of the push at `offset`.
 pub(crate) fn pushdata_lengths(
     script: &[u8],
     offset: usize,
     opcode: u8,
-) -> Result<(usize, usize), BranchResolveError> {
+) -> Result<(NonZeroUsize, usize), BranchResolveError> {
     match opcode {
-        0x01..=0x4b => Ok((1, usize::from(opcode))),
+        0x01..=0x4b => Ok((width(1), usize::from(opcode))),
         0x4c => Ok((
-            2,
+            width(2),
             usize::from(
                 *script
                     .get(offset + 1)
@@ -300,7 +306,10 @@ pub(crate) fn pushdata_lengths(
             let bytes = script
                 .get(offset + 1..offset + 3)
                 .ok_or(BranchResolveError::MalformedScript)?;
-            Ok((3, usize::from(u16::from_le_bytes([bytes[0], bytes[1]]))))
+            Ok((
+                width(3),
+                usize::from(u16::from_le_bytes([bytes[0], bytes[1]])),
+            ))
         }
         0x4e => {
             let bytes = script
@@ -308,7 +317,7 @@ pub(crate) fn pushdata_lengths(
                 .ok_or(BranchResolveError::MalformedScript)?;
             let len = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             usize::try_from(len)
-                .map(|length| (5, length))
+                .map(|length| (width(5), length))
                 .map_err(|_| BranchResolveError::MalformedScript)
         }
         _ => Err(BranchResolveError::MalformedScript),
@@ -318,14 +327,14 @@ pub(crate) fn pushdata_lengths(
 pub(crate) fn advance_push(
     script: &[u8],
     offset: usize,
-    header: usize,
+    header: NonZeroUsize,
     payload: usize,
 ) -> Result<usize, BranchResolveError> {
+    // The non-zero header means `next` always moves past `offset`.
     let next = offset
-        .checked_add(header)
+        .checked_add(header.get())
         .and_then(|v| v.checked_add(payload))
         .ok_or(BranchResolveError::MalformedScript)?;
-    // Every push header is at least one byte, so `next` always moves forward.
     if next > script.len() {
         return Err(BranchResolveError::MalformedScript);
     }

@@ -12,6 +12,8 @@ use std::cell::RefCell;
 use std::fmt::Write;
 
 const MAX_FRAME_DATA: usize = 91;
+/// Largest payload carried by one QR code, framed or not.
+const SINGLE_FRAME_DATA: usize = 134;
 
 /// Maximum number of frames for a multi-frame QR payload. Sized to
 /// cover a 3-input 2-of-3 PSKT on the tightest hardware envelope
@@ -29,22 +31,30 @@ pub struct QrFrame {
 
 pub fn generate_frames(kspt_hex: &str) -> Result<Vec<QrFrame>, String> {
     let data = hex::decode(kspt_hex).map_err(|e| format!("Invalid hex: {}", e))?;
+    let payloads = frame_payloads(&data)?;
+    let total_frames = payloads.len() as u8;
+    payloads
+        .iter()
+        .zip(0u8..)
+        .map(|(payload, frame_num)| {
+            Ok(QrFrame {
+                frame_num,
+                total_frames,
+                svg: qr_to_svg(payload)?,
+            })
+        })
+        .collect()
+}
 
+/// The QR payload of every frame: the data itself when it fits one code,
+/// otherwise balanced session-bound fragments.
+pub(crate) fn frame_payloads(data: &[u8]) -> Result<Vec<Vec<u8>>, String> {
     if data.is_empty() {
         return Err("Empty data".into());
     }
-
-    // Single frame if small enough
-    if data.len() <= 134 {
-        let svg = qr_to_svg(&data)?;
-        return Ok(vec![QrFrame {
-            frame_num: 0,
-            total_frames: 1,
-            svg,
-        }]);
+    if data.len() <= SINGLE_FRAME_DATA {
+        return Ok(vec![data.to_vec()]);
     }
-
-    // Multi-frame
     let total_frames = data.len().div_ceil(MAX_FRAME_DATA);
     if total_frames > MAX_FRAMES {
         return Err(format!(
@@ -54,35 +64,25 @@ pub fn generate_frames(kspt_hex: &str) -> Result<Vec<QrFrame>, String> {
             MAX_FRAMES
         ));
     }
-
-    let balanced_size = data.len().div_ceil(total_frames);
-    let total = total_frames as u8;
-    let identifier = crate::transaction::interchange::qr::frame::session_id(&data);
-    let mut frames = Vec::with_capacity(total_frames);
-
-    for frame_num in 0..total_frames {
-        let start = frame_num * balanced_size;
-        let end = (start + balanced_size).min(data.len());
-        let fragment = &data[start..end];
-        let mut payload = [0u8; 134];
-        let encoded_length = crate::transaction::interchange::qr::frame::encode_frame(
-            &identifier,
-            frame_num as u8,
-            total,
-            fragment,
-            &mut payload,
-        )
-        .map_err(|error| format!("Frame encoding failed: {:?}", error))?;
-
-        let svg = qr_to_svg(&payload[..encoded_length])?;
-        frames.push(QrFrame {
-            frame_num: frame_num as u8,
-            total_frames: total,
-            svg,
-        });
-    }
-
-    Ok(frames)
+    let identifier = crate::transaction::interchange::qr::frame::session_id(data);
+    let fragments: Vec<&[u8]> = data.chunks(data.len().div_ceil(total_frames)).collect();
+    let total = fragments.len() as u8;
+    fragments
+        .into_iter()
+        .zip(0u8..)
+        .map(|(fragment, frame_num)| {
+            let mut payload = [0u8; SINGLE_FRAME_DATA];
+            let length = crate::transaction::interchange::qr::frame::encode_frame(
+                &identifier,
+                frame_num,
+                total,
+                fragment,
+                &mut payload,
+            )
+            .map_err(|error| format!("Frame encoding failed: {:?}", error))?;
+            Ok(payload[..length].to_vec())
+        })
+        .collect()
 }
 
 fn qr_to_svg(data: &[u8]) -> Result<String, String> {
@@ -93,7 +93,7 @@ fn qr_to_svg(data: &[u8]) -> Result<String, String> {
     let modules = code.to_colors();
     let size = code.width();
     let border = 2;
-    let total = size + 4;
+    let total = size + 2 * border;
 
     let svg_capacity = total.saturating_mul(total).saturating_mul(60);
     let mut svg = String::with_capacity(svg_capacity);
@@ -252,3 +252,7 @@ pub fn decoder_progress() -> String {
 pub fn generate_svg_from_text(text: &str) -> Result<String, String> {
     qr_to_svg(text.as_bytes())
 }
+
+#[cfg(test)]
+#[path = "unit-tests/codec.rs"]
+mod unit_tests;

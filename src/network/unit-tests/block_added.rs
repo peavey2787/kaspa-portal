@@ -148,3 +148,161 @@ fn block_added_decoder_rejects_rpc_response_frames() {
     frame.write_u8(BLOCK_ADDED_NOTIFICATION_OPERATION);
     assert!(block_added::decode(&frame.into_vec()).is_err());
 }
+
+/// An `RpcHeader(v1)` whose `parents_by_level` section is `parents`.
+fn rpc_header_with_parents(parents: &[u8]) -> Vec<u8> {
+    let standard = rpc_header([0x6a; 32], 5);
+    // Replace the empty parent-level count (after version, hash, header version).
+    let mut header = standard[..36].to_vec();
+    header.extend_from_slice(parents);
+    header.extend_from_slice(&standard[40..]);
+    header
+}
+
+fn block_from(header: &[u8], transactions: &[u8], trailing: &[u8]) -> Vec<u8> {
+    let mut block = WireWriter::new();
+    block.write_u16(1);
+    block.write_bytes(header).expect("header payload");
+    block
+        .write_bytes(transactions)
+        .expect("transactions payload");
+    block.write_bytes(&[0]).expect("block verbose payload");
+    block.write_raw(trailing);
+    block.into_vec()
+}
+
+fn transactions_with_count(count: u32, items: &[Vec<u8>], trailing: &[u8]) -> Vec<u8> {
+    let mut writer = WireWriter::new();
+    writer.write_u32(count);
+    for item in items {
+        writer.write_bytes(item).expect("transaction payload");
+    }
+    writer.write_raw(trailing);
+    writer.into_vec()
+}
+
+fn decode_error(block: &[u8]) -> String {
+    block_added::decode_rpc_block(block)
+        .expect_err("malformed block")
+        .to_string()
+}
+
+#[test]
+fn every_nested_record_must_be_consumed_exactly() {
+    let header = rpc_header([0x6a; 32], 5);
+    let tx = rpc_transaction([0x7b; 32], b"app");
+    let one = transactions_with_count(1, std::slice::from_ref(&tx), &[]);
+    assert!(block_added::decode_rpc_block(&block_from(&header, &one, &[])).is_ok());
+    assert!(decode_error(&block_from(&header, &one, &[0])).contains("after RpcBlock"));
+    assert!(decode_error(&block_from(
+        &header,
+        &transactions_with_count(1, std::slice::from_ref(&tx), &[0]),
+        &[]
+    ))
+    .contains("after Vec<RpcTransaction>"));
+    let mut long_header = header.clone();
+    long_header.push(0);
+    assert!(decode_error(&block_from(&long_header, &one, &[])).contains("after RpcHeader"));
+    let mut long_tx = tx;
+    long_tx.push(0);
+    assert!(decode_error(&block_from(
+        &header,
+        &transactions_with_count(1, &[long_tx], &[]),
+        &[]
+    ))
+    .contains("after RpcTransaction"));
+}
+
+#[test]
+fn transaction_and_parent_counts_are_bounded_exactly() {
+    let header = rpc_header([0x6a; 32], 5);
+    let at_limit = decode_error(&block_from(
+        &header,
+        &transactions_with_count(1_000_000, &[], &[]),
+        &[],
+    ));
+    assert!(
+        !at_limit.contains("transaction count exceeds"),
+        "{at_limit}"
+    );
+    assert!(decode_error(&block_from(
+        &header,
+        &transactions_with_count(1_000_001, &[], &[]),
+        &[]
+    ))
+    .contains("transaction count exceeds safety bound"));
+
+    let levels = |count: u32| rpc_header_with_parents(&count.to_le_bytes());
+    let empty = transactions_with_count(0, &[], &[]);
+    let at_limit = decode_error(&block_from(&levels(1024), &empty, &[]));
+    assert!(
+        !at_limit.contains("parent-level count exceeds"),
+        "{at_limit}"
+    );
+    assert!(decode_error(&block_from(&levels(1025), &empty, &[]))
+        .contains("parent-level count exceeds safety bound"));
+
+    let one_level = |parents: u32, hashes: usize| {
+        let mut section = 1u32.to_le_bytes().to_vec();
+        section.extend_from_slice(&parents.to_le_bytes());
+        section.extend_from_slice(&vec![0x99; 32 * hashes]);
+        rpc_header_with_parents(&section)
+    };
+    let two_parents = block_from(&one_level(2, 2), &empty, &[]);
+    let decoded =
+        block_added::decode_rpc_block(&two_parents).expect("two parent hashes are skipped exactly");
+    assert_eq!(decoded.daa_score, 5);
+    let at_limit = decode_error(&block_from(&one_level(65_536, 0), &empty, &[]));
+    assert!(!at_limit.contains("parent count exceeds"), "{at_limit}");
+    assert!(
+        decode_error(&block_from(&one_level(65_537, 0), &empty, &[]))
+            .contains("parent count exceeds safety bound")
+    );
+}
+
+#[test]
+fn large_payloads_decode_and_malformed_verbose_data_yields_no_id() {
+    let header = rpc_header([0x6a; 32], 5);
+    let big = vec![0x5a; 1_100_000];
+    let block = block_from(
+        &header,
+        &transactions_with_count(1, &[rpc_transaction([1; 32], &big)], &[]),
+        &[],
+    );
+    let decoded = block_added::decode_rpc_block(&block).expect("large payload");
+    assert_eq!(decoded.transactions[0].payload.len(), big.len());
+
+    // Rewrite the optional verbose section of a transaction.
+    let with_verbose = |optional: &[u8]| {
+        let standard = rpc_transaction([2; 32], b"x");
+        let verbose_start = standard.len() - (4 + 1 + 4 + 1 + 32 + 32 + 8 + 32 + 8);
+        let mut tx = standard[..verbose_start].to_vec();
+        let mut writer = WireWriter::new();
+        writer.write_bytes(optional).expect("optional verbose");
+        tx.extend_from_slice(&writer.into_vec());
+        let block = block_from(&header, &transactions_with_count(1, &[tx], &[]), &[]);
+        block_added::decode_rpc_block(&block)
+            .expect("block")
+            .transactions[0]
+            .transaction_id
+            .clone()
+    };
+    let verbose = |version: u8, extra: &[u8]| {
+        let mut body = vec![version];
+        body.extend_from_slice(&[3; 32]);
+        body.extend_from_slice(&[0; 32 + 8 + 32 + 8]);
+        body.extend_from_slice(extra);
+        let mut writer = WireWriter::new();
+        writer.write_u8(1);
+        writer.write_bytes(&body).expect("verbose body");
+        writer.into_vec()
+    };
+    assert_eq!(with_verbose(&verbose(1, &[])), Some(hex::encode([3; 32])));
+    assert_eq!(with_verbose(&[0]), None);
+    assert_eq!(with_verbose(&[2]), None);
+    assert_eq!(with_verbose(&verbose(2, &[])), None);
+    assert_eq!(with_verbose(&verbose(1, &[0])), None);
+    let mut trailing = verbose(1, &[]);
+    trailing.push(0);
+    assert_eq!(with_verbose(&trailing), None);
+}

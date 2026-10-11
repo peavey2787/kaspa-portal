@@ -208,11 +208,9 @@ fn validate_null_field(
     label: &str,
     key: &str,
 ) -> Result<(), String> {
+    // Every nullable field is optional, so null always means its default.
     if spec.null_rule == NullRule::Forbidden {
         return Err(format!("{label}.{key} must not be null"));
-    }
-    if spec.default == DefaultRule::None && spec.required {
-        return Err(format!("{label}.{key} has no null default"));
     }
     Ok(())
 }

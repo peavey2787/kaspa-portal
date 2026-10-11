@@ -1,10 +1,7 @@
 //! Descriptor-backed 45' multisig change verification.
 
-use super::{
-    constants::{OP_BLAKE2B, OP_DATA_32, OP_EQUAL},
-    multisig::MultisigConfig,
-    transaction::Transaction,
-};
+use super::{multisig::MultisigConfig, transaction::Transaction};
+use crate::contract::script::p2sh_hash;
 
 /// Find the first 45' output change claim contradicted by a descriptor already
 /// proven against one of this transaction's inputs. Unknown/unverifiable claims
@@ -83,17 +80,4 @@ fn matches_input_script(tx: &Transaction, candidate: &[u8]) -> bool {
         .iter()
         .take(tx.num_inputs)
         .any(|input| input.utxo_entry.script_public_key.script_bytes() == candidate)
-}
-
-fn p2sh_hash(script: &[u8]) -> Option<[u8; 32]> {
-    if script.len() != 35
-        || script[0] != OP_BLAKE2B
-        || script[1] != OP_DATA_32
-        || script[34] != OP_EQUAL
-    {
-        return None;
-    }
-    let mut hash = [0u8; 32];
-    hash.copy_from_slice(&script[2..34]);
-    Some(hash)
 }

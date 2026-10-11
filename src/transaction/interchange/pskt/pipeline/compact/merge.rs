@@ -16,20 +16,19 @@ pub(crate) fn validate_and_merge(
     let unsigned = super::super::relay::encode_pskt(original_pskt_hex, network, limits)?;
     let expected = parse(&unsigned, limits)?;
     let signed = parse(signed_kspt, limits)?;
-    validate_same_transaction(&expected, &signed, network)?;
+    validate_same_transaction(&expected, &signed)?;
     verify_all_signatures(&expected)?;
     verify_all_signatures(&signed)?;
     merge_signatures(original_pskt_hex, &signed)
 }
 
+/// The signed KSPT must describe exactly the wallet's transaction. `expected`
+/// was encoded for the requested network, and the body comparison includes the
+/// network, so a KSPT bound to any other network is refused here too.
 pub(crate) fn validate_same_transaction(
     expected: &Transaction,
     signed: &Transaction,
-    network: Network,
 ) -> Result<(), String> {
-    if signed.network != network as u8 || expected.network != network as u8 {
-        return Err("signed KSPT network does not match requested network".to_string());
-    }
     let mut expected_body = expected.clone();
     let mut signed_body = signed.clone();
     expected_body.flags = 0;
@@ -129,9 +128,8 @@ pub(crate) fn merge_p2pk(
     signed: &Input,
     index: usize,
 ) -> Result<(), String> {
-    if signed.script.len() != 34 || signed.script[0] != 0x20 || signed.script[33] != 0xac {
-        return Err(format!("input[{index}] is not a standard P2PK input"));
-    }
+    let key = crate::contract::script::p2pk_xonly(&signed.script)
+        .ok_or_else(|| format!("input[{index}] is not a standard P2PK input"))?;
     if signed.signatures.len() != 1 {
         return Err(format!(
             "input[{index}] standard P2PK input must contain exactly one signature"
@@ -147,7 +145,7 @@ pub(crate) fn merge_p2pk(
         ));
     }
     require_sighash_all(signature, index)?;
-    let public_key = format!("02{}", hex::encode(&signed.script[1..33]));
+    let public_key = format!("02{}", hex::encode(key));
     insert_signature(partials, public_key, &signature.bytes, index)
 }
 

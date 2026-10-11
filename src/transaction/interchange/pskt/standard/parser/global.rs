@@ -3,7 +3,7 @@
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
 use crate::transaction::model::{Transaction, MAX_OUTPUTS, SUBNETWORK_ID_NATIVE};
 
-use super::super::preservation::{capture_unknown, capture_unknown_keyed};
+use super::super::preservation::capture_unknown;
 use super::super::{PskError, Tok, Tokenizer};
 use super::helpers::{
     capture_nonempty_object, consume_object_separator, expect, expect_bool, expect_string,
@@ -256,10 +256,9 @@ impl GlobalParser<'_> {
         key_start: usize,
     ) -> Result<(), PskError> {
         skip_value(tok)?;
-        capture_unknown_keyed(
+        capture_unknown(
             self.parsed,
             PsktUnknownScope::global(),
-            tok.source(),
             key_start,
             tok.position(),
         )
