@@ -1,6 +1,7 @@
 mod builder;
 mod config;
 mod facade;
+mod resolved;
 
 pub use builder::KaspaPortalBuilder;
 pub use config::PortalConfig;

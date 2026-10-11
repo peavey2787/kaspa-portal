@@ -57,14 +57,22 @@ impl KaspaPortalBuilder {
     }
 
     async fn connect_resolved(self) -> Result<KaspaPortal> {
-        let candidates = crate::platform::resolve_public_endpoints(self.config.network).await;
-        let mut last_error = Error::Network("no public Kaspa resolver answered".into());
-        for endpoint in candidates {
-            match self.clone().endpoint(endpoint).connect_configured().await {
-                Ok(portal) => return Ok(portal),
-                Err(error) => last_error = error,
+        let answers = crate::platform::public_endpoint_answers(self.config.network);
+        super::resolved::first_connected(answers, |endpoint| {
+            let attempt = self.clone().endpoint(endpoint.clone());
+            async move {
+                attempt
+                    .connect_configured()
+                    .await
+                    .map_err(|error| format!("{endpoint}: {error}"))
             }
-        }
-        Err(last_error)
+        })
+        .await
+        .map_err(|failures| {
+            Error::Network(format!(
+                "no public Kaspa node accepted a connection: {}",
+                failures.join(" | ")
+            ))
+        })
     }
 }

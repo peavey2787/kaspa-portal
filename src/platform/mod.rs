@@ -62,14 +62,18 @@ pub(crate) async fn fetch_text(url: &str) -> Result<String, String> {
     }
 }
 
-/// Ask every public resolver concurrently; healthy `wss://` endpoints in
-/// first-answer order.
-pub(crate) async fn resolve_public_endpoints(network: crate::primitives::NetworkId) -> Vec<String> {
+/// Ask every public resolver concurrently; each answer (a `wss://` endpoint
+/// or the reason that resolver failed) is yielded as soon as it arrives.
+pub(crate) fn public_endpoint_answers(
+    network: crate::primitives::NetworkId,
+) -> impl futures_util::Stream<Item = Result<String, String>> + Unpin {
     use crate::network::resolver;
-    let queries = resolver::PUBLIC_RESOLVERS.iter().map(|base| async move {
-        let body = fetch_text(&resolver::query_url(base, network)).await.ok()?;
-        resolver::parse_endpoint(&body).ok()
-    });
-    let answers = futures_util::future::join_all(queries).await;
-    resolver::unique_endpoints(answers.into_iter().flatten())
+    resolver::PUBLIC_RESOLVERS
+        .iter()
+        .map(|base| async move {
+            let body = fetch_text(&resolver::query_url(base, network)).await;
+            body.and_then(|body| resolver::parse_endpoint(&body).map_err(|error| error.to_string()))
+                .map_err(|error| format!("{base}: {error}"))
+        })
+        .collect::<futures_util::stream::FuturesUnordered<_>>()
 }

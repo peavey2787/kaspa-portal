@@ -2,8 +2,11 @@
 
 use std::time::Duration;
 
-const CONNECT_TIMEOUT: Duration = Duration::from_millis(1_500);
-const TOTAL_TIMEOUT: Duration = Duration::from_secs(3);
+// Public resolvers take 1-1.5 s to accept a connection and up to ~5 s to
+// answer. Answers are raced, so these bound a silent resolver without ever
+// delaying a node another resolver already offered.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_BODY_BYTES: usize = 16 * 1024;
 
 pub async fn fetch_text(url: &str) -> Result<String, String> {
