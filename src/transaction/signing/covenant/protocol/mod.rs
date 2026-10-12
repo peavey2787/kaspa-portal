@@ -311,27 +311,8 @@ pub fn recompute_known_commitment(scheme: KnownScheme, context: &[u8]) -> Option
 /// occurrence inside a larger payload is not a binding.
 #[must_use]
 pub fn script_contains_xonly_key(script: &[u8], pubkey_x: &[u8; 32]) -> bool {
-    use crate::contract::covenant::branch::{advance_push, pushdata_lengths};
-
-    let mut rest = script;
-    while let Some(&opcode) = rest.first() {
-        let width = if (0x01..=0x4e).contains(&opcode) {
-            let Ok((header, payload)) = pushdata_lengths(rest, 0, opcode) else {
-                return false;
-            };
-            let Ok(end) = advance_push(rest, 0, header, payload) else {
-                return false;
-            };
-            if &rest[header.get()..end] == pubkey_x.as_slice() {
-                return true;
-            }
-            end
-        } else {
-            1
-        };
-        rest = &rest[width..];
-    }
-    false
+    crate::primitives::script::elements(script)
+        .any(|element| element.is_push() && element.data == pubkey_x.as_slice())
 }
 
 #[must_use]

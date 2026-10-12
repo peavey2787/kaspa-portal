@@ -184,3 +184,70 @@ fn stealth_sequence_commit_proof_is_canonical_contract_data() {
     assert_eq!(proof.gas, 0);
     assert_eq!(proof.transaction_version, 1);
 }
+
+#[test]
+fn template_recognizers_return_exactly_the_built_fields() {
+    use crate::contract::{
+        commit_reveal::{
+            build_commit_reveal_script, commit_reveal_script_fields, CommitRevealFields,
+        },
+        covenant::{build_private_swap_script, private_swap_script_fields, PrivateSwapFields},
+        merkle::{
+            build_merkle_whitelist_script, merkle_whitelist_script_fields, MerkleWhitelistFields,
+        },
+    };
+
+    for locktime in [5u64, 1_000_000] {
+        let swap = PrivateSwapFields {
+            owner_pubkey: [1; 32],
+            claimer_pubkey: [2; 32],
+            claimer_output_spk: [&[0x20][..], &[3; 32], &[0xac]].concat(),
+            refund_locktime_daa: locktime,
+            salt: [4; 16],
+        };
+        let script = build_private_swap_script(
+            &swap.owner_pubkey,
+            &swap.claimer_pubkey,
+            &swap.claimer_output_spk,
+            swap.refund_locktime_daa,
+            &swap.salt,
+        )
+        .unwrap();
+        assert_eq!(private_swap_script_fields(&script), Some(swap));
+        let mut altered = script.clone();
+        *altered.last_mut().unwrap() = 0x51;
+        assert_eq!(private_swap_script_fields(&altered), None);
+        assert_eq!(
+            private_swap_script_fields(&script[..script.len() - 1]),
+            None
+        );
+
+        let commit = CommitRevealFields {
+            owner_pubkey: [5; 32],
+            committed_hash: [6; 32],
+            locktime_daa: locktime,
+        };
+        let script =
+            build_commit_reveal_script(&commit.owner_pubkey, &commit.committed_hash, locktime);
+        assert_eq!(commit_reveal_script_fields(&script), Some(commit));
+        let mut altered = script.clone();
+        altered.push(0x51);
+        assert_eq!(commit_reveal_script_fields(&altered), None);
+
+        for depth in [0u8, 1, 15] {
+            let merkle = MerkleWhitelistFields {
+                owner_pubkey: [7; 32],
+                merkle_root: [8; 32],
+                depth,
+                locktime_daa: locktime,
+            };
+            let script = build_merkle_whitelist_script(&[7; 32], &[8; 32], depth, locktime);
+            assert_eq!(merkle_whitelist_script_fields(&script), Some(merkle));
+            let mut altered = script.clone();
+            altered[0] = 0x64;
+            assert_eq!(merkle_whitelist_script_fields(&altered), None);
+        }
+    }
+    assert_eq!(private_swap_script_fields(&[]), None);
+    assert_eq!(merkle_whitelist_script_fields(&[0x51; 4]), None);
+}

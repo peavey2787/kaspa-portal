@@ -181,6 +181,24 @@ impl MultisigConfig {
         false
     }
 
+    /// Write this wallet's current P2SH address for `network` into `out`,
+    /// returning its length (0 without a redeem script or known network).
+    pub fn address(
+        &self,
+        network: crate::primitives::address::KaspaNetwork,
+        out: &mut [u8; crate::primitives::address::MAX_ADDR_LEN],
+    ) -> usize {
+        let Some(script) = self.script.get(..self.script_len).filter(|s| !s.is_empty()) else {
+            return 0;
+        };
+        crate::primitives::address::encode_address_for_network(
+            &crate::primitives::address::script_hash(script),
+            crate::primitives::address::AddressType::P2sh,
+            network,
+            out,
+        )
+    }
+
     /// Human-readable wallet label. 45' includes the address family and chain
     /// because neither can be inferred from a P2SH address.
     pub fn label(&self, buf: &mut [u8]) -> usize {
@@ -205,14 +223,71 @@ impl MultisigConfig {
 
     fn serialized_entry(&self, index: usize) -> [u8; 74] {
         // Version bytes are equal for every kpub, so omitting them preserves
-        // exactly the same order while avoiding an unnecessary dependency.
-        let mut out = [0u8; 74];
-        out[0] = self.cosigner_depth[index];
-        out[1..5].copy_from_slice(&self.cosigner_parent_fp[index]);
-        out[5..9].copy_from_slice(&self.cosigner_child_num[index]);
-        out[9..41].copy_from_slice(&self.cosigner_chain_codes[index]);
-        out[41..74].copy_from_slice(&self.cosigner_pubkeys[index]);
-        out
+        // exactly the same order.
+        serialized_parts(&self.cosigner_parts(index))
+    }
+
+    /// The account key of cosigner `index` as kpub parts.
+    #[must_use]
+    pub fn cosigner_parts(&self, index: usize) -> KpubParts {
+        KpubParts {
+            depth: self.cosigner_depth[index],
+            parent_fp: self.cosigner_parent_fp[index],
+            child_num: self.cosigner_child_num[index],
+            chain_code: self.cosigner_chain_codes[index],
+            pubkey: self.cosigner_pubkeys[index],
+        }
+    }
+
+    /// Write this wallet's descriptor into `out`: `multi_hd45(m,<kpub1>,...)`
+    /// for 45' wallets, legacy `multi_hd(m,<pubkey||chain code hex>,...)`
+    /// otherwise. `None` when `out` is too small or a key will not encode.
+    pub fn write_descriptor(&self, out: &mut [u8]) -> Option<usize> {
+        let mut text = DescriptorText { out, length: 0 };
+        text.push(if self.v45 {
+            b"multi_hd45("
+        } else {
+            b"multi_hd("
+        })?;
+        text.push(&[b'0' + self.m])?;
+        for index in 0..usize::from(self.n) {
+            text.push(b",")?;
+            if self.v45 {
+                let mut encoded = [0u8; crate::wallet::key::xpub::KPUB_MAX_LEN];
+                let length = crate::wallet::key::xpub::serialize_kpub_parts(
+                    &self.cosigner_parts(index),
+                    &mut encoded,
+                )
+                .ok()?;
+                text.push(&encoded[..length])?;
+            } else {
+                text.hex(&self.cosigner_pubkeys[index])?;
+                text.hex(&self.cosigner_chain_codes[index])?;
+            }
+        }
+        text.push(b")")?;
+        Some(text.length)
+    }
+}
+
+struct DescriptorText<'a> {
+    out: &'a mut [u8],
+    length: usize,
+}
+
+impl DescriptorText<'_> {
+    fn push(&mut self, bytes: &[u8]) -> Option<()> {
+        let end = self.length.checked_add(bytes.len())?;
+        self.out.get_mut(self.length..end)?.copy_from_slice(bytes);
+        self.length = end;
+        Some(())
+    }
+
+    fn hex(&mut self, bytes: &[u8]) -> Option<()> {
+        let end = self.length.checked_add(bytes.len().checked_mul(2)?)?;
+        crate::primitives::bytes::encode_lower_hex(bytes, self.out.get_mut(self.length..end)?)?;
+        self.length = end;
+        Some(())
     }
 }
 

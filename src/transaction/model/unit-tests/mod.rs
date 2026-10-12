@@ -339,6 +339,43 @@ fn v106_hd45_script_hash_vector_is_exact() {
         crate::primitives::hash::blake2b_256(&config.script[..config.script_len]),
         EXPECTED_HASH,
     );
+    let mut address = [0u8; crate::primitives::address::MAX_ADDR_LEN];
+    let length = config.address(
+        crate::primitives::address::KaspaNetwork::Mainnet,
+        &mut address,
+    );
+    assert_eq!(
+        core::str::from_utf8(&address[..length]).unwrap(),
+        crate::primitives::address::encode_p2sh_address(&EXPECTED_HASH, "kaspa")
+    );
+    assert_eq!(
+        MultisigConfig::new().address(
+            crate::primitives::address::KaspaNetwork::Mainnet,
+            &mut address
+        ),
+        0
+    );
+
+    let mut text = [0u8; 1024];
+    let length = config.write_descriptor(&mut text).expect("45' descriptor");
+    let descriptor = core::str::from_utf8(&text[..length]).unwrap();
+    assert!(descriptor.starts_with("multi_hd45(2,kpub1"));
+    let parsed = crate::wallet::multisig::MultisigDescriptor::parse(descriptor).expect("parses");
+    assert!(parsed.is_hd45());
+    assert_eq!((parsed.threshold(), parsed.participant_count()), (2, 5));
+    assert_eq!(config.write_descriptor(&mut text[..length - 1]), None);
+
+    let mut legacy = config.clone();
+    legacy.v45 = false;
+    let length = legacy
+        .write_descriptor(&mut text)
+        .expect("legacy descriptor");
+    let descriptor = core::str::from_utf8(&text[..length]).unwrap();
+    assert!(descriptor.starts_with("multi_hd(2,"));
+    assert_eq!(length, "multi_hd(2".len() + 5 * (1 + 130) + 1);
+    let parsed = crate::wallet::multisig::MultisigDescriptor::parse(descriptor).expect("parses");
+    assert!(parsed.is_hd() && !parsed.is_hd45());
+    assert_eq!(config.cosigner_parts(0).pubkey, config.cosigner_pubkeys[0]);
 }
 
 #[test]

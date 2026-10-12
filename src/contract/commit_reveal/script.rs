@@ -66,3 +66,28 @@ pub fn build_commit_reveal_script(
     s.push(OP_ENDIF);
     s
 }
+
+/// The fields of a canonical commit-reveal script.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommitRevealFields {
+    pub owner_pubkey: [u8; 32],
+    pub committed_hash: [u8; 32],
+    pub locktime_daa: u64,
+}
+
+/// Recognize `script` as exactly what [`build_commit_reveal_script`] builds.
+#[must_use]
+pub fn commit_reveal_script_fields(script: &[u8]) -> Option<CommitRevealFields> {
+    let elements = crate::contract::script::complete_elements(script)?;
+    let fields = CommitRevealFields {
+        owner_pubkey: elements.get(1)?.data.try_into().ok()?,
+        locktime_daa: crate::contract::script::element_integer(elements.get(3)?)?,
+        committed_hash: elements.get(11)?.data.try_into().ok()?,
+    };
+    let rebuilt = build_commit_reveal_script(
+        &fields.owner_pubkey,
+        &fields.committed_hash,
+        fields.locktime_daa,
+    );
+    (rebuilt == script).then_some(fields)
+}

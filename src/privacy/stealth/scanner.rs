@@ -1,3 +1,5 @@
+use crate::primitives::opcode::OP_PUSHDATA2;
+
 pub fn scan_raw_for_preimage(raw: &[u8], transaction_id: &[u8]) -> Option<Vec<u8>> {
     for position in 4..raw.len().saturating_sub(50) {
         let Some(script) = candidate_script(raw, transaction_id, position) else {
@@ -41,24 +43,10 @@ fn read_u32_length(bytes: &[u8], start: usize) -> Option<usize> {
 }
 
 pub(super) fn first_push(script: &[u8]) -> Option<&[u8]> {
-    let (start, length) = push_bounds(script)?;
-    if !valid_push_length(length) {
-        return None;
-    }
-    script.get(start..start.checked_add(length)?)
-}
-
-fn push_bounds(script: &[u8]) -> Option<(usize, usize)> {
-    let opcode = *script.first()?;
-    match opcode {
-        1..=0x4b => Some((1usize, usize::from(opcode))),
-        0x4c => Some((2usize, usize::from(*script.get(1)?))),
-        0x4d => Some((
-            3usize,
-            usize::from(u16::from_le_bytes([*script.get(1)?, *script.get(2)?])),
-        )),
-        _ => None,
-    }
+    let (element, _) = crate::primitives::script::read_element(script, 0)?;
+    // Direct pushes and OP_PUSHDATA1/2 of 1..=200 bytes carry a preimage.
+    (element.opcode <= OP_PUSHDATA2 && valid_push_length(element.data.len()))
+        .then_some(element.data)
 }
 
 fn valid_push_length(length: usize) -> bool {

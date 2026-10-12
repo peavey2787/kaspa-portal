@@ -68,6 +68,41 @@ fn append_whitelist_branch(
     script.push(OP_1);
 }
 
+/// The fields of a canonical Merkle-whitelist script.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MerkleWhitelistFields {
+    pub owner_pubkey: [u8; 32],
+    pub merkle_root: [u8; 32],
+    pub depth: u8,
+    pub locktime_daa: u64,
+}
+
+/// Recognize `script` as exactly what [`build_merkle_whitelist_script`] builds.
+#[must_use]
+pub fn merkle_whitelist_script_fields(script: &[u8]) -> Option<MerkleWhitelistFields> {
+    const FIXED_ELEMENTS: usize = 17;
+    const LAYER_ELEMENTS: usize = 6;
+    let elements = crate::contract::script::complete_elements(script)?;
+    let layers = elements.len().checked_sub(FIXED_ELEMENTS)? / LAYER_ELEMENTS;
+    let fields = MerkleWhitelistFields {
+        owner_pubkey: elements.get(1)?.data.try_into().ok()?,
+        locktime_daa: crate::contract::script::element_integer(elements.get(3)?)?,
+        merkle_root: elements
+            .get(10 + layers * LAYER_ELEMENTS)?
+            .data
+            .try_into()
+            .ok()?,
+        depth: u8::try_from(layers).ok()?,
+    };
+    let rebuilt = build_merkle_whitelist_script(
+        &fields.owner_pubkey,
+        &fields.merkle_root,
+        fields.depth,
+        fields.locktime_daa,
+    );
+    (rebuilt == script).then_some(fields)
+}
+
 /// Compute a merkle root from a list of leaf data (SPK bytes).
 /// Each leaf is BLAKE2B(data). Tree is built bottom-up.
 /// If the number of leaves is not a power of 2, pad with zero hashes.

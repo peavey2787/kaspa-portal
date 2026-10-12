@@ -1,6 +1,6 @@
 use super::{
-    extract_cltv_locktime, extract_csv_sequence, p2pk_xonly, p2sh_hash, push_data, push_int,
-    read_canonical_u64,
+    element_integer, extract_cltv_locktime, extract_csv_sequence, p2pk_xonly, p2sh_hash, push_data,
+    push_int,
 };
 
 #[test]
@@ -141,7 +141,7 @@ fn locktime_parser_covers_pushdata1_and_pushdata2_items() {
     pushdata1[1] = 3;
     assert_eq!(
         extract_cltv_locktime(&pushdata1).unwrap_err(),
-        "Truncated OP_PUSHDATA1 data"
+        "Truncated script item"
     );
 
     let mut pushdata2 = vec![0x4d, 1, 0, 9, 0xb1];
@@ -149,24 +149,8 @@ fn locktime_parser_covers_pushdata1_and_pushdata2_items() {
     pushdata2[1] = 3;
     assert_eq!(
         extract_csv_sequence(&pushdata2).unwrap_err(),
-        "Truncated OP_PUSHDATA2 data"
+        "Truncated script item"
     );
-}
-
-#[test]
-fn pushdata_length_readers_are_directly_host_testable() {
-    use super::number::{read_pushdata1, read_pushdata2, ScriptItem};
-
-    assert_eq!(
-        read_pushdata1(&[0x4c, 2, 7, 8], 0).unwrap(),
-        (4, ScriptItem::Integer(0x0807)),
-    );
-    assert_eq!(
-        read_pushdata2(&[0x4d, 2, 0, 9, 10], 0).unwrap(),
-        (5, ScriptItem::Integer(0x0a09)),
-    );
-    assert!(read_pushdata1(&[0x4c], 0).is_err());
-    assert!(read_pushdata2(&[0x4d, 1], 0).is_err());
 }
 
 #[test]
@@ -195,53 +179,49 @@ fn next_script_item_covers_integer_pushdata_and_opcode_classes() {
     use super::number::{next_script_item, ScriptItem};
 
     assert_eq!(
-        next_script_item(&[0x00], 0, 0x00).unwrap(),
+        next_script_item(&[0x00], 0).unwrap(),
         (1, ScriptItem::Integer(0)),
     );
     assert_eq!(
-        next_script_item(&[0x60], 0, 0x60).unwrap(),
+        next_script_item(&[0x60], 0).unwrap(),
         (1, ScriptItem::Integer(16)),
     );
     assert_eq!(
-        next_script_item(&[0x02, 7, 8], 0, 0x02).unwrap(),
+        next_script_item(&[0x02, 7, 8], 0).unwrap(),
         (3, ScriptItem::Integer(0x0807)),
     );
     assert_eq!(
-        next_script_item(&[0x4c, 1, 9], 0, 0x4c).unwrap(),
+        next_script_item(&[0x4c, 1, 9], 0).unwrap(),
         (3, ScriptItem::Integer(9)),
     );
     assert_eq!(
-        next_script_item(&[0x4d, 1, 0, 10], 0, 0x4d).unwrap(),
+        next_script_item(&[0x4d, 1, 0, 10], 0).unwrap(),
         (4, ScriptItem::Integer(10)),
     );
     assert_eq!(
-        next_script_item(&[0x4e, 1, 0, 0, 0, 11], 0, 0x4e).unwrap(),
+        next_script_item(&[0x4e, 1, 0, 0, 0, 11], 0).unwrap(),
         (6, ScriptItem::Integer(11)),
     );
     assert_eq!(
-        next_script_item(&[0xac], 0, 0xac).unwrap(),
+        next_script_item(&[0xac], 0).unwrap(),
         (1, ScriptItem::Opcode),
     );
     assert_eq!(
-        next_script_item(&[0x51, 0x52], 1, 0x52).unwrap(),
+        next_script_item(&[0x51, 0x52], 1).unwrap(),
         (2, ScriptItem::Integer(2)),
     );
     assert_eq!(
-        next_script_item(&[0x09, 1, 2, 3, 4, 5, 6, 7, 8, 9], 0, 0x09)
+        next_script_item(&[0x09, 1, 2, 3, 4, 5, 6, 7, 8, 9], 0)
             .unwrap()
             .1,
         ScriptItem::OversizedInteger,
     );
     assert_eq!(
-        next_script_item(&[0x02, 7], 0, 0x02).unwrap_err(),
-        "Truncated direct script push",
-    );
-    assert_eq!(
-        next_script_item(&[], 0, 0x00).unwrap_err(),
+        next_script_item(&[0x02, 7], 0).unwrap_err(),
         "Truncated script item",
     );
     assert_eq!(
-        next_script_item(&[], 0, 0xac).unwrap_err(),
+        next_script_item(&[], 0).unwrap_err(),
         "Truncated script item",
     );
 }
@@ -268,17 +248,17 @@ fn script_integer_encoding_and_eight_byte_boundary_are_exact() {
 
     let eight = [0x08, 1, 2, 3, 4, 5, 6, 7, 8];
     assert_eq!(
-        next_script_item(&eight, 0, 0x08).unwrap(),
+        next_script_item(&eight, 0).unwrap(),
         (9, ScriptItem::Integer(0x0807_0605_0403_0201)),
     );
     let nine = [0x09, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     assert_eq!(
-        next_script_item(&nine, 0, 0x09).unwrap().1,
+        next_script_item(&nine, 0).unwrap().1,
         ScriptItem::OversizedInteger
     );
 
     assert_eq!(
-        next_script_item(&[0x4c, 0], 0, 0x4c).unwrap(),
+        next_script_item(&[0x4c, 0], 0).unwrap(),
         (2, ScriptItem::Integer(0)),
     );
 }
@@ -337,40 +317,10 @@ fn canonical_integers_round_trip_every_encoding_width() {
         let mut script = alloc::vec![0xab];
         push_int(&mut script, value);
         script.push(0xcd);
-        assert_eq!(
-            read_canonical_u64(&script, 1),
-            Some((value, script.len() - 1)),
-            "{value}"
-        );
+        let (element, next) = crate::primitives::script::read_element(&script, 1).expect("element");
+        assert_eq!(element_integer(&element), Some(value), "{value}");
+        assert_eq!(next, script.len() - 1, "{value}");
     }
-}
-
-#[test]
-fn canonical_integers_reject_non_minimal_negative_and_truncated_pushes() {
-    assert_eq!(read_canonical_u64(&[0x00], 0), Some((0, 1)));
-    assert_eq!(read_canonical_u64(&[0x51], 0), Some((1, 1)));
-    assert_eq!(read_canonical_u64(&[0x60], 0), Some((16, 1)));
-    assert_eq!(
-        read_canonical_u64(&[0x02, 0x34, 0x12], 0),
-        Some((0x1234, 3))
-    );
-    assert_eq!(read_canonical_u64(&[0x02, 0x80, 0x00], 0), Some((0x80, 3)));
-    for rejected in [
-        &[][..],
-        &[0x61],
-        &[0x4f],
-        &[0x01, 0x10],
-        &[0x01, 0x80],
-        &[0x02, 0x01, 0x00],
-        // Redundant zero sign byte above a clear top bit.
-        &[0x02, 0x11, 0x00],
-        &[0x02, 0x11],
-        &[0x09, 1, 2, 3, 4, 5, 6, 7, 8, 1],
-        &[0x0a, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0],
-    ] {
-        assert_eq!(read_canonical_u64(rejected, 0), None, "{rejected:02x?}");
-    }
-    assert_eq!(read_canonical_u64(&[0x51], 1), None);
 }
 
 #[test]

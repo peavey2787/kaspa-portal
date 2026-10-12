@@ -17,9 +17,7 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
 
-use super::branch::{
-    advance_push, pushdata_lengths, MAX_COVENANT_BRANCH_DEPTH, MAX_COVENANT_BRANCH_KEYS,
-};
+use super::branch::{MAX_COVENANT_BRANCH_DEPTH, MAX_COVENANT_BRANCH_KEYS};
 
 const OP_IF: u8 = 0x63;
 const OP_NOTIF: u8 = 0x64;
@@ -163,11 +161,9 @@ impl Parser<'_> {
         Ok(end + 1)
     }
 
-    fn data_push(&mut self, position: usize, opcode: u8) -> Result<usize, ExecutionError> {
-        let malformed = |_| ExecutionError::MalformedScript;
-        let (header, payload) =
-            pushdata_lengths(self.script, position, opcode).map_err(malformed)?;
-        let end = advance_push(self.script, position, header, payload).map_err(malformed)?;
+    fn data_push(&mut self, position: usize) -> Result<usize, ExecutionError> {
+        let (_, end) = crate::primitives::script::read_element(self.script, position)
+            .ok_or(ExecutionError::MalformedScript)?;
         self.current().push(Node::Push);
         Ok(end)
     }
@@ -180,7 +176,7 @@ impl Parser<'_> {
             OP_ELSE => self.enter_else(),
             OP_ENDIF => self.leave_branch(),
             OP_DATA_32 => return self.key_push(position),
-            0x01..=0x4e => return self.data_push(position, opcode),
+            0x01..=0x4e => return self.data_push(position),
             0x00 | 0x4f | 0x51..=0x60 => {
                 self.current().push(Node::Push);
                 Ok(())

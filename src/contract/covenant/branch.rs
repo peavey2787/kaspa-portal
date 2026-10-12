@@ -256,10 +256,10 @@ impl BranchParser {
             0x68 => self.leave_branch().map(|()| ONE_BYTE),
             0x20 => self.inspect_key_push(rest).map(|()| KEY_PUSH),
             0x01..=0x4e => {
-                let (header, payload) = pushdata_lengths(rest, 0, opcode)?;
-                // Bounds-check the push; it spans its non-zero header plus payload.
-                advance_push(rest, 0, header, payload)?;
-                Ok(header.saturating_add(payload))
+                let (_, end) = crate::primitives::script::read_element(rest, 0)
+                    .ok_or(BranchResolveError::MalformedScript)?;
+                // An element always spans at least its opcode byte.
+                NonZeroUsize::new(end).ok_or(BranchResolveError::MalformedScript)
             }
             _ => Ok(ONE_BYTE),
         }
@@ -284,61 +284,6 @@ pub fn resolve_covenant_branches(script: &[u8]) -> Result<BranchResolution, Bran
             .ok_or(BranchResolveError::MalformedScript)?;
     }
     parser.finish()
-}
-
-/// The header width (never zero) and payload length of the push at `offset`.
-pub(crate) fn pushdata_lengths(
-    script: &[u8],
-    offset: usize,
-    opcode: u8,
-) -> Result<(NonZeroUsize, usize), BranchResolveError> {
-    match opcode {
-        0x01..=0x4b => Ok((width(1), usize::from(opcode))),
-        0x4c => Ok((
-            width(2),
-            usize::from(
-                *script
-                    .get(offset + 1)
-                    .ok_or(BranchResolveError::MalformedScript)?,
-            ),
-        )),
-        0x4d => {
-            let bytes = script
-                .get(offset + 1..offset + 3)
-                .ok_or(BranchResolveError::MalformedScript)?;
-            Ok((
-                width(3),
-                usize::from(u16::from_le_bytes([bytes[0], bytes[1]])),
-            ))
-        }
-        0x4e => {
-            let bytes = script
-                .get(offset + 1..offset + 5)
-                .ok_or(BranchResolveError::MalformedScript)?;
-            let len = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            usize::try_from(len)
-                .map(|length| (width(5), length))
-                .map_err(|_| BranchResolveError::MalformedScript)
-        }
-        _ => Err(BranchResolveError::MalformedScript),
-    }
-}
-
-pub(crate) fn advance_push(
-    script: &[u8],
-    offset: usize,
-    header: NonZeroUsize,
-    payload: usize,
-) -> Result<usize, BranchResolveError> {
-    // The non-zero header means `next` always moves past `offset`.
-    let next = offset
-        .checked_add(header.get())
-        .and_then(|v| v.checked_add(payload))
-        .ok_or(BranchResolveError::MalformedScript)?;
-    if next > script.len() {
-        return Err(BranchResolveError::MalformedScript);
-    }
-    Ok(next)
 }
 
 #[cfg(test)]

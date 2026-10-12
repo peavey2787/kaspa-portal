@@ -23,45 +23,6 @@ pub fn push_int(script: &mut Vec<u8>, value: u64) {
     script.extend_from_slice(&bytes);
 }
 
-/// Read the minimally encoded non-negative script integer starting at `at`,
-/// exactly as [`push_int`] writes it: `OP_0`, `OP_1..=OP_16`, or a direct push
-/// of 1..=9 bytes holding a value above 16 with no redundant sign byte.
-/// Returns the value and the position after it.
-pub(crate) fn read_canonical_u64(script: &[u8], at: usize) -> Option<(u64, usize)> {
-    let opcode = *script.get(at)?;
-    if opcode == opcode::OP_0 {
-        return Some((0, at + 1));
-    }
-    if (opcode::OP_1..=opcode::OP_16).contains(&opcode) {
-        return Some((u64::from(opcode - 0x50), at + 1));
-    }
-    let length = usize::from(opcode);
-    if !(1..=9).contains(&length) {
-        return None;
-    }
-    let end = at + 1 + length;
-    let value = canonical_positive_u64(script.get(at + 1..end)?)?;
-    (value > 16).then_some((value, end))
-}
-
-/// Decode little-endian script-number bytes that are positive, minimal and
-/// fit in a `u64`.
-fn canonical_positive_u64(data: &[u8]) -> Option<u64> {
-    let (&last, prefix) = data.split_last()?;
-    let significant = if last == 0 {
-        // A zero sign byte is minimal only when it separates a set top bit.
-        (prefix.last()? & 0x80 != 0).then_some(prefix)?
-    } else {
-        (last & 0x80 == 0).then_some(data)?
-    };
-    (significant.len() <= 8).then(|| {
-        significant
-            .iter()
-            .rev()
-            .fold(0, |value, byte| (value << 8) + u64::from(*byte))
-    })
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ScriptItem {
     Opcode,
@@ -84,164 +45,42 @@ fn classify_push(data: &[u8]) -> ScriptItem {
     }
 }
 
-fn read_push_item(
-    script: &[u8],
-    start: usize,
-    length: usize,
-    truncated_message: &'static str,
-) -> Result<(usize, ScriptItem), String> {
-    let end = start
-        .checked_add(length)
-        .ok_or_else(|| "Script position overflow".to_string())?;
-    let data = script
-        .get(start..end)
-        .ok_or_else(|| truncated_message.to_string())?;
-    Ok((end, classify_push(data)))
-}
-
-pub(super) fn read_pushdata1(
-    script: &[u8],
-    position: usize,
-) -> Result<(usize, ScriptItem), String> {
-    let length_position = position
-        .checked_add(1)
-        .ok_or_else(|| "Script position overflow".to_string())?;
-    let length = *script
-        .get(length_position)
-        .ok_or_else(|| "Truncated OP_PUSHDATA1 length".to_string())? as usize;
-    let start = position
-        .checked_add(2)
-        .ok_or_else(|| "Script position overflow".to_string())?;
-    read_push_item(script, start, length, "Truncated OP_PUSHDATA1 data")
-}
-
-pub(super) fn read_pushdata2(
-    script: &[u8],
-    position: usize,
-) -> Result<(usize, ScriptItem), String> {
-    let start = position
-        .checked_add(1)
-        .ok_or_else(|| "Script position overflow".to_string())?;
-    let end = start
-        .checked_add(2)
-        .ok_or_else(|| "Script position overflow".to_string())?;
-    let bytes = script
-        .get(start..end)
-        .ok_or_else(|| "Truncated OP_PUSHDATA2 length".to_string())?;
-    let length = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
-    read_push_item(script, end, length, "Truncated OP_PUSHDATA2 data")
-}
-
-fn read_pushdata4(script: &[u8], position: usize) -> Result<(usize, ScriptItem), String> {
-    let start = position
-        .checked_add(1)
-        .ok_or_else(|| "Script position overflow".to_string())?;
-    let end = start
-        .checked_add(4)
-        .ok_or_else(|| "Script position overflow".to_string())?;
-    let bytes = script
-        .get(start..end)
-        .ok_or_else(|| "Truncated OP_PUSHDATA4 length".to_string())?;
-    let length = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
-    read_push_item(script, end, length, "Truncated OP_PUSHDATA4 data")
-}
-
-fn next_position(position: usize, amount: usize, script_len: usize) -> Result<usize, String> {
-    let next = position
-        .checked_add(amount)
-        .ok_or_else(|| "Script position overflow".to_string())?;
-    if next <= position || next > script_len {
-        return Err("Truncated script item".to_string());
-    }
-    Ok(next)
-}
-
-fn next_pushdata_item(
-    script: &[u8],
-    position: usize,
-    opcode: u8,
-) -> Result<(usize, ScriptItem), String> {
-    if opcode == 0x4c {
-        read_pushdata1(script, position)
-    } else {
-        next_wide_pushdata_item(script, position, opcode)
-    }
-}
-
-fn next_wide_pushdata_item(
-    script: &[u8],
-    position: usize,
-    opcode: u8,
-) -> Result<(usize, ScriptItem), String> {
-    if opcode == 0x4d {
-        read_pushdata2(script, position)
-    } else {
-        read_pushdata4(script, position)
-    }
-}
-
-fn next_push_item(
-    script: &[u8],
-    position: usize,
-    opcode: u8,
-) -> Result<(usize, ScriptItem), String> {
-    if opcode <= 0x4b {
-        let start = position
-            .checked_add(1)
-            .ok_or_else(|| "Script position overflow".to_string())?;
-        read_push_item(
-            script,
-            start,
-            opcode as usize,
-            "Truncated direct script push",
-        )
-    } else {
-        next_pushdata_item(script, position, opcode)
-    }
-}
-
-fn next_zero_or_push_item(
-    script: &[u8],
-    position: usize,
-    opcode: u8,
-) -> Result<(usize, ScriptItem), String> {
-    if opcode == 0x00 {
-        Ok((
-            next_position(position, 1, script.len())?,
-            ScriptItem::Integer(0),
-        ))
-    } else {
-        next_push_item(script, position, opcode)
-    }
-}
-
-fn next_non_push_item(
-    script: &[u8],
-    position: usize,
-    opcode: u8,
-) -> Result<(usize, ScriptItem), String> {
-    if (0x51..=0x60).contains(&opcode) {
-        Ok((
-            next_position(position, 1, script.len())?,
-            ScriptItem::Integer((opcode - 0x50) as u64),
-        ))
-    } else {
-        Ok((
-            next_position(position, 1, script.len())?,
-            ScriptItem::Opcode,
-        ))
-    }
-}
-
+/// The element at `position` and the integer it encodes, if any.
 pub(super) fn next_script_item(
     script: &[u8],
     position: usize,
-    opcode: u8,
 ) -> Result<(usize, ScriptItem), String> {
-    if opcode <= 0x4e {
-        next_zero_or_push_item(script, position, opcode)
-    } else {
-        next_non_push_item(script, position, opcode)
+    let (element, next) = crate::primitives::script::read_element(script, position)
+        .ok_or_else(|| "Truncated script item".to_string())?;
+    Ok((next, classify_element(&element)))
+}
+
+fn classify_element(element: &crate::primitives::script::Element<'_>) -> ScriptItem {
+    match element.opcode {
+        _ if element.is_push() => classify_push(element.data),
+        opcode @ opcode::OP_1..=opcode::OP_16 => {
+            ScriptItem::Integer(u64::from(opcode - opcode::OP_1 + 1))
+        }
+        _ => ScriptItem::Opcode,
+    }
+}
+
+/// The non-negative integer an element pushes: `OP_0`, `OP_1..=OP_16`, or
+/// little-endian bytes (a ninth, zero sign byte is allowed above `i64::MAX`).
+/// Callers rebuild the script to reject non-minimal encodings.
+pub(crate) fn element_integer(element: &crate::primitives::script::Element<'_>) -> Option<u64> {
+    let element = match element.data {
+        [value @ .., 0] if element.is_push() && value.len() == 8 => {
+            crate::primitives::script::Element {
+                opcode: element.opcode,
+                data: value,
+            }
+        }
+        _ => *element,
+    };
+    match classify_element(&element) {
+        ScriptItem::Integer(value) => Some(value),
+        _ => None,
     }
 }
 
@@ -262,7 +101,7 @@ pub(super) fn find_preceding_script_integer(
                 ScriptItem::Opcode => Ok(None),
             };
         }
-        let (next, item) = next_script_item(script, position, current_opcode)?;
+        let (next, item) = next_script_item(script, position)?;
         previous = item;
         position = next;
     }

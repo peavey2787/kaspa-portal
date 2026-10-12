@@ -5,6 +5,7 @@ pub use facade::ContractApi;
 pub mod commit_reveal;
 pub mod covenant;
 pub mod crowdfund;
+pub mod krc20;
 pub mod merkle;
 pub mod oracle;
 pub mod script;

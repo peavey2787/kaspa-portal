@@ -563,31 +563,20 @@ fn private_swap_template_recognition_is_exact() {
     trailing.push(0x51);
     assert!(recognize_private_swap(&trailing)
         .unwrap_err()
-        .contains("trailing"));
+        .contains("not a canonical Private Swap"));
     assert!(recognize_private_swap(&[0x51]).is_err());
 }
 
 #[test]
-fn merkle_layers_stop_at_the_selector_capacity() {
-    use super::specialized::{recognize_merkle_layers, Cursor};
-    use crate::contract::script::opcode::{OP_BLAKE2B, OP_CAT, OP_ENDIF, OP_IF, OP_SWAP};
+fn merkle_templates_stop_at_the_selector_capacity() {
+    use super::specialized::recognize_merkle;
+    use crate::contract::merkle::build_merkle_whitelist_script;
 
-    let layers =
-        |count: usize| [OP_SWAP, OP_IF, OP_SWAP, OP_ENDIF, OP_CAT, OP_BLAKE2B].repeat(count);
-    let fifteen = layers(15);
-    let mut cursor = Cursor {
-        script: &fifteen,
-        at: 0,
-    };
-    assert_eq!(recognize_merkle_layers(&mut cursor), Ok(15));
-    assert_eq!(cursor.at, fifteen.len());
-    let sixteen = layers(16);
-    let mut cursor = Cursor {
-        script: &sixteen,
-        at: 0,
-    };
-    assert!(recognize_merkle_layers(&mut cursor)
-        .unwrap_err()
+    let template = |depth| build_merkle_whitelist_script(&[7; 32], &[8; 32], depth, 100);
+    assert_eq!(recognize_merkle(&template(15)).map(|t| t.depth), Ok(15));
+    assert!(recognize_merkle(&template(16))
+        .err()
+        .unwrap()
         .contains("selector capacity"));
 }
 

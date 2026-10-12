@@ -32,9 +32,7 @@ pub fn build_private_swap_script(
         return Err("Private Swap owner and claimer keys must differ".into());
     }
 
-    let mut destination_spk = Vec::with_capacity(2 + claimer_output_spk.len());
-    destination_spk.extend_from_slice(&[0x00, 0x00]);
-    destination_spk.extend_from_slice(claimer_output_spk);
+    let destination_spk = versioned_destination(claimer_output_spk);
     let mut script = Vec::with_capacity(242 + claimer_output_spk.len());
     push_data(&mut script, salt);
     script.push(OP_DROP);
@@ -87,3 +85,53 @@ fn append_claim_fee_bound(script: &mut Vec<u8>) {
 #[cfg(test)]
 #[path = "private_swap/unit-tests/mod.rs"]
 mod unit_tests;
+
+/// The fields of a canonical Private Swap script.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrivateSwapFields {
+    pub owner_pubkey: [u8; 32],
+    pub claimer_pubkey: [u8; 32],
+    /// The claim destination, without its two-byte script version.
+    pub claimer_output_spk: Vec<u8>,
+    pub refund_locktime_daa: u64,
+    pub salt: [u8; 16],
+}
+
+impl PrivateSwapFields {
+    /// The destination as the claim branch commits to it: script version 0
+    /// then the script.
+    #[must_use]
+    pub fn versioned_destination(&self) -> Vec<u8> {
+        versioned_destination(&self.claimer_output_spk)
+    }
+}
+
+fn versioned_destination(script: &[u8]) -> Vec<u8> {
+    let mut versioned = Vec::with_capacity(2 + script.len());
+    versioned.extend_from_slice(&[0x00, 0x00]);
+    versioned.extend_from_slice(script);
+    versioned
+}
+
+/// Recognize `script` as exactly what [`build_private_swap_script`] builds.
+#[must_use]
+pub fn private_swap_script_fields(script: &[u8]) -> Option<PrivateSwapFields> {
+    let elements = crate::contract::script::complete_elements(script)?;
+    let push32 = |index: usize| elements.get(index)?.data.try_into().ok();
+    let fields = PrivateSwapFields {
+        salt: elements.first()?.data.try_into().ok()?,
+        claimer_pubkey: push32(3)?,
+        claimer_output_spk: elements.get(13)?.data.get(2..)?.to_vec(),
+        owner_pubkey: push32(30)?,
+        refund_locktime_daa: crate::contract::script::element_integer(elements.get(32)?)?,
+    };
+    let rebuilt = build_private_swap_script(
+        &fields.owner_pubkey,
+        &fields.claimer_pubkey,
+        &fields.claimer_output_spk,
+        fields.refund_locktime_daa,
+        &fields.salt,
+    )
+    .ok()?;
+    (rebuilt == script).then_some(fields)
+}

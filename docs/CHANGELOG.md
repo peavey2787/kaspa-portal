@@ -4,6 +4,16 @@
 
 One implementation per primitive.
 
+- `primitives::script::{read_element, elements}` is the only script-push
+  reader; the covenant branch resolver, execution tracer, script-integer
+  walker, key scanner and stealth scanner use it.
+- Template recognizers live beside their builders and rebuild to compare:
+  `covenant::private_swap_script_fields`, `commit_reveal::commit_reveal_script_fields`,
+  `merkle::merkle_whitelist_script_fields` (Oracle-v1 already did). The PSKT
+  pipeline's hand-written template parsers and the signer's own Private Swap
+  parser are removed.
+- `contract::krc20::krc20_operation` decodes a Kasplex reveal envelope.
+- `MultisigConfig::{address, cosigner_parts, write_descriptor}`.
 - `primitives::hash::{blake2b_256, Blake2b256}` is Portal's only BLAKE2b
   (unkeyed and keyed). The hand-written keyed compression in
   `transaction::sighash`, `sighash::{blake2b_hash, KaspaBlake2b}` and the

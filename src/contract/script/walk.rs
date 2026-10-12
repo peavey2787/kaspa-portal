@@ -1,11 +1,6 @@
-use super::number::next_script_item;
-
+/// The offset just past the script element at `offset`.
 pub fn item_end(script: &[u8], offset: usize) -> Option<usize> {
-    script.get(offset).and_then(|opcode| {
-        next_script_item(script, offset, *opcode)
-            .ok()
-            .map(|(next, _)| next)
-    })
+    crate::primitives::script::read_element(script, offset).map(|(_, next)| next)
 }
 
 #[cfg(feature = "std")]

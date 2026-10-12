@@ -12,12 +12,7 @@ use k256::schnorr::{Signature as K256Signature, VerifyingKey};
 use serde_json::{Map, Value};
 
 use super::compact::{Input, Signature, SpecializedRoute, SpecializedWitness};
-use crate::contract::script::opcode::{
-    OP_0, OP_1, OP_BLAKE2B, OP_CAT, OP_CHECKLOCKTIMEVERIFY, OP_CHECKSIGFROMSTACK,
-    OP_CHECKSIGVERIFY, OP_DROP, OP_DUP, OP_ELSE, OP_ENDIF, OP_EQUALVERIFY, OP_GREATERTHANOREQUAL,
-    OP_IF, OP_LESSTHANOREQUAL, OP_NUMEQUALVERIFY, OP_SUB, OP_SWAP, OP_TX_INPUT_AMOUNT,
-    OP_TX_INPUT_COUNT, OP_TX_OUTPUT_AMOUNT, OP_TX_OUTPUT_COUNT, OP_TX_OUTPUT_SPK, OP_VERIFY,
-};
+use crate::contract::script::opcode::{OP_0, OP_1};
 mod claims;
 mod merkle_proof;
 mod routes;
@@ -26,8 +21,6 @@ pub(crate) use claims::*;
 pub(crate) use merkle_proof::*;
 pub(crate) use routes::*;
 pub(crate) use templates::*;
-
-const PRIVATE_SWAP_MAX_FEE_SOMPI: u64 = 500_000_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RouteKind {

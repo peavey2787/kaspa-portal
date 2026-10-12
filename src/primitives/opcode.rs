@@ -1,6 +1,9 @@
 //! Kaspa script opcodes, shared by every script builder and parser.
 
 pub const OP_0: u8 = 0x00;
+pub const OP_PUSHDATA1: u8 = 0x4c;
+pub const OP_PUSHDATA2: u8 = 0x4d;
+pub const OP_PUSHDATA4: u8 = 0x4e;
 pub const OP_IF: u8 = 0x63;
 pub const OP_ELSE: u8 = 0x67;
 pub const OP_ENDIF: u8 = 0x68;

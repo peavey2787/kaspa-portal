@@ -2,7 +2,10 @@ use alloc::vec::Vec;
 
 use super::*;
 use super::{parse_private_swap_script, PrivateSwapError};
-use crate::{primitives::address::KaspaNetwork, transaction::model::Transaction};
+use crate::{
+    primitives::{address::KaspaNetwork, opcode::*},
+    transaction::model::Transaction,
+};
 
 fn push_data(script: &mut Vec<u8>, data: &[u8]) {
     script.push(u8::try_from(data.len()).expect("fixture direct push"));
@@ -149,56 +152,6 @@ fn canonical_private_swap_script_roundtrips_and_rejects_noncanonical_shapes() {
     );
     assert_eq!(
         parse_private_swap_script(&[0xa8, 0x20]),
-        Err(PrivateSwapError::InvalidScript)
-    );
-}
-
-#[test]
-fn script_integer_and_direct_push_readers_reject_noncanonical_encodings() {
-    let mut pos = 0;
-    assert_eq!(read_script_int(&[OP_0], &mut pos), Ok(0));
-    pos = 0;
-    assert_eq!(read_script_int(&[OP_1], &mut pos), Ok(1));
-    pos = 0;
-    assert_eq!(read_script_int(&[1, 17], &mut pos), Ok(17));
-
-    for bad in [
-        &[1, 0][..],
-        &[1, 0x80][..],
-        &[1, 16][..],
-        &[10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10][..],
-    ] {
-        let mut offset = 0;
-        assert_eq!(
-            read_script_int(bad, &mut offset),
-            Err(PrivateSwapError::InvalidScript)
-        );
-    }
-
-    let mut offset = 0;
-    assert_eq!(
-        read_bounded_direct_push(&[0], &mut offset, 1, 75),
-        Err(PrivateSwapError::InvalidScript)
-    );
-    offset = 0;
-    assert_eq!(
-        read_bounded_direct_push(&[76], &mut offset, 1, 75),
-        Err(PrivateSwapError::InvalidScript)
-    );
-    offset = 0;
-    assert_eq!(
-        read_bounded_direct_push(&[2, 1], &mut offset, 1, 75),
-        Err(PrivateSwapError::InvalidScript)
-    );
-
-    let mut expect_pos = 0;
-    assert_eq!(
-        expect(&[OP_1], &mut expect_pos, OP_0),
-        Err(PrivateSwapError::InvalidScript)
-    );
-    expect_pos = 0;
-    assert_eq!(
-        expect_sequence(&[OP_1], &mut expect_pos, &[OP_0]),
         Err(PrivateSwapError::InvalidScript)
     );
 }
