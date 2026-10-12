@@ -8,7 +8,6 @@
 //! transaction signature is bound to that branch, and (5) route-specific proof
 //! material validates against commitments embedded in the redeem script.
 
-use blake2b_simd::Params;
 use k256::schnorr::{Signature as K256Signature, VerifyingKey};
 use serde_json::{Map, Value};
 

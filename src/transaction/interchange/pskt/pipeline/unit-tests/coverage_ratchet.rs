@@ -289,8 +289,8 @@ fn canonical_merge_covers_generic_covenant_signature_binding() {
     redeem.extend_from_slice(&xonly(beneficiary));
     redeem.extend_from_slice(&[0xac, 0x68]);
 
-    let hash = blake2b_simd::Params::new().hash_length(32).hash(&redeem);
-    let p2sh = format!("0000aa20{}87", hex::encode(hash.as_bytes()));
+    let hash = crate::primitives::hash::blake2b_256(&redeem);
+    let p2sh = format!("0000aa20{}87", hex::encode(hash));
 
     let mut original_doc = base_document(json!({}), Some(&redeem));
     original_doc["inputs"][0]["utxoEntry"]["scriptPublicKey"] = json!(p2sh);

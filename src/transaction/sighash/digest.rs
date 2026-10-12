@@ -17,21 +17,22 @@
 
 use crate::transaction::model::{Hash256, SigHashType};
 
-use super::blake2b::KaspaBlake2b;
 use super::components::{
     outputs_hash, payload_hash, previous_outputs_hash, sequences_hash, sig_op_counts_hash,
 };
+use super::signing_hasher;
 use super::source::SighashSource;
+use crate::primitives::hash::Blake2b256;
 
 /// Incremental keyed Blake2b-256 hasher for the final sighash digest.
 struct SigHasher {
-    hasher: KaspaBlake2b,
+    hasher: Blake2b256,
 }
 
 impl SigHasher {
     fn new() -> Self {
         Self {
-            hasher: KaspaBlake2b::new(),
+            hasher: signing_hasher(),
         }
     }
 

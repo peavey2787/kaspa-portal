@@ -7,11 +7,8 @@
 //! canonical kpub decoding, duplicate detection, and canonical HD45 participant
 //! ordering live here so hardware and wallet code cannot drift.
 
-use crate::{
-    primitives::bytes::decode_hex_nibble,
-    wallet::key::account::{
-        decode_account_key_text, ACCOUNT_KEY_PAYLOAD_LEN, ACCOUNT_KEY_TEXT_LEN,
-    },
+use crate::wallet::key::account::{
+    decode_account_key_text, ACCOUNT_KEY_PAYLOAD_LEN, ACCOUNT_KEY_TEXT_LEN,
 };
 
 const HD44_PARTICIPANT_HEX_LEN: usize = 130;
@@ -287,12 +284,9 @@ fn decode_hex_bytes(hex: &[u8], output: &mut [u8]) -> Result<(), MultisigDescrip
     if hex.len() != output.len() * 2 {
         return Err(MultisigDescriptorError::InvalidParticipantLength);
     }
-    for (pair, byte) in hex.as_chunks::<2>().0.iter().zip(output.iter_mut()) {
-        let high = decode_hex_nibble(pair[0]).ok_or(MultisigDescriptorError::InvalidHex)?;
-        let low = decode_hex_nibble(pair[1]).ok_or(MultisigDescriptorError::InvalidHex)?;
-        *byte = high.wrapping_shl(4).wrapping_add(low);
-    }
-    Ok(())
+    crate::primitives::bytes::decode_hex(hex, output)
+        .map(|_| ())
+        .ok_or(MultisigDescriptorError::InvalidHex)
 }
 
 fn sort_hd45_by_encoded<const N: usize>(

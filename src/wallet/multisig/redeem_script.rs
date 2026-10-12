@@ -1,19 +1,11 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
-pub fn build_redeem_script(threshold: u8, public_keys: &[[u8; 32]]) -> Result<Vec<u8>, String> {
-    let count =
-        u8::try_from(public_keys.len()).map_err(|_| "Too many multisig public keys".to_string())?;
-    if threshold == 0 || threshold > count || usize::from(count) > super::MAX_MULTISIG_KEYS {
-        return Err(format!("Invalid {}-of-{} multisig", threshold, count));
-    }
+use crate::primitives::multisig_script::{encode, encoded_len, MAX_SCRIPT_KEYS};
 
-    let mut script = Vec::with_capacity(1 + public_keys.len() * 33 + 2);
-    script.push(0x50 + threshold);
-    for public_key in public_keys {
-        script.push(0x20);
-        script.extend_from_slice(public_key);
-    }
-    script.push(0x50 + count);
-    script.push(0xae);
+pub fn build_redeem_script(threshold: u8, public_keys: &[[u8; 32]]) -> Result<Vec<u8>, String> {
+    // Bounded before allocating; more keys than a script can declare fail to encode.
+    let mut script = vec![0u8; encoded_len(public_keys.len().min(MAX_SCRIPT_KEYS))];
+    encode(threshold, public_keys, &mut script)
+        .ok_or_else(|| format!("Invalid {}-of-{} multisig", threshold, public_keys.len()))?;
     Ok(script)
 }

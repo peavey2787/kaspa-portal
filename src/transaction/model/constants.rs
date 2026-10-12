@@ -83,20 +83,6 @@ pub const MAX_SIGS_PER_INPUT: usize = 5;
 /// Maximum public keys in a multisig script
 pub const MAX_MULTISIG_KEYS: usize = 5;
 
-// ─── Kaspa Script Opcodes (subset for multisig parsing) ─────────────
-
-/// Kaspa script opcodes used in P2PK and multisig scripts.
-pub const OP_DATA_32: u8 = 0x20; // push 32 bytes
-pub const OP_1: u8 = 0x51; // push value 1
-pub const OP_2: u8 = 0x52; // push value 2
-pub const OP_3: u8 = 0x53; // push value 3
-pub const OP_4: u8 = 0x54; // push value 4
-pub const OP_5: u8 = 0x55; // push value 5
-pub const OP_CHECKSIG: u8 = 0xAC;
-pub const OP_CHECKMULTISIG: u8 = 0xAE;
-pub const OP_BLAKE2B: u8 = 0xAA;
-pub const OP_EQUAL: u8 = 0x87;
-
 // ─── Transaction ──────────────────────────────────────────────────────
 
 /// Shared pool size for redeem scripts that exceed MAX_SCRIPT_SIZE.

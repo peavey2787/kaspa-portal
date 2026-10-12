@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+One implementation per primitive.
+
+- `primitives::hash::{blake2b_256, Blake2b256}` is Portal's only BLAKE2b
+  (unkeyed and keyed). The hand-written keyed compression in
+  `transaction::sighash`, `sighash::{blake2b_hash, KaspaBlake2b}` and the
+  `blake2` dependency are removed.
+- `primitives::multisig_script` is the only `OP_CHECKMULTISIG` redeem codec;
+  the transaction model, PSKT pipeline and `wallet::multisig::build_redeem_script`
+  use it.
+- `primitives::opcode` is the only opcode table (`contract::script::opcode`
+  re-exports it; the model's duplicate constants are gone).
+- `primitives::bytes::decode_hex` joins `decode_lower_hex`; the PSKT and
+  descriptor parsers use them instead of their own loops.
+
 Toccata-sized payloads and covenant genesis proofs.
 
 - `contract::covenant::identity` is the one KIP-20 covenant-ID hash

@@ -5,7 +5,7 @@ use crate::wallet::{
     key::xpub::KpubParts,
 };
 
-use super::super::constants::{MAX_MULTISIG_KEYS, OP_1, OP_CHECKMULTISIG, OP_DATA_32};
+use super::super::constants::MAX_MULTISIG_KEYS;
 use super::super::multisig_validation::valid_config;
 use super::MultisigConfig;
 
@@ -86,24 +86,7 @@ pub(super) fn encode_redeem(
     if !valid_config(m, n) {
         return None;
     }
-    let needed = 1 + n as usize * 33 + 2;
-    if needed > out.len() {
-        return None;
-    }
-    let mut pos = 0usize;
-    out[pos] = OP_1 + m - 1;
-    pos += 1;
-    for child in children.iter().take(n as usize) {
-        out[pos] = OP_DATA_32;
-        pos += 1;
-        out[pos..pos + 32].copy_from_slice(child);
-        pos += 32;
-    }
-    out[pos] = OP_1 + n - 1;
-    pos += 1;
-    out[pos] = OP_CHECKMULTISIG;
-    pos += 1;
-    Some(pos)
+    crate::primitives::multisig_script::encode(m, children.get(..usize::from(n))?, out)
 }
 
 pub(super) fn write_multisig_script(

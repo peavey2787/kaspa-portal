@@ -17,8 +17,9 @@
 
 use crate::transaction::model::{Hash256, SigHashType, SUBNETWORK_ID_NATIVE};
 
-use super::blake2b::KaspaBlake2b;
+use super::signing_hasher;
 use super::source::{SighashOutput, SighashSource};
+use crate::primitives::hash::Blake2b256;
 
 /// Blake2b("TransactionOutpoints", serialization of all outpoints)
 /// If ANYONECANPAY -> 0x0000...0000
@@ -30,7 +31,7 @@ pub(super) fn previous_outputs_hash<T: SighashSource + ?Sized>(
         return [0u8; 32];
     }
 
-    let mut hasher = KaspaBlake2b::new();
+    let mut hasher = signing_hasher();
     for index in 0..tx.input_count() {
         let input = tx.input(index);
         hasher.update(input.transaction_id);
@@ -54,7 +55,7 @@ pub(super) fn sequences_hash<T: SighashSource + ?Sized>(
         return [0u8; 32];
     }
 
-    let mut hasher = KaspaBlake2b::new();
+    let mut hasher = signing_hasher();
     for index in 0..tx.input_count() {
         hasher.update(&tx.input(index).sequence.to_le_bytes());
     }
@@ -73,7 +74,7 @@ pub(super) fn sig_op_counts_hash<T: SighashSource + ?Sized>(
         return [0u8; 32];
     }
 
-    let mut hasher = KaspaBlake2b::new();
+    let mut hasher = signing_hasher();
     for index in 0..tx.input_count() {
         hasher.update(&[tx.input(index).sig_op_count]);
     }
@@ -101,13 +102,13 @@ pub(super) fn outputs_hash<T: SighashSource + ?Sized>(
             return [0u8; 32];
         }
         // Only the output with the same index
-        let mut hasher = KaspaBlake2b::new();
+        let mut hasher = signing_hasher();
         hash_output(&mut hasher, tx.output(input_index), tx.version());
         return hasher.finalize();
     }
 
     // SigHashAll: hash of all outputs
-    let mut hasher = KaspaBlake2b::new();
+    let mut hasher = signing_hasher();
     for index in 0..tx.output_count() {
         hash_output(&mut hasher, tx.output(index), tx.version());
     }
@@ -118,7 +119,7 @@ pub(super) fn outputs_hash<T: SighashSource + ?Sized>(
 /// Matches Rusty Kaspa's `hash_output` which calls `hash_script_public_key`,
 /// which uses `write_var_bytes` (u64 LE length prefix + raw bytes).
 /// For tx version >= 1, also includes covenant binding data.
-fn hash_output(hasher: &mut KaspaBlake2b, output: SighashOutput<'_>, tx_version: u16) {
+fn hash_output(hasher: &mut Blake2b256, output: SighashOutput<'_>, tx_version: u16) {
     hasher.update(&output.value.to_le_bytes());
     // hash_script_public_key: version(u16 LE) + write_var_bytes(script)
     hasher.update(&output.script_version.to_le_bytes());
@@ -146,7 +147,7 @@ pub(super) fn payload_hash<T: SighashSource + ?Sized>(tx: &T) -> Hash256 {
     if *tx.subnetwork_id() == SUBNETWORK_ID_NATIVE && payload.is_empty() {
         return [0u8; 32];
     }
-    let mut hasher = KaspaBlake2b::new();
+    let mut hasher = signing_hasher();
     // write_var_bytes: length prefix (u64 LE) + raw bytes
     hasher.update(&(payload.len() as u64).to_le_bytes());
     hasher.update(payload);

@@ -1252,7 +1252,6 @@ dependencies = [
  "ark-snark",
  "ark-std",
  "base64",
- "blake2",
  "blake2b_simd",
  "blake3",
  "ed25519-dalek",

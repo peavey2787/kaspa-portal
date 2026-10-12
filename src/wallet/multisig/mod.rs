@@ -8,7 +8,7 @@ pub use descriptor::MultisigDescriptor;
 pub use redeem_script::build_redeem_script;
 
 /// Most cosigners one `OP_CHECKMULTISIG` redeem script may name.
-pub const MAX_MULTISIG_KEYS: usize = 16;
+pub const MAX_MULTISIG_KEYS: usize = crate::primitives::multisig_script::MAX_SCRIPT_KEYS;
 
 #[cfg(test)]
 #[path = "unit-tests/mod.rs"]

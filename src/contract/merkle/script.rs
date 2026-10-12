@@ -5,9 +5,8 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
 
-use crate::contract::script::{
-    opcode as covenant_ops, p2sh::blake2b_hash, push_data, push_int, push_pubkey,
-};
+use crate::contract::script::{opcode as covenant_ops, push_data, push_int, push_pubkey};
+use crate::primitives::hash::blake2b_256;
 
 /// Build a Merkle-whitelist vault redeem script.
 ///
@@ -78,7 +77,7 @@ pub fn compute_merkle_root(leaves: &[Vec<u8>]) -> [u8; 32] {
     }
 
     // Hash all leaves
-    let mut level: Vec<[u8; 32]> = leaves.iter().map(|leaf| blake2b_hash(leaf)).collect();
+    let mut level: Vec<[u8; 32]> = leaves.iter().map(|leaf| blake2b_256(leaf)).collect();
 
     // Pad to next power of 2
     let target = level.len().next_power_of_two();
@@ -93,7 +92,7 @@ pub fn compute_merkle_root(leaves: &[Vec<u8>]) -> [u8; 32] {
             let mut combined = Vec::with_capacity(64);
             combined.extend_from_slice(&pair[0]);
             combined.extend_from_slice(&pair[1]);
-            next_level.push(blake2b_hash(&combined));
+            next_level.push(blake2b_256(&combined));
         }
         level = next_level;
     }
@@ -110,7 +109,7 @@ pub fn generate_merkle_proof(leaves: &[Vec<u8>], leaf_index: usize) -> Vec<([u8;
     }
 
     // Hash all leaves
-    let mut level: Vec<[u8; 32]> = leaves.iter().map(|leaf| blake2b_hash(leaf)).collect();
+    let mut level: Vec<[u8; 32]> = leaves.iter().map(|leaf| blake2b_256(leaf)).collect();
 
     // Pad to next power of 2
     let target = level.len().next_power_of_two();
@@ -139,7 +138,7 @@ pub fn generate_merkle_proof(leaves: &[Vec<u8>], leaf_index: usize) -> Vec<([u8;
             let mut combined = Vec::with_capacity(64);
             combined.extend_from_slice(&pair[0]);
             combined.extend_from_slice(&pair[1]);
-            next_level.push(blake2b_hash(&combined));
+            next_level.push(blake2b_256(&combined));
         }
         level = next_level;
         idx /= 2;

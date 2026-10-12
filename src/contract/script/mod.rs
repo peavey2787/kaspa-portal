@@ -1,6 +1,6 @@
 mod locktime;
 mod number;
-pub mod opcode;
+pub use crate::primitives::opcode;
 pub mod p2sh;
 mod push;
 mod standard;

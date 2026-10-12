@@ -1,7 +1,7 @@
 // Kaspa protocol implementation
 // SPDX-License-Identifier: GPL-3.0-only
 
-use crate::{transaction::sighash::blake2b_hash, wallet::key::xpub::KpubParts};
+use crate::wallet::key::xpub::KpubParts;
 
 use super::{
     constants::{MAX_MULTISIG_KEYS, MAX_MULTISIG_WALLETS, MAX_SCRIPT_SIZE},
@@ -124,7 +124,7 @@ impl MultisigConfig {
         let Some(length) = encode_redeem(self.m, self.n, &children, &mut redeem) else {
             return false;
         };
-        blake2b_hash(&redeem[..length]) == *script_hash
+        crate::primitives::address::script_hash(&redeem[..length]) == *script_hash
     }
 
     /// Sort 45' cosigner parents into the v1.0.6/rusty-kaspa canonical order.

@@ -54,17 +54,29 @@ pub fn encode_lower_hex(source: &[u8], destination: &mut [u8]) -> Option<usize> 
 /// Decode canonical lowercase hexadecimal text.
 #[inline]
 pub fn decode_lower_hex(source: &[u8], destination: &mut [u8]) -> Option<usize> {
+    decode_hex_with(source, destination, decode_lower_hex_nibble)
+}
+
+/// Decode hexadecimal text in either case.
+#[inline]
+pub fn decode_hex(source: &[u8], destination: &mut [u8]) -> Option<usize> {
+    decode_hex_with(source, destination, decode_hex_nibble)
+}
+
+fn decode_hex_with(
+    source: &[u8],
+    destination: &mut [u8],
+    nibble: fn(u8) -> Option<u8>,
+) -> Option<usize> {
     if source.len() & 1 != 0 {
         return None;
     }
     let required = source.len() / 2;
-    if destination.len() < required {
-        return None;
-    }
-    for index in 0..required {
-        let high = decode_lower_hex_nibble(source[index * 2])?;
-        let low = decode_lower_hex_nibble(source[index * 2 + 1])?;
-        destination[index] = high.wrapping_shl(4).wrapping_add(low);
+    let destination = destination.get_mut(..required)?;
+    for (pair, byte) in source.as_chunks::<2>().0.iter().zip(destination) {
+        *byte = nibble(pair[0])?
+            .wrapping_shl(4)
+            .wrapping_add(nibble(pair[1])?);
     }
     Some(required)
 }

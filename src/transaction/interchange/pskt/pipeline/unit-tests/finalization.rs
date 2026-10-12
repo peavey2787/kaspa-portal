@@ -6,7 +6,7 @@ use super::super::test_support::{
 };
 use super::{finalize_json, pskt_verified_signature_counts, Network};
 use crate::contract::script::{push_data, push_int};
-use crate::transaction::interchange::pskt::pipeline::specialized::blake2b32;
+use crate::primitives::hash::blake2b_256;
 
 #[test]
 fn generic_finalizer_covers_p2pk_globals_defaults_and_explicit_covenants() {
@@ -530,7 +530,7 @@ fn commit_reveal_claim_document() -> Value {
     let part_b = b"reveal".to_vec();
     let mut preimage = part_a.clone();
     preimage.extend_from_slice(&part_b);
-    let commitment = blake2b32(&preimage);
+    let commitment = blake2b_256(&preimage);
 
     let mut redeem = vec![0x63]; // IF
     push_data(&mut redeem, &xonly(owner));
@@ -561,7 +561,7 @@ fn merkle_claim_document_with_direction(direction: u8) -> Value {
     let owner = 0x71;
     let destination = vec![0x00, 0x00, 0x51];
     let sibling = [0x72; 32];
-    let leaf = blake2b32(&destination);
+    let leaf = blake2b_256(&destination);
     let (left, right) = if direction == 0 {
         (sibling, leaf)
     } else {
@@ -570,7 +570,7 @@ fn merkle_claim_document_with_direction(direction: u8) -> Value {
     let mut pair = [0u8; 64];
     pair[..32].copy_from_slice(&left);
     pair[32..].copy_from_slice(&right);
-    let root = blake2b32(&pair);
+    let root = blake2b_256(&pair);
 
     let mut redeem = vec![0x63];
     push_data(&mut redeem, &xonly(owner));

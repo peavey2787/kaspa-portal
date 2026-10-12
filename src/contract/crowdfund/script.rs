@@ -36,19 +36,13 @@ pub fn crowdfund_campaign_id(
     verifying_key_hash: &[u8; 32],
     organizer_output_spk: &[u8],
 ) -> [u8; 32] {
-    let mut state = blake2b_simd::Params::new()
-        .hash_length(32)
-        .key(b"KaspaPortalCrowdfundV1")
-        .to_state();
-    state.update(verifying_key_hash);
-    state.update(&goal_sompi.to_le_bytes());
-    state.update(&locktime_daa.to_le_bytes());
-    state.update(&(organizer_output_spk.len() as u64).to_le_bytes());
-    state.update(organizer_output_spk);
-    let digest = state.finalize();
-    let mut out = [0u8; 32];
-    out.copy_from_slice(digest.as_bytes());
-    out
+    crate::primitives::hash::Blake2b256::keyed(b"KaspaPortalCrowdfundV1")
+        .update(verifying_key_hash)
+        .update(&goal_sompi.to_le_bytes())
+        .update(&locktime_daa.to_le_bytes())
+        .update(&(organizer_output_spk.len() as u64).to_le_bytes())
+        .update(organizer_output_spk)
+        .finalize()
 }
 
 pub fn crowdfund_redeem_script(config: CrowdfundScript<'_>) -> Result<Vec<u8>, String> {

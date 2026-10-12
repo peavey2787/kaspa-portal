@@ -75,10 +75,7 @@ pub enum CovenantProofError {
 /// `genesis`; byte-for-byte the consensus computation.
 #[must_use]
 pub fn covenant_id(genesis: GenesisOutpoint, outputs: &[AuthorizedOutput<'_>]) -> [u8; 32] {
-    let mut state = blake2b_simd::Params::new()
-        .hash_length(32)
-        .key(COVENANT_ID_DOMAIN)
-        .to_state();
+    let mut state = crate::primitives::hash::Blake2b256::keyed(COVENANT_ID_DOMAIN);
     state
         .update(&genesis.transaction_id)
         .update(&genesis.index.to_le_bytes())
@@ -91,9 +88,7 @@ pub fn covenant_id(genesis: GenesisOutpoint, outputs: &[AuthorizedOutput<'_>]) -
             .update(&(output.spk_script.len() as u64).to_le_bytes())
             .update(output.spk_script);
     }
-    let mut id = [0u8; 32];
-    id.copy_from_slice(state.finalize().as_bytes());
-    id
+    state.finalize()
 }
 
 /// Proves `claimed` is the covenant created by the input spending `genesis`

@@ -30,11 +30,13 @@ mod sighash_type;
 mod signatures;
 mod transaction;
 
+pub use crate::primitives::opcode::{
+    OP_1, OP_2, OP_3, OP_4, OP_5, OP_BLAKE2B, OP_CHECKMULTISIG, OP_CHECKSIG, OP_DATA_32, OP_EQUAL,
+};
 pub use constants::{
     Hash256, SubnetworkId, TransactionLimits, DEFAULT_INPUT_CAPACITY, MAX_INPUTS,
     MAX_MULTISIG_KEYS, MAX_MULTISIG_WALLETS, MAX_OUTPUTS, MAX_PAYLOAD_SIZE, MAX_REDEEM_SIZE,
-    MAX_SCRIPT_SIZE, MAX_SIGS_PER_INPUT, OP_1, OP_2, OP_3, OP_4, OP_5, OP_BLAKE2B,
-    OP_CHECKMULTISIG, OP_CHECKSIG, OP_DATA_32, OP_EQUAL, REDEEM_POOL_SIZE, SUBNETWORK_ID_NATIVE,
+    MAX_SCRIPT_SIZE, MAX_SIGS_PER_INPUT, REDEEM_POOL_SIZE, SUBNETWORK_ID_NATIVE,
 };
 pub use input::{Ms45Hint, Outpoint, TransactionInput};
 pub use multisig::{MultisigConfig, MultisigStore};

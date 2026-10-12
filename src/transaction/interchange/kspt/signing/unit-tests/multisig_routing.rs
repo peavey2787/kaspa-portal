@@ -257,7 +257,7 @@ fn hd45_account_set_public_entry_point_signs_the_hint_selected_child() {
 
     let mut tx = super::transaction();
     tx.store_redeem(0, &redeem).expect("redeem");
-    let hash = crate::transaction::sighash::blake2b_hash(&redeem);
+    let hash = crate::primitives::hash::blake2b_256(&redeem);
     let outer = &mut tx.inputs[0].utxo_entry.script_public_key;
     outer.script[0] = OP_BLAKE2B;
     outer.script[1] = OP_DATA_32;

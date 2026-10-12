@@ -3,7 +3,7 @@ use crate::alloc_prelude::*;
 use k256::schnorr::{Signature as K256Signature, VerifyingKey};
 use serde_json::{Map, Value};
 
-use super::{relay_fields::find_pubkey_position, wire};
+use super::wire;
 use crate::{
     primitives::address::KaspaNetwork as Network, transaction::interchange::kspt::wire as kspt_wire,
 };

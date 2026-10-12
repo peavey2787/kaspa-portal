@@ -15,13 +15,17 @@
 
 // Stable Kaspa sighash facade.
 
-mod blake2b;
 mod components;
+
+/// Every Kaspa sighash hasher, sub-hashes and final digest, is keyed with
+/// this domain (rusty-kaspa `TransactionSigningHash`).
+fn signing_hasher() -> crate::primitives::hash::Blake2b256 {
+    crate::primitives::hash::Blake2b256::keyed(b"TransactionSigningHash")
+}
 mod digest;
 mod signing;
 mod source;
 
-pub use blake2b::{blake2b_hash, KaspaBlake2b};
 pub use digest::calculate_sighash;
 pub use signing::{sign_input, sign_input_with_entropy};
 pub use source::{SighashInput, SighashOutput, SighashSource};

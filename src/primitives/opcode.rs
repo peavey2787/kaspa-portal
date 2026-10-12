@@ -1,3 +1,5 @@
+//! Kaspa script opcodes, shared by every script builder and parser.
+
 pub const OP_0: u8 = 0x00;
 pub const OP_IF: u8 = 0x63;
 pub const OP_ELSE: u8 = 0x67;
@@ -23,6 +25,7 @@ pub const OP_BLAKE2B: u8 = 0xaa;
 pub const OP_CHECKSIG: u8 = 0xac;
 pub const OP_DATA_32: u8 = 0x20;
 pub const OP_CHECKSIGVERIFY: u8 = 0xad;
+pub const OP_CHECKMULTISIG: u8 = 0xae;
 pub const OP_CHECKLOCKTIMEVERIFY: u8 = 0xb0;
 pub const OP_CHECKSEQUENCEVERIFY: u8 = 0xb1;
 pub const OP_TX_INPUT_COUNT: u8 = 0xb3;
@@ -42,4 +45,8 @@ pub const OP_COV_OUTPUT_IDX: u8 = 0xd3;
 pub const OP_OUTPUT_COVENANT_ID: u8 = 0xd5;
 pub const OP_CHECKSIGFROMSTACK: u8 = 0xd7;
 pub const OP_1: u8 = 0x51;
+pub const OP_2: u8 = 0x52;
+pub const OP_3: u8 = 0x53;
+pub const OP_4: u8 = 0x54;
+pub const OP_5: u8 = 0x55;
 pub const OP_16: u8 = 0x60;

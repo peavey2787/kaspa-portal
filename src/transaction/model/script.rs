@@ -13,12 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use super::constants::{
-    MAX_MULTISIG_KEYS, MAX_SCRIPT_SIZE, OP_1, OP_5, OP_BLAKE2B, OP_CHECKMULTISIG, OP_CHECKSIG,
-    OP_DATA_32, OP_EQUAL,
+use super::constants::{MAX_MULTISIG_KEYS, MAX_SCRIPT_SIZE};
+use crate::primitives::{
+    multisig_script,
+    opcode::{OP_BLAKE2B, OP_CHECKSIG, OP_DATA_32, OP_EQUAL},
 };
-
-const MIN_MULTISIG_SCRIPT_LEN: usize = 1 + 33 + 1 + 1;
 
 // ─── Script Public Key ────────────────────────────────────────────────
 
@@ -131,42 +130,25 @@ fn is_p2sh_script(script: &[u8], len: usize) -> bool {
         && script.get(34) == Some(&OP_EQUAL)
 }
 
-fn is_multisig_script(script: &[u8], len: usize) -> bool {
-    let Some((_, n)) = multisig_thresholds(script, len) else {
-        return false;
-    };
-    let expected_len = 1 + n * 33 + 1 + 1;
-    len == expected_len && (0..n).all(|index| script.get(1 + index * 33) == Some(&OP_DATA_32))
+/// A multisig redeem script within this model's key capacity.
+fn signer_multisig(script: &[u8], len: usize) -> Option<multisig_script::MultisigScript<'_>> {
+    multisig_script::parse(script.get(..len)?)
+        .filter(|parsed| usize::from(parsed.key_count()) <= MAX_MULTISIG_KEYS)
 }
 
-fn multisig_thresholds(script: &[u8], len: usize) -> Option<(usize, usize)> {
-    if len < MIN_MULTISIG_SCRIPT_LEN || script.get(len.checked_sub(1)?) != Some(&OP_CHECKMULTISIG) {
-        return None;
-    }
-    let m_byte = *script.first()?;
-    let n_byte = *script.get(len.checked_sub(2)?)?;
-    if !(OP_1..=OP_5).contains(&m_byte) || !(OP_1..=OP_5).contains(&n_byte) {
-        return None;
-    }
-    let m = usize::from(m_byte - OP_1 + 1);
-    let n = usize::from(n_byte - OP_1 + 1);
-    (m <= n && n <= MAX_MULTISIG_KEYS).then_some((m, n))
+fn is_multisig_script(script: &[u8], len: usize) -> bool {
+    signer_multisig(script, len).is_some()
 }
 
 /// Parse a multisig scriptPublicKey, extracting M, N, and pubkeys.
 /// Returns None if not a valid multisig script.
 pub fn parse_multisig_script(script: &[u8], len: usize) -> Option<MultisigInfo> {
-    if detect_script_type(script, len) != ScriptType::Multisig {
-        return None;
-    }
-    let m = script[0] - OP_1 + 1;
-    let n = script[len - 2] - OP_1 + 1;
+    let parsed = signer_multisig(script, len)?;
     let mut info = MultisigInfo::new();
-    info.m = m;
-    info.n = n;
-    for i in 0..n as usize {
-        let start = 1 + i * 33 + 1; // skip OP_m + i*(OP_DATA_32+pubkey) + OP_DATA_32
-        info.pubkeys[i].copy_from_slice(&script[start..start + 32]);
+    info.m = parsed.threshold();
+    info.n = parsed.key_count();
+    for (slot, key) in info.pubkeys.iter_mut().zip(parsed.keys()) {
+        *slot = key;
     }
     Some(info)
 }

@@ -29,7 +29,7 @@ fn nested_escrow() -> Vec<u8> {
 }
 
 fn document(redeem: &[u8], mask: u16, truth: u16) -> Value {
-    let hash = blake2b_simd::Params::new().hash_length(32).hash(redeem);
+    let hash = crate::primitives::hash::blake2b_256(redeem);
     json!({
         "global": {
             "version": 0, "txVersion": 0, "inputCount": 1, "outputCount": 1,
@@ -39,7 +39,7 @@ fn document(redeem: &[u8], mask: u16, truth: u16) -> Value {
             "previousOutpoint": {"transactionId": "22".repeat(32), "index": 7},
             "utxoEntry": {
                 "amount": "100000",
-                "scriptPublicKey": format!("0000aa20{}87", hex::encode(hash.as_bytes()))
+                "scriptPublicKey": format!("0000aa20{}87", hex::encode(hash))
             },
             "sequence": "0", "sigOpCount": 1, "sighashType": 1,
             "redeemScript": hex::encode(redeem),
@@ -162,9 +162,9 @@ fn signatures_outside_the_selected_path_or_incomplete_selectors_never_finalize()
 }
 
 fn p2sh(redeem: &[u8]) -> Vec<u8> {
-    let hash = blake2b_simd::Params::new().hash_length(32).hash(redeem);
+    let hash = crate::primitives::hash::blake2b_256(redeem);
     let mut script = vec![0xaa, 0x20];
-    script.extend_from_slice(hash.as_bytes());
+    script.extend_from_slice(&hash);
     script.push(0x87);
     script
 }

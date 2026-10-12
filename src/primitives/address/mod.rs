@@ -93,12 +93,7 @@ pub fn encode_p2sh_address(script_hash: &[u8; 32], prefix: &str) -> String {
 
 #[must_use]
 pub fn script_hash(redeem_script: &[u8]) -> [u8; 32] {
-    let hash = blake2b_simd::Params::new()
-        .hash_length(32)
-        .hash(redeem_script);
-    let mut output = [0u8; 32];
-    output.copy_from_slice(hash.as_bytes());
-    output
+    crate::primitives::hash::blake2b_256(redeem_script)
 }
 
 pub fn script_to_p2sh_address(redeem_script: &[u8], prefix: &str) -> String {

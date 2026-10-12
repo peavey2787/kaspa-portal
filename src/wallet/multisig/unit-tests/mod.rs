@@ -208,7 +208,7 @@ fn redeem_script_validation_covers_threshold_count_and_conversion_boundaries() {
     let too_many = vec![[0x33u8; 32]; 256];
     assert!(build_redeem_script(1, &too_many)
         .unwrap_err()
-        .contains("Too many multisig"));
+        .contains("Invalid 1-of-256"));
 }
 
 #[test]

@@ -91,8 +91,8 @@ pub(crate) fn sign_first_input(
 /// of `redeem` when one is given.
 pub(crate) fn unsigned_document(redeem: Option<&[u8]>, signer: u8) -> serde_json::Value {
     let input_script = if let Some(redeem) = redeem {
-        let hash = blake2b_simd::Params::new().hash_length(32).hash(redeem);
-        format!("0000aa20{}87", hex::encode(hash.as_bytes()))
+        let hash = crate::primitives::hash::blake2b_256(redeem);
+        format!("0000aa20{}87", hex::encode(hash))
     } else {
         format!("000020{}ac", hex::encode(xonly(signer)))
     };

@@ -336,7 +336,7 @@ fn v106_hd45_script_hash_vector_is_exact() {
     }
     assert!(config.build_script() > 0);
     assert_eq!(
-        crate::transaction::sighash::blake2b_hash(&config.script[..config.script_len]),
+        crate::primitives::hash::blake2b_256(&config.script[..config.script_len]),
         EXPECTED_HASH,
     );
 }
@@ -364,7 +364,7 @@ fn descriptor_backed_hd45_change_verification_rejects_only_forged_claims() {
         derived.chain = chain as u8;
         derived.addr_index = index;
         assert!(derived.build_script() > 0);
-        let hash = crate::transaction::sighash::blake2b_hash(&derived.script[..derived.script_len]);
+        let hash = crate::primitives::hash::blake2b_256(&derived.script[..derived.script_len]);
         let mut spk = ScriptPublicKey::new();
         spk.script_len = 35;
         spk.script[0] = OP_BLAKE2B;

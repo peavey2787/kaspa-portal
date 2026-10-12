@@ -4,8 +4,7 @@ use super::super::verified::witness::push_data;
 use super::{
     parse_merkle_proof, recognize_commit_reveal, recognize_merkle, recognize_oracle_v1,
     recognize_private_swap, CommitTemplate, Input, K256Signature, Map, MerkleProofItem,
-    MerkleTemplate, OracleTemplate, Params, Signature, SpecializedRoute, Value, VerifyingKey, OP_0,
-    OP_1,
+    MerkleTemplate, OracleTemplate, Signature, SpecializedRoute, Value, VerifyingKey, OP_0, OP_1,
 };
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
@@ -129,7 +128,7 @@ pub(crate) fn validate_commit_reveal_claim(
     let mut preimage = Vec::with_capacity(part_a.len() + part_b.len());
     preimage.extend_from_slice(part_a);
     preimage.extend_from_slice(part_b);
-    if blake2b32(&preimage) != template.commitment {
+    if crate::primitives::hash::blake2b_256(&preimage) != template.commitment {
         return Err(format!(
             "input[{index}] commit-reveal preimage does not match redeem commitment"
         ));
@@ -214,7 +213,7 @@ pub(crate) fn verify_merkle_root(
     proof: &[MerkleProofItem],
     expected_root: [u8; 32],
 ) -> Result<(), String> {
-    let mut current = blake2b32(dest_spk);
+    let mut current = crate::primitives::hash::blake2b_256(dest_spk);
     for item in proof {
         current = merkle_step(current, item);
     }
@@ -235,7 +234,7 @@ pub(crate) fn merkle_step(current: [u8; 32], item: &MerkleProofItem) -> [u8; 32]
         pair[..32].copy_from_slice(&item.sibling);
         pair[32..].copy_from_slice(&current);
     }
-    blake2b32(&pair)
+    crate::primitives::hash::blake2b_256(&pair)
 }
 
 pub(crate) fn build_merkle_witness(
@@ -307,11 +306,4 @@ fn push_signature(script: &mut Vec<u8>, signature: &Signature) -> Result<(), Str
         &signature.bytes,
         signature.sighash,
     )
-}
-
-pub(crate) fn blake2b32(data: &[u8]) -> [u8; 32] {
-    let hash = Params::new().hash_length(32).hash(data);
-    let mut out = [0u8; 32];
-    out.copy_from_slice(hash.as_bytes());
-    out
 }

@@ -1,8 +1,7 @@
 //! Merge a signed compact KSPT back into its original PSKT.
 
 use super::{
-    find_pubkey_position, parse, verify_all_signatures, wire, Input, Map, Network, Signature,
-    Transaction, Value,
+    parse, verify_all_signatures, wire, Input, Map, Network, Signature, Transaction, Value,
 };
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
@@ -253,12 +252,5 @@ pub(crate) fn insert_signature(
 }
 
 pub(crate) fn multisig_xonly(redeem: &[u8], position: u8) -> Option<[u8; 32]> {
-    let public_key = (0u8..=u8::MAX).find_map(|candidate| {
-        let start = 2usize.checked_add(usize::from(candidate).checked_mul(33)?)?;
-        let key = redeem.get(start..start + 32)?;
-        let mut prefixed = String::from("02");
-        prefixed.push_str(&hex::encode(key));
-        (find_pubkey_position(redeem, &prefixed) == Some(position)).then_some(key)
-    })?;
-    public_key.try_into().ok()
+    crate::primitives::multisig_script::parse(redeem)?.key(position)
 }

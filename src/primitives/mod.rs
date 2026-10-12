@@ -3,7 +3,10 @@ use crate::alloc_prelude::*;
 pub mod address;
 
 pub mod bytes;
+pub mod hash;
 pub mod limits;
+pub mod multisig_script;
+pub mod opcode;
 pub mod qr_payload;
 pub mod serialization;
 pub mod utxo;

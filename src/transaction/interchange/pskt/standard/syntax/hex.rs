@@ -1,17 +1,11 @@
 //! Strict lowercase hexadecimal conversion.
 
 use super::super::PskError;
-use crate::primitives::bytes::{decode_lower_hex_nibble, encode_lower_hex};
+use crate::primitives::bytes::{decode_lower_hex, encode_lower_hex};
 
 // ═══════════════════════════════════════════════════════════════════════
 // Strict hex decoder
 // ═══════════════════════════════════════════════════════════════════════
-
-/// Map the shared canonical lowercase nibble primitive into the PSKT error.
-#[inline]
-fn decode_nibble(value: u8) -> Result<u8, PskError> {
-    decode_lower_hex_nibble(value).ok_or(PskError::BadHexChar)
-}
 
 /// Strict lowercase-hex decoder.
 ///
@@ -41,12 +35,8 @@ pub fn hex_decode_strict(src: &[u8], dst: &mut [u8]) -> Result<usize, PskError> 
     if dst.len() < need {
         return Err(PskError::ScratchBufferTooSmall);
     }
-    for (index, pair) in src.as_chunks::<2>().0.iter().enumerate() {
-        let hi = decode_nibble(pair[0])?;
-        let lo = decode_nibble(pair[1])?;
-        dst[index] = hi * 16 + lo;
-    }
-    Ok(need)
+    // Length and capacity are checked above, so only a bad digit can fail.
+    decode_lower_hex(src, dst).ok_or(PskError::BadHexChar)
 }
 
 /// Encode bytes as lowercase hex into `dst`, returning the number of

@@ -7,12 +7,12 @@ fn test_keyed_differs() -> bool {
     let data = b"test data for keyed hash check";
 
     // Unkeyed
-    let plain = blake2b_hash(data);
+    let plain = crate::primitives::hash::blake2b_256(data);
 
     // Keyed with signing hash domain key
-    let mut h = KaspaBlake2b::new();
-    h.update(data);
-    let keyed = h.finalize();
+    let keyed = crate::primitives::hash::Blake2b256::keyed(b"TransactionSigningHash")
+        .update(data)
+        .finalize();
 
     // They MUST differ — if they're the same, keying is not working
     plain != keyed

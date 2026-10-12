@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 use kaspa_portal::randomness::extractor::{extract_and_fold, ExtractorConfig};
 
 fn randomness_benches(c: &mut Criterion) {

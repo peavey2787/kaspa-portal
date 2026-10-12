@@ -9,6 +9,8 @@ examine_globs = [
   # Cryptography and key material.
   "src/crypto/**/*.rs",
   "src/primitives/bytes.rs",
+  "src/primitives/hash.rs",
+  "src/primitives/multisig_script.rs",
   "src/primitives/address/**/*.rs",
   "src/wallet/key/**/*.rs",
   "src/wallet/derivation/**/*.rs",

@@ -15,15 +15,12 @@
 //
 // Total overhead: 33 + 12 + 16 = 61 bytes over plaintext.
 
+use crate::primitives::hash::Blake2b256;
 use aes_gcm::{
     aead::{generic_array::GenericArray, AeadInPlace, KeyInit},
     Aes256Gcm,
 };
-use blake2::digest::consts::U32;
-use blake2::{Blake2b, Digest};
 use k256::{elliptic_curve::sec1::ToEncodedPoint, AffinePoint, ProjectivePoint, Scalar, SecretKey};
-
-type Blake2b256 = Blake2b<U32>;
 
 /// Encrypt plaintext for a recipient identified by their 32-byte x-only pubkey.
 /// Returns the ciphertext in wire format (33 + 12 + N + 16 bytes).
@@ -60,7 +57,7 @@ pub fn encrypt(
     let mut hasher = Blake2b256::new();
     hasher.update(b"KaspaPortal-ECIES-v1");
     hasher.update(shared_x);
-    let aes_key: [u8; 32] = hasher.finalize().into();
+    let aes_key: [u8; 32] = hasher.finalize();
 
     // 5. AES-256-GCM encrypt (detached: ciphertext in-place, tag returned separately)
     let nonce_bytes: &[u8; 12] = rng_bytes[32..44].try_into().unwrap();
@@ -127,7 +124,7 @@ pub fn decrypt(
     let mut hasher = Blake2b256::new();
     hasher.update(b"KaspaPortal-ECIES-v1");
     hasher.update(shared_x);
-    let aes_key: [u8; 32] = hasher.finalize().into();
+    let aes_key: [u8; 32] = hasher.finalize();
 
     // 5. AES-256-GCM decrypt (detached: split ciphertext and tag)
     let encrypted = &ciphertext_wire[45..];
