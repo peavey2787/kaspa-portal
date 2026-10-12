@@ -272,6 +272,11 @@ fn claim_sighash_enforces_transaction_role_destination_and_fee_policy() {
         Err(PrivateSwapError::InvalidTransaction)
     );
 
+    let (mut maximum_fee, _) = claim_transaction();
+    maximum_fee.inputs[0].utxo_entry.amount = PRIVATE_SWAP_MAX_FEE_SOMPI + 10_000;
+    maximum_fee.outputs[0].value = 10_000;
+    assert!(private_swap_claim_sighash(&maximum_fee, &claimer).is_ok());
+
     let (mut excessive_fee, _) = claim_transaction();
     excessive_fee.inputs[0].utxo_entry.amount = PRIVATE_SWAP_MAX_FEE_SOMPI + 10_000;
     excessive_fee.outputs[0].value = 9_999;

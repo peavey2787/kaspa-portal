@@ -39,13 +39,10 @@
 //   - Child mnemonics are cryptographically independent from parent
 //   - Knowing a child mnemonic does NOT reveal the parent or other children
 
-use super::bip32;
+use super::bip32::{self, HARDENED_BIT};
 use super::hmac::{hmac_sha512, zeroize_buf};
 use crate::wallet::mnemonic::bip39;
 use crate::wallet::mnemonic::bip39::{Mnemonic12, Mnemonic24};
-
-/// BIP32 hardened derivation bit
-const HARDENED_BIT: u32 = 0x8000_0000;
 
 // ─── Constants ──────────────────────────────────────────────────────
 

@@ -50,38 +50,22 @@ fn extract_error_message(data: &[u8]) -> Option<String> {
 pub(crate) fn decode_tagged_error(data: &[u8]) -> String {
     if data.len() > 5 {
         let encoded_length = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
-        let length = match usize::try_from(encoded_length) {
-            Ok(length) => length,
-            Err(_) => usize::MAX,
-        };
+        let length = usize::try_from(encoded_length).unwrap_or(usize::MAX);
         let end = 5usize.saturating_add(length).min(data.len());
         return String::from_utf8_lossy(&data[5..end]).into_owned();
     }
     "transaction rejected by node".into()
 }
 
+/// The success body: an optional `1` tag, a `u32` length, then the bytes
+/// (clipped to what arrived). Inputs too short to hold that are returned whole.
 fn unwrap_success(data: &[u8]) -> &[u8] {
     if data.len() <= 5 {
         return data;
     }
-    let start = if data[0] == 1 { 1 } else { 0 };
-    if start + 4 > data.len() {
-        return data;
-    }
-    let length_bytes = [
-        data[start],
-        data[start + 1],
-        data[start + 2],
-        data[start + 3],
-    ];
-    let encoded_length = u32::from_le_bytes(length_bytes);
-    let length = match usize::try_from(encoded_length) {
-        Ok(length) => length,
-        Err(_) => usize::MAX,
-    };
-    let end = start
-        .saturating_add(4)
-        .saturating_add(length)
-        .min(data.len());
-    &data[start + 4..end]
+    let body = &data[usize::from(data[0] == 1)..];
+    let (length, rest) = body.split_at(4);
+    let length = u32::from_le_bytes([length[0], length[1], length[2], length[3]]);
+    let length = usize::try_from(length).unwrap_or(usize::MAX);
+    &rest[..length.min(rest.len())]
 }

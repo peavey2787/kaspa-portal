@@ -131,12 +131,25 @@ pub fn field_spec(scope: Scope, name: &[u8]) -> Option<&'static FieldSpec> {
         .find(|spec| spec.name.as_bytes() == name)
 }
 
+// Presence is tracked in a `u64`, one bit per field of a scope.
+const _: () = assert!(
+    TOP_LEVEL_FIELDS.len() <= 64
+        && GLOBAL_FIELDS.len() <= 64
+        && INPUT_FIELDS.len() <= 64
+        && UTXO_FIELDS.len() <= 64
+        && OUTPOINT_FIELDS.len() <= 64
+        && OUTPUT_FIELDS.len() <= 64
+        && COVENANT_EXECUTION_FIELDS.len() <= 64
+        && COVENANT_BINDING_FIELDS.len() <= 64
+        && PARTIAL_SIGNATURE_FIELDS.len() <= 64
+);
+
 #[must_use]
 pub fn field_bit(scope: Scope, name: &[u8]) -> Option<u64> {
     fields(scope)
         .iter()
         .position(|spec| spec.name.as_bytes() == name)
-        .and_then(|index| (index < 64).then_some(1u64 << index))
+        .map(|index| 1u64 << index)
 }
 
 #[must_use]
@@ -144,8 +157,9 @@ pub fn required_mask(scope: Scope) -> u64 {
     fields(scope)
         .iter()
         .enumerate()
-        .filter_map(|(index, spec)| (spec.required && index < 64).then_some(1u64 << index))
-        .fold(0u64, |mask, bit| mask | bit)
+        .filter(|(_, spec)| spec.required)
+        .map(|(index, _)| 1u64 << index)
+        .sum()
 }
 
 #[must_use]
@@ -249,11 +263,6 @@ pub const fn supported_tx_version_u64(version: u64) -> bool {
 #[must_use]
 pub fn default_rule(scope: Scope, name: &[u8]) -> DefaultRule {
     field_spec(scope, name).map_or(DefaultRule::None, |spec| spec.default)
-}
-
-#[must_use]
-pub fn value_kind(scope: Scope, name: &[u8]) -> Option<ValueKind> {
-    field_spec(scope, name).map(|spec| spec.kind)
 }
 
 mod json;

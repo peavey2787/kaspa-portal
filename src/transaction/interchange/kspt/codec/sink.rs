@@ -3,7 +3,7 @@
 
 use crate::{
     primitives::address::KaspaNetwork,
-    transaction::model::{Ms45Hint, SigHashType, Transaction, TransactionStorageError},
+    transaction::model::{Ms45Hint, SigHashType, Transaction},
 };
 
 use super::super::{
@@ -21,13 +21,6 @@ const fn ms45_hint(value: Ms45Derivation) -> Ms45Hint {
         cosigner: value.cosigner,
         chain: value.chain,
         index: value.index,
-    }
-}
-
-fn payload_error(error: TransactionStorageError) -> PsktError {
-    match error {
-        TransactionStorageError::PayloadTooLarge => PsktError::PayloadTooLong,
-        _ => PsktError::StorageExhausted,
     }
 }
 
@@ -51,7 +44,9 @@ impl DecodeSink for TransactionSink<'_> {
         tx.locktime = value.locktime;
         tx.subnetwork_id = value.subnetwork_id;
         tx.gas = value.gas;
-        tx.set_payload(value.payload).map_err(payload_error)
+        // The grammar limit is the model's own, so only allocation can fail.
+        tx.set_payload(value.payload)
+            .map_err(|_| PsktError::StorageExhausted)
     }
 
     fn input(

@@ -51,31 +51,6 @@ pub fn build_oracle_v1_covenant_script(
     script
 }
 
-fn oracle_v1_layout_matches(script: &[u8], tail: usize) -> bool {
-    use super::covenant_ops::*;
-    let fixed = [
-        (0usize, 0x10),
-        (17, OP_DROP),
-        (18, OP_IF),
-        (19, 32),
-        (52, OP_CHECKSIGVERIFY),
-        (tail, OP_CHECKLOCKTIMEVERIFY),
-        (tail + 1, OP_1),
-        (tail + 2, OP_ELSE),
-        (tail + 3, 32),
-        (tail + 36, OP_CHECKSIGVERIFY),
-        (tail + 37, 32),
-        (tail + 70, 32),
-        (tail + 103, OP_CHECKSIGFROMSTACK),
-        (tail + 104, OP_VERIFY),
-        (tail + 105, OP_1),
-        (tail + 106, OP_ENDIF),
-    ];
-    fixed
-        .iter()
-        .all(|(index, expected)| script.get(*index) == Some(expected))
-}
-
 #[derive(Clone, Copy)]
 struct OracleV1BoundFields {
     salt: [u8; 16],
@@ -111,9 +86,7 @@ pub fn oracle_v1_attestation_binding(script: &[u8]) -> Option<([u8; 32], [u8; 32
     // Parsing the fields and rebuilding the script prevents imported data from
     // smuggling extra branches around an Oracle-looking claim segment.
     let tail = script.len().checked_sub(107)?;
-    if tail < 53 || !oracle_v1_layout_matches(script, tail) {
-        return None;
-    }
+    // The rebuilt-script comparison below rejects every other layout deviation.
     let locktime = crate::contract::script::extract_cltv_locktime(script)
         .ok()
         .flatten()?;

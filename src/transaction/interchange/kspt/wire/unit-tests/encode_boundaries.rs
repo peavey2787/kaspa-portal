@@ -11,6 +11,7 @@ struct EncoderBoundarySource {
     signature_count: usize,
     duplicate_signatures: bool,
     sighash: u8,
+    sig_op_count: u8,
     derivation: Option<Derivation>,
     ms45: Option<Ms45Derivation>,
 }
@@ -28,6 +29,7 @@ impl EncoderBoundarySource {
             signature_count: 1,
             duplicate_signatures: false,
             sighash: 0x01,
+            sig_op_count: 1,
             derivation: None,
             ms45: None,
         }
@@ -57,7 +59,7 @@ impl EncodeSource for EncoderBoundarySource {
             previous_index: 0,
             amount: 10,
             sequence: 0,
-            sig_op_count: 1,
+            sig_op_count: self.sig_op_count,
             script_version: 0,
             script: &self.input_script,
         }
@@ -337,5 +339,18 @@ fn canonical_encoder_rejects_input_counts_above_consumer_limit_before_trailer_po
     assert_eq!(
         encode_vec(&WideInputSource(EncoderBoundarySource::new())),
         Err(WireError::TooManyInputs),
+    );
+}
+
+#[test]
+fn encoder_admits_sig_op_counts_up_to_the_signature_capacity() {
+    let mut buffer = [0u8; 1024];
+    let mut source = EncoderBoundarySource::new();
+    source.sig_op_count = MAX_SIGNATURE_RECORDS as u8;
+    assert!(encode(&source, &mut buffer).is_ok());
+    source.sig_op_count += 1;
+    assert_eq!(
+        encode(&source, &mut buffer),
+        Err(WireError::TooManySignatures)
     );
 }

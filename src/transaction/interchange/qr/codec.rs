@@ -93,7 +93,7 @@ fn qr_to_svg(data: &[u8]) -> Result<String, String> {
     let modules = code.to_colors();
     let size = code.width();
     let border = 2;
-    let total = size + 2 * border;
+    let total = border + size + border;
 
     let svg_capacity = total.saturating_mul(total).saturating_mul(60);
     let mut svg = String::with_capacity(svg_capacity);

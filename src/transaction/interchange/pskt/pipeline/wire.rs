@@ -6,10 +6,11 @@ use crate::transaction::interchange::kspt::wire::{valid_derivation, Derivation};
 
 use crate::transaction::interchange::pskt::model::{PSKB_MAGIC, PSKT_MAGIC};
 
-/// The offline signer stores decoded JSON length in u16; enforce the same
-/// ceiling before host-side hex/JSON allocations can grow without bound.
-/// Largest decoded PSKT JSON body accepted.
-pub const MAX_PSKT_JSON_BYTES: usize = u16::MAX as usize;
+/// Largest decoded PSKT JSON body accepted, bounding host-side hex/JSON
+/// allocations: a maximum payload as hex plus 64 KiB for every other field.
+/// Embedded signers enforce their own, smaller document limits.
+pub const MAX_PSKT_JSON_BYTES: usize =
+    2 * crate::transaction::model::MAX_PAYLOAD_SIZE + u16::MAX as usize;
 /// Largest hex PSKT/PSKB envelope accepted before allocation.
 pub const MAX_PSKT_WIRE_HEX_CHARS: usize = 2 * (4 + 2 * MAX_PSKT_JSON_BYTES);
 

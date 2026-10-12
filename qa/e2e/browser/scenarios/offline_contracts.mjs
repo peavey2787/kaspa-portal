@@ -48,6 +48,13 @@ export async function wasm_offline_contracts(page, fixture, covenantNetwork) {
       { index: 0, amountSompi: '123000000', version: 0, scriptHex: Array.from(taggedVault, (b) => b.toString(16).padStart(2, '0')).join('') },
       { index: 1, amountSompi: '45000000', version: 0, scriptHex: Array.from(splitVault, (b) => b.toString(16).padStart(2, '0')).join('') },
     ]));
+    const outputsJson = JSON.stringify([
+      { index: 0, amountSompi: '123000000', version: 0, scriptHex: Array.from(taggedVault, (b) => b.toString(16).padStart(2, '0')).join('') },
+      { index: 1, amountSompi: '45000000', version: 0, scriptHex: Array.from(splitVault, (b) => b.toString(16).padStart(2, '0')).join('') },
+    ]);
+    contract.verifyCovenantGenesis(covenantId, '88'.repeat(32), 3, outputsJson);
+    let forgedGenesisRefused = false;
+    try { contract.verifyCovenantGenesis(covenantId, '88'.repeat(32), 4, outputsJson); } catch { forgedGenesisRefused = true; }
     const setup = JSON.parse(contract.zkTrustedSetup());
     const proof = JSON.parse(contract.zkProveCrowdfund(setup.provingKey, JSON.stringify(['10000000','20000000','30000000'])));
     const zkValid = contract.zkVerify(setup.verifyingKey, proof.proof, proof.publicInput);
@@ -58,7 +65,7 @@ export async function wasm_offline_contracts(page, fixture, covenantNetwork) {
       campaignId, crowdfundScript: Array.from(crowdfundScript), merkleRoot, merkleProof,
       heartbeat: Array.from(heartbeat), heartbeatSig: Array.from(heartbeatSig), consumerSig: Array.from(consumerSig),
       sequenceProof, shipping: Array.from(shipping), taggedVault: Array.from(taggedVault), splitVault: Array.from(splitVault),
-      covenantId, proofTotal: proof.totalSompi, zkValid,
+      covenantId, forgedGenesisRefused, proofTotal: proof.totalSompi, zkValid,
     };
   }, { fixture, covenantNetwork, covenantPrefix: addressPrefix(covenantNetwork) });
   const hex = (a) => Buffer.from(a).toString('hex');
@@ -89,6 +96,7 @@ export async function wasm_offline_contracts(page, fixture, covenantNetwork) {
   expect(hex(result.taggedVault)).toBe(fixture.contract.taggedVault);
   expect(hex(result.splitVault)).toBe(fixture.contract.splitVault);
   expect(result.covenantId).toBe(fixture.contract.covenantId);
+  expect(result.forgedGenesisRefused).toBe(true);
   expect(result.proofTotal).toBe('60000000');
   expect(result.zkValid).toBe(true);
 }

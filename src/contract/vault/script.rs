@@ -52,51 +52,6 @@ pub fn build_tagged_vault_script(owner_pubkey: &[u8; 32]) -> Vec<u8> {
     s
 }
 
-/// Compute a KIP-20 covenant_id from a genesis outpoint and authorized outputs.
-///
-/// Replicates the consensus computation in hashing/covenant_id.rs:
-///   blake2b(key=b"CovenantID", hash_length=32):
-///     update(transaction_id)            // 32 bytes
-///     update(index as u32 LE)           // 4 bytes
-///     update(num_outputs as u64 LE)     // 8 bytes
-///     for each output:
-///       update(output_index as u32 LE)  // 4 bytes
-///       update(value as u64 LE)         // 8 bytes
-///       update(spk_version as u16 LE)   // 2 bytes
-///       update(script_len as u64 LE)    // 8 bytes (write_var_bytes)
-///       update(script)                  // raw bytes
-pub fn compute_covenant_id(
-    prev_txid: &[u8; 32],
-    prev_index: u32,
-    auth_outputs: &[(u32, u64, u16, &[u8])], // (out_idx, value, spk_version, spk_script)
-) -> [u8; 32] {
-    let state = blake2b_simd::Params::new()
-        .hash_length(32)
-        .key(b"CovenantID")
-        .to_state();
-    let mut h = state;
-
-    // outpoint
-    h.update(prev_txid);
-    h.update(&prev_index.to_le_bytes());
-
-    // num outputs
-    h.update(&(auth_outputs.len() as u64).to_le_bytes());
-
-    for &(idx, value, spk_ver, spk_script) in auth_outputs {
-        h.update(&idx.to_le_bytes());
-        h.update(&value.to_le_bytes());
-        h.update(&spk_ver.to_le_bytes());
-        // write_var_bytes: len as u64 LE, then bytes
-        h.update(&(spk_script.len() as u64).to_le_bytes());
-        h.update(spk_script);
-    }
-
-    let mut out = [0u8; 32];
-    out.copy_from_slice(h.finalize().as_bytes());
-    out
-}
-
 // ================================================================
 // Split Vault: one input splits into two tagged outputs (KIP-20)
 // ================================================================

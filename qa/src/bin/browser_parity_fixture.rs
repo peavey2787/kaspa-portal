@@ -3,7 +3,11 @@ use std::{env, fs, path::PathBuf};
 use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
     chain::utxo::UtxoEntry,
-    contract::{crowdfund::CrowdfundScript, shipping_escrow::ShippingEscrowScriptRequest},
+    contract::{
+        covenant::identity::{AuthorizedOutput, GenesisOutpoint},
+        crowdfund::CrowdfundScript,
+        shipping_escrow::ShippingEscrowScriptRequest,
+    },
     indexer::{IndexedBlock, IndexedTransaction, IndexerApi, IndexerConfig},
     primitives::{address::address_to_script_pubkey, NetworkId},
     randomness::{
@@ -28,7 +32,7 @@ use kaspa_portal::{
 };
 use serde_json::json;
 
-const RELAY_KSPT_HEX: &str = "4b53505401000000010000000100000000000000000000000000000000000000000000000000000000000000000000000000001111111111111111111111111111111111111111111111111111111111111111010000006400000000000000000000000000000001000022204444444444444444444444444444444444444444444444444444444444444444ac0000005a00000000000000000022205555555555555555555555555555555555555555555555555555555555555555ac4e01";
+const RELAY_KSPT_HEX: &str = "4b535054010000000100000001000000000000000000000000000000000000000000000000000000000000000000000000000000001111111111111111111111111111111111111111111111111111111111111111010000006400000000000000000000000000000001000022204444444444444444444444444444444444444444444444444444444444444444ac0000005a00000000000000000022205555555555555555555555555555555555555555555555555555555555555555ac4e01";
 
 fn deterministic_kpub(seed_byte: u8) -> String {
     let seed = [seed_byte; 64];
@@ -294,12 +298,24 @@ fn main() {
         .expect("shipping escrow");
     let tagged = contract.vault().tagged(&owner);
     let split = contract.vault().split(&owner);
-    let covenant_id = contract.vault().covenant_id(
-        &[0x88; 32],
-        3,
+    let covenant_id = contract.covenant().id(
+        GenesisOutpoint {
+            transaction_id: [0x88; 32],
+            index: 3,
+        },
         &[
-            (0, 123_000_000, 0, tagged.as_slice()),
-            (1, 45_000_000, 0, split.as_slice()),
+            AuthorizedOutput {
+                index: 0,
+                value: 123_000_000,
+                spk_version: 0,
+                spk_script: tagged.as_slice(),
+            },
+            AuthorizedOutput {
+                index: 1,
+                value: 45_000_000,
+                spk_version: 0,
+                spk_script: split.as_slice(),
+            },
         ],
     );
 

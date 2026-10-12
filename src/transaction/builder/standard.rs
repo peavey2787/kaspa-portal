@@ -45,7 +45,7 @@ pub async fn create_send_with_payload(
 ) -> Result<String, String> {
     if payload.len() > crate::transaction::model::MAX_PAYLOAD_SIZE {
         return Err(format!(
-            "transaction payload exceeds KSPT v1 limit of {} bytes",
+            "transaction payload exceeds the {}-byte consensus limit",
             crate::transaction::model::MAX_PAYLOAD_SIZE
         ));
     }

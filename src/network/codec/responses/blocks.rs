@@ -9,7 +9,8 @@ use crate::network::{
 /// Kaspa wRPC success payloads start with this marker before the
 /// length-prefixed `Serializable` response (see the UTXO response vector).
 const RESPONSE_PRESENT: u8 = 1;
-const MAX_BLOB_BYTES: usize = 64 * 1024 * 1024;
+/// 64 MiB.
+const MAX_BLOB_BYTES: usize = 67_108_864;
 /// A node answers one bounded page of the DAG past `low_hash`.
 const MAX_BLOCKS: usize = 100_000;
 

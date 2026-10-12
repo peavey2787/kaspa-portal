@@ -2,6 +2,10 @@
 use crate::alloc_prelude::*;
 use serde::Serialize;
 
+use crate::contract::covenant::identity::{
+    verify_genesis, AuthorizedOutput, CovenantGenesis, CovenantProofError, GenesisOutpoint,
+};
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConsensusInput {
@@ -52,6 +56,47 @@ pub struct ConsensusTransaction {
 pub type SpentUtxo = (u64, usize, bool);
 
 impl ConsensusTransaction {
+    /// Extracts the genesis group bound to `claimed` from this genesis
+    /// transaction and verifies it. Every output bound to the ID must name the
+    /// same authorizing input.
+    pub fn covenant_genesis(
+        &self,
+        claimed: &[u8; 32],
+    ) -> Result<CovenantGenesis<'_>, CovenantProofError> {
+        let mut authorizing_input = None;
+        let mut outputs = Vec::new();
+        for (index, output) in self.outputs.iter().enumerate() {
+            let Some((input, _)) = output.covenant.filter(|(_, id)| id == claimed) else {
+                continue;
+            };
+            if *authorizing_input.get_or_insert(input) != input {
+                return Err(CovenantProofError::MixedAuthorizingInputs);
+            }
+            outputs.push(AuthorizedOutput {
+                index: u32::try_from(index).map_err(|_| CovenantProofError::OutputsNotOrdered)?,
+                value: output.value,
+                spk_version: output.spk_version,
+                spk_script: &output.spk_script,
+            });
+        }
+        let authorizing_input = authorizing_input.ok_or(CovenantProofError::NoAuthorizedOutputs)?;
+        let input = self
+            .inputs
+            .get(usize::from(authorizing_input))
+            .ok_or(CovenantProofError::NoSuchInput(authorizing_input))?;
+        let outpoint = GenesisOutpoint {
+            transaction_id: input.prev_tx_id,
+            index: input.prev_index,
+        };
+        verify_genesis(claimed, outpoint, &outputs)?;
+        Ok(CovenantGenesis {
+            covenant_id: *claimed,
+            outpoint,
+            authorizing_input,
+            outputs,
+        })
+    }
+
     /// KIP-9 storage mass for spending `inputs` into `outputs`.
     pub fn storage_mass_for(
         inputs: &[SpentUtxo],
@@ -76,3 +121,7 @@ impl ConsensusTransaction {
         storage_mass_estimate(&input_cells, &output_cells)
     }
 }
+
+#[cfg(test)]
+#[path = "unit-tests/model.rs"]
+mod unit_tests;

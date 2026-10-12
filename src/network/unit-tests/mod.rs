@@ -20,6 +20,7 @@ fn wrpc_operation_codes_cover_every_known_and_unknown_value() {
         Operation::GetSink,
         Operation::SubmitTransaction,
         Operation::GetBlock,
+        Operation::GetBlocks,
         Operation::GetBlockDagInfo,
         Operation::GetUtxosByAddresses,
         Operation::GetFeeEstimate,

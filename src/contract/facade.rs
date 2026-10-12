@@ -5,6 +5,11 @@ use crate::{
     },
     error::{Error, Result},
 };
+use covenant::identity;
+
+fn proof_error(error: identity::CovenantProofError) -> Error {
+    Error::Contract(error.to_string())
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ContractApi;
@@ -79,6 +84,31 @@ impl ScriptApi {
 }
 
 impl CovenantApi {
+    /// KIP-20 covenant ID of `outputs` authorized by the input spending `genesis`.
+    pub fn id(
+        &self,
+        genesis: identity::GenesisOutpoint,
+        outputs: &[identity::AuthorizedOutput<'_>],
+    ) -> [u8; 32] {
+        identity::covenant_id(genesis, outputs)
+    }
+    /// Proves `claimed` was created by the input spending `genesis` with `outputs`.
+    pub fn verify_genesis(
+        &self,
+        claimed: &[u8; 32],
+        genesis: identity::GenesisOutpoint,
+        outputs: &[identity::AuthorizedOutput<'_>],
+    ) -> Result<()> {
+        identity::verify_genesis(claimed, genesis, outputs).map_err(proof_error)
+    }
+    /// Proves `output` locks `redeem_script` through P2SH.
+    pub fn verify_redeem_script(
+        &self,
+        output: &identity::AuthorizedOutput<'_>,
+        redeem_script: &[u8],
+    ) -> Result<()> {
+        identity::verify_redeem_script(output, redeem_script).map_err(proof_error)
+    }
     pub fn dms(&self, owner: &[u8; 32], heir: &[u8; 32], inactivity_daa: u64) -> Vec<u8> {
         covenant::build_dms_csv_script(owner, heir, inactivity_daa)
     }
@@ -201,14 +231,6 @@ impl VaultApi {
     }
     pub fn split(&self, owner: &[u8; 32]) -> Vec<u8> {
         vault::build_split_vault_script(owner)
-    }
-    pub fn covenant_id(
-        &self,
-        prev_txid: &[u8; 32],
-        prev_index: u32,
-        outputs: &[(u32, u64, u16, &[u8])],
-    ) -> [u8; 32] {
-        vault::compute_covenant_id(prev_txid, prev_index, outputs)
     }
 }
 

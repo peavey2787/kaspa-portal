@@ -196,3 +196,39 @@ fn the_longest_address_fits_the_output_buffer() {
         0
     );
 }
+
+#[test]
+fn convert_bits_pads_only_a_partial_final_group() {
+    // 40 bits regroup exactly into 8 five-bit groups: no padding group.
+    assert_eq!(convert_bits(&[0xff; 5], 8, 5, true).unwrap(), vec![31; 8]);
+    // 8 bits leave 3 bits, padded with two zero bits: 0b111_00.
+    assert_eq!(convert_bits(&[0xff], 8, 5, true).unwrap(), vec![31, 28]);
+    // 16 bits leave 1 bit, padded with four zero bits: 0b1_0000.
+    assert_eq!(
+        convert_bits(&[0xff, 0xff], 8, 5, true).unwrap(),
+        vec![31, 31, 31, 16]
+    );
+}
+
+#[test]
+fn convert_bits_rejects_out_of_range_values_and_bad_padding() {
+    assert_eq!(convert_bits(&[31, 28], 5, 8, false).unwrap(), vec![0xff]);
+    assert!(convert_bits(&[32], 5, 8, false).is_err());
+    // Non-zero padding bits.
+    assert!(convert_bits(&[31, 29], 5, 8, false).is_err());
+    // A whole spare input group (5 leftover bits) is not padding.
+    assert!(convert_bits(&[31, 28, 0], 5, 8, false).is_err());
+    // 4 leftover zero bits are valid padding.
+    assert_eq!(
+        convert_bits(&[31, 31, 31, 16], 5, 8, false).unwrap(),
+        vec![0xff, 0xff]
+    );
+    assert!(convert_bits(&[31, 31, 31, 24], 5, 8, false).is_err());
+}
+
+#[test]
+fn polymod_matches_reference_values() {
+    assert_eq!(polymod([].into_iter()), 1);
+    assert_eq!(polymod([0u8].into_iter()), 32);
+    assert_eq!(polymod([31u8].into_iter()), 63);
+}

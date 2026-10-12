@@ -143,7 +143,7 @@ fn compact_parser_grows_inputs_only_as_wire_records_are_consumed() {
     // The largest count the format admits must reach the missing-record error
     // without reserving that many TransactionInput values first; anything
     // larger is refused outright.
-    let mut wire = [0u8; 51];
+    let mut wire = [0u8; 53];
     wire[..4].copy_from_slice(b"KSPT");
     wire[4] = 1;
     wire[8..12].copy_from_slice(&u32::MAX.to_le_bytes());
@@ -225,7 +225,7 @@ fn compact_codec_accepts_dynamic_inputs_and_fixed_global_boundaries() {
     tx.outputs[0].script_public_key.script[..MAX_SCRIPT_SIZE].fill(0x62);
     add_single_signature(&mut tx, 0, [0x63; 64]);
 
-    let mut wire = vec![0u8; 128 * 1024];
+    let mut wire = vec![0u8; MAX_PAYLOAD_SIZE + 16 * 1024];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize exact limits");
     let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse exact limits");
@@ -258,7 +258,7 @@ fn unsigned_compact_wire() -> (Vec<u8>, usize) {
 const V1_INPUT_COUNT_OFFSET: usize = 4 + 1 + 1 + 2;
 const V1_OUTPUT_COUNT_OFFSET: usize = V1_INPUT_COUNT_OFFSET + 4;
 const V1_PAYLOAD_LEN_OFFSET: usize = V1_OUTPUT_COUNT_OFFSET + 1 + 8 + 20 + 8;
-const V1_FIRST_INPUT_OFFSET: usize = V1_PAYLOAD_LEN_OFFSET + 2;
+const V1_FIRST_INPUT_OFFSET: usize = V1_PAYLOAD_LEN_OFFSET + 4;
 const V1_FIRST_INPUT_SPK_LEN_OFFSET: usize = V1_FIRST_INPUT_OFFSET + 32 + 4 + 8 + 8 + 1 + 2;
 const FIXTURE_INPUT_SPK_LEN: usize = 34;
 const V1_FIRST_OUTPUT_OFFSET: usize =

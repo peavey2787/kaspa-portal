@@ -35,9 +35,13 @@ pub const MAX_SCRIPT_SIZE: usize = 512;
 /// uses this larger ceiling. RAM cost: +6 KB (8 inputs x 768 extra).
 pub const MAX_REDEEM_SIZE: usize = 1024;
 
-/// Largest application payload the KSPT v1 `u16` length field can carry.
+pub use crate::primitives::limits::MAX_SERIALIZED_TRANSACTION_BYTES;
+
+/// Largest application payload a transaction may carry. No transaction can
+/// exceed [`MAX_SERIALIZED_TRANSACTION_BYTES`], so this is the payload
+/// ceiling; mass analysis then checks that the whole transaction fits.
 /// Signers with less memory pass a lower [`TransactionLimits`].
-pub const MAX_PAYLOAD_SIZE: usize = u16::MAX as usize;
+pub const MAX_PAYLOAD_SIZE: usize = MAX_SERIALIZED_TRANSACTION_BYTES;
 
 /// Per-transaction resource ceilings. The defaults are the KSPT v1 format
 /// limits; an embedded signer constructs transactions with its own, lower
@@ -49,7 +53,7 @@ pub struct TransactionLimits {
 }
 
 impl TransactionLimits {
-    /// The KSPT v1 wire-format ceilings.
+    /// The KSPT wire-format ceilings.
     pub const FORMAT: Self = Self {
         max_inputs: MAX_INPUTS,
         max_payload_bytes: MAX_PAYLOAD_SIZE,

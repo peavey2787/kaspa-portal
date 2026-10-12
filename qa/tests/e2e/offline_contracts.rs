@@ -1,5 +1,10 @@
 use kaspa_portal::{
-    contract::{crowdfund::CrowdfundScript, shipping_escrow::ShippingEscrowScriptRequest},
+    contract::{
+        covenant::identity::{AuthorizedOutput, GenesisOutpoint},
+        crowdfund::CrowdfundScript,
+        shipping_escrow::ShippingEscrowScriptRequest,
+    },
+    primitives::address::script_hash,
     KaspaPortal,
 };
 
@@ -143,15 +148,41 @@ fn rust_offline_contracts() {
     assert!(!tagged.is_empty());
     assert!(!split.is_empty());
     assert_ne!(tagged, split);
-    let covenant_id = vault.covenant_id(
-        &[0x88; 32],
-        3,
-        &[
-            (0, 123_000_000, 0, tagged.as_slice()),
-            (1, 45_000_000, 0, split.as_slice()),
-        ],
-    );
+    // A covenant genesis is provable from its outpoint, authorized outputs
+    // and published redeem script alone.
+    let mut tagged_p2sh = vec![0xaa, 0x20];
+    tagged_p2sh.extend_from_slice(&script_hash(&tagged));
+    tagged_p2sh.push(0x87);
+    let genesis = GenesisOutpoint {
+        transaction_id: [0x88; 32],
+        index: 3,
+    };
+    let outputs = [
+        AuthorizedOutput {
+            index: 0,
+            value: 123_000_000,
+            spk_version: 0,
+            spk_script: tagged_p2sh.as_slice(),
+        },
+        AuthorizedOutput {
+            index: 1,
+            value: 45_000_000,
+            spk_version: 0,
+            spk_script: split.as_slice(),
+        },
+    ];
+    let covenant_id = covenant.id(genesis, &outputs);
     assert_ne!(covenant_id, [0u8; 32]);
+    covenant
+        .verify_genesis(&covenant_id, genesis, &outputs)
+        .expect("genesis proof");
+    assert!(covenant
+        .verify_genesis(&covenant_id, genesis, &outputs[..1])
+        .is_err());
+    covenant
+        .verify_redeem_script(&outputs[0], &tagged)
+        .expect("redeem script proof");
+    assert!(covenant.verify_redeem_script(&outputs[0], &split).is_err());
 
     let (proving_key, verifying_key) = zk.trusted_setup().expect("Groth16 trusted setup");
     assert!(!proving_key.is_empty());

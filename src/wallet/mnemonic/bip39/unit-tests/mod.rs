@@ -81,7 +81,8 @@ fn checkpointed_seed_derivation_matches_normal_seed() {
         seed_from_mnemonic_12_with_checkpoint(&mnemonic, "KaspaPortal", &mut callback);
     let mut normal = seed_from_mnemonic_12(&mnemonic, "KaspaPortal");
     assert_eq!(checkpointed.bytes, normal.bytes);
-    assert!(checkpoints >= 32);
+    // Once after U1, after every 64th of the 2047 later rounds, and at the end.
+    assert_eq!(checkpoints, 1 + 31 + 1);
     checkpointed.zeroize();
     normal.zeroize();
 }

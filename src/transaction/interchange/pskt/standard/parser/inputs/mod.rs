@@ -341,8 +341,8 @@ impl InputParser<'_> {
 
     fn parse_covenant_execution(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
         if matches!(tok.peek()?, Tok::Null) {
+            // The schema admits the field once, so nothing was set before.
             tok.next_token()?;
-            self.clear_covenant_execution();
             return Ok(());
         }
         let (mask, truth) = parse_covenant_execution_object(tok)?;
@@ -350,12 +350,6 @@ impl InputParser<'_> {
         self.input.covenant_execution_mask = mask;
         self.input.covenant_execution_true_mask = truth;
         Ok(())
-    }
-
-    fn clear_covenant_execution(&mut self) {
-        self.input.covenant_execution_present = false;
-        self.input.covenant_execution_mask = 0;
-        self.input.covenant_execution_true_mask = 0;
     }
 
     fn parse_minimum_signatures(

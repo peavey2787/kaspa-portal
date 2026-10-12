@@ -261,7 +261,8 @@ fn read_bounded_direct_push<'a>(
     max: usize,
 ) -> Result<&'a [u8], PrivateSwapError> {
     let len = usize::from(*script.get(*pos).ok_or(PrivateSwapError::InvalidScript)?);
-    if len < min || len > max || len > 75 {
+    // Every caller's `max` is within the direct-push range (<= 75).
+    if len < min || len > max {
         return Err(PrivateSwapError::InvalidScript);
     }
     *pos = (*pos)

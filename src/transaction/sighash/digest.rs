@@ -15,12 +15,13 @@
 
 // Final Kaspa transaction signing digest assembly.
 
-use crate::transaction::model::{Hash256, SigHashType, Transaction};
+use crate::transaction::model::{Hash256, SigHashType};
 
 use super::blake2b::KaspaBlake2b;
 use super::components::{
     outputs_hash, payload_hash, previous_outputs_hash, sequences_hash, sig_op_counts_hash,
 };
+use super::source::SighashSource;
 
 /// Incremental keyed Blake2b-256 hasher for the final sighash digest.
 struct SigHasher {
@@ -72,12 +73,12 @@ impl SigHasher {
 /// `sighash_type`: sighash type (normally SigHashAll)
 ///
 /// Returns 32 bytes = keyed Blake2b of the sighash digest.
-pub fn calculate_sighash(
-    tx: &Transaction,
+pub fn calculate_sighash<T: SighashSource + ?Sized>(
+    tx: &T,
     input_index: usize,
     sighash_type: SigHashType,
 ) -> Hash256 {
-    let input = &tx.inputs[input_index];
+    let input = tx.input(input_index);
 
     let prev_outputs = previous_outputs_hash(tx, sighash_type);
     let sequences = sequences_hash(tx, sighash_type);
@@ -88,7 +89,7 @@ pub fn calculate_sighash(
     let mut h = SigHasher::new();
 
     // 1. tx.Version (2 bytes LE)
-    h.update_u16_le(tx.version);
+    h.update_u16_le(tx.version());
 
     // 2. previousOutputsHash (32 bytes)
     h.update_hash(&prev_outputs);
@@ -97,34 +98,34 @@ pub fn calculate_sighash(
     h.update_hash(&sequences);
 
     // 4. sigOpCountsHash (32 bytes) — only for version 0
-    if tx.version == 0 {
+    if tx.version() == 0 {
         let sig_op_counts = sig_op_counts_hash(tx, sighash_type);
         h.update_hash(&sig_op_counts);
     }
 
     // 5. txIn.PreviousOutpoint.TransactionID (32 bytes)
-    h.update_hash(&input.previous_outpoint.transaction_id);
+    h.update_hash(input.transaction_id);
 
     // 6. txIn.PreviousOutpoint.Index (4 bytes LE)
-    h.update_u32_le(input.previous_outpoint.index);
+    h.update_u32_le(input.index);
 
     // 7. txIn.PreviousOutput.ScriptPubKeyVersion (2 bytes LE)
-    h.update_u16_le(input.utxo_entry.script_public_key.version);
+    h.update_u16_le(input.script_version);
 
     // 8. txIn.PreviousOutput.ScriptPubKey.length (8 bytes LE)
-    h.update_u64_le(input.utxo_entry.script_public_key.script_len as u64);
+    h.update_u64_le(input.script.len() as u64);
 
     // 9. txIn.PreviousOutput.ScriptPubKey (variable)
-    h.update_bytes(input.utxo_entry.script_public_key.script_bytes());
+    h.update_bytes(input.script);
 
     // 10. txIn.PreviousOutput.Value (8 bytes LE)
-    h.update_u64_le(input.utxo_entry.amount);
+    h.update_u64_le(input.amount);
 
     // 11. txIn.Sequence (8 bytes LE)
     h.update_u64_le(input.sequence);
 
     // 12. txIn.SigOpCount (1 byte) — only for version 0
-    if tx.version == 0 {
+    if tx.version() == 0 {
         h.update_u8(input.sig_op_count);
     }
 
@@ -132,13 +133,13 @@ pub fn calculate_sighash(
     h.update_hash(&outputs);
 
     // 14. tx.Locktime (8 bytes LE)
-    h.update_u64_le(tx.locktime);
+    h.update_u64_le(tx.locktime());
 
     // 15. tx.SubnetworkID (20 bytes)
-    h.update_bytes(&tx.subnetwork_id);
+    h.update_bytes(tx.subnetwork_id());
 
     // 16. tx.Gas (8 bytes LE)
-    h.update_u64_le(tx.gas);
+    h.update_u64_le(tx.gas());
 
     // 17. payloadHash (32 bytes)
     h.update_hash(&payload);

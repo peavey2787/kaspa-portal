@@ -260,3 +260,29 @@ fn hd45_keys_and_derivation_maps_reject_chains_beyond_change() {
         .unwrap_err()
         .contains("chain"));
 }
+
+#[test]
+fn participant_length_errors_report_the_offending_participant_length() {
+    let error = |descriptor: &str| MultisigDescriptor::parse(descriptor).unwrap_err();
+    assert_eq!(
+        error(&format!("multi(1,abcd, {})", "02".repeat(32))),
+        "Pubkey must be 64 hex chars, got 4"
+    );
+    assert_eq!(
+        error(&format!(
+            "multi_hd(1, {} ,{})",
+            "00".repeat(60),
+            "02".repeat(65)
+        )),
+        "Cosigner xpub must be 130 hex chars, got 120"
+    );
+    // A label line before the descriptor is skipped.
+    assert_eq!(
+        error(&format!(
+            "vault
+  multi(1,abc,{})",
+            "02".repeat(32)
+        )),
+        "Pubkey must be 64 hex chars, got 3"
+    );
+}

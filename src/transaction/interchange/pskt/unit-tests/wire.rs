@@ -81,3 +81,17 @@ fn outer_envelope_is_lowercase_hex_within_the_signer_ceiling() {
         "outer hex: payload exceeds signer-compatible resource ceiling"
     );
 }
+
+#[test]
+fn outer_envelope_at_the_resource_ceiling_is_accepted() {
+    use crate::transaction::interchange::pskt::pipeline::{
+        encode_json_body, MAX_PSKT_JSON_BYTES, MAX_PSKT_WIRE_HEX_CHARS,
+    };
+
+    let largest = serde_json::Value::String("a".repeat(MAX_PSKT_JSON_BYTES - 2));
+    let mut pskt = Vec::from(*b"PSKT");
+    pskt.extend_from_slice(&encode_json_body(&largest).expect("largest body"));
+    let wire = hex::encode(pskt);
+    assert_eq!(wire.len(), MAX_PSKT_WIRE_HEX_CHARS);
+    assert_eq!(decode_root(&wire).map(|(_, root)| root), Ok(largest));
+}

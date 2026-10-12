@@ -2,7 +2,8 @@ use crate::network::{
     codec::primitives::WireReader, error::NetworkError, model::fee_estimate::FeeEstimate,
 };
 
-const MAX_BLOB_BYTES: usize = 1024 * 1024;
+/// 1 MiB.
+const MAX_BLOB_BYTES: usize = 1_048_576;
 const MAX_BUCKETS: usize = 10_000;
 
 fn estimate_blob(data: &[u8]) -> Result<&[u8], NetworkError> {

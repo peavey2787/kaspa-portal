@@ -237,3 +237,7 @@ fn covenant_material(
         context.cached_address_material(seed_index, target)
     }
 }
+
+#[cfg(test)]
+#[path = "covenant/unit-tests/mod.rs"]
+mod unit_tests;

@@ -159,3 +159,17 @@ fn utxo_response_accepts_length_prefix_whose_first_byte_is_sentinel() {
     response.extend_from_slice(&outer);
     assert!(utxo::decode(&response).unwrap().is_empty());
 }
+
+#[test]
+fn utxo_entry_count_limit_is_inclusive() {
+    use crate::network::error::NetworkError;
+
+    // At the limit the count is accepted and decoding stops at the missing entry.
+    let at_limit = utxo::decode(&wrap_entries(&1_000_000u32.to_le_bytes())).unwrap_err();
+    assert!(
+        !matches!(at_limit, NetworkError::InvalidLength),
+        "{at_limit:?}"
+    );
+    let over = utxo::decode(&wrap_entries(&1_000_001u32.to_le_bytes())).unwrap_err();
+    assert!(matches!(over, NetworkError::InvalidLength), "{over:?}");
+}

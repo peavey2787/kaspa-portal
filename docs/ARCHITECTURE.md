@@ -70,7 +70,7 @@ The public native BlockAdded decoder/API lives in `network`; transport/WebSocket
 
 ## Transaction payload boundary
 
-KSPT v1's payload length is a little-endian `u16`, so Portal's application-payload ceiling is exactly 65,535 bytes. The transaction model stores payloads in `Vec<u8>` and KSPT encode/decode paths reject values beyond that format limit. Standard PSKT parser offsets/decoded-JSON lengths are wider than `u16`, because a maximum-size binary payload represented as JSON/hex is itself larger than 65,535 bytes.
+KSPT v1's payload length is a little-endian `u32`. Portal's application-payload ceiling is `MAX_PAYLOAD_SIZE` = 250,000 bytes, the largest serialized transaction a Toccata block admits (1,000,000-gram transient limit at 4 grams per byte); mass analysis then decides whether the complete transaction fits. The transaction model stores payloads in `Vec<u8>`, and embedded signers pass a lower `TransactionLimits::max_payload_bytes`.
 
 `plan_send_with_payload()` performs payload-aware mass/fee estimation before final UTXO selection and then validates the resulting plan's actual output-script lengths and payload size before encoding.
 

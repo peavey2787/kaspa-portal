@@ -171,9 +171,9 @@ fn canonical_decoder_rejects_header_capacity_and_required_trailer_boundaries() {
 
 #[test]
 fn canonical_decoder_rejects_signature_and_script_boundaries() {
-    const SIGNATURE_COUNT_OFFSET: usize = 110;
-    const SIGNATURE_POSITION_OFFSET: usize = 111;
-    const SIGNATURE_SIGHASH_OFFSET: usize = 112;
+    const SIGNATURE_COUNT_OFFSET: usize = 112;
+    const SIGNATURE_POSITION_OFFSET: usize = 113;
+    const SIGNATURE_SIGHASH_OFFSET: usize = 114;
 
     let mut wire = encode_vec(&OneInputSource::new()).expect("one-input vector");
     wire[SIGNATURE_COUNT_OFFSET] = (MAX_SIGNATURE_RECORDS as u8) + 1;
@@ -239,8 +239,8 @@ fn canonical_decoder_rejects_signature_and_script_boundaries() {
     assert_wire_error(&wire, WireError::DuplicateSignaturePosition);
 
     let mut wire = encode_vec(&VectorSource::minimal(MAX_SCRIPT_SIZE)).expect("max script vector");
-    // header (6) + global (45) + output amount/version (10)
-    let script_prefix = 61usize;
+    // header (6) + global (47) + output amount/version (10)
+    let script_prefix = 63usize;
     assert_eq!(wire[script_prefix], EXTENDED_SCRIPT_LENGTH);
     wire[script_prefix + 1..script_prefix + 3]
         .copy_from_slice(&((MAX_SCRIPT_SIZE + 1) as u16).to_le_bytes());

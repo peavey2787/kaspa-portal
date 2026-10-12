@@ -71,7 +71,7 @@ fn write_global(writer: &mut Writer<'_>, value: Global<'_>) -> Result<(), WireEr
     writer.u64(value.locktime)?;
     writer.bytes(&value.subnetwork_id)?;
     writer.u64(value.gas)?;
-    writer.u16(u16::try_from(value.payload.len()).map_err(|_| WireError::CountOverflow)?)?;
+    writer.u32(u32::try_from(value.payload.len()).map_err(|_| WireError::CountOverflow)?)?;
     writer.bytes(value.payload)
 }
 

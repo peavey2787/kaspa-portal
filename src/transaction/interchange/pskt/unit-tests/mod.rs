@@ -223,7 +223,7 @@ fn transaction_lane_rejects_uppercase_subnetworks_and_oversized_payloads() {
     let oversized = vec![0u8; crate::transaction::model::MAX_PAYLOAD_SIZE + 1];
     assert!(set_tx_lane(&wire, &"00".repeat(20), 0, 0, &oversized)
         .unwrap_err()
-        .contains("exceeds KSPT v1 limit"));
+        .contains("consensus limit"));
 }
 
 fn pskb_wire(document: Value) -> String {
@@ -234,3 +234,62 @@ fn pskb_wire(document: Value) -> String {
 }
 
 mod wire;
+
+#[test]
+fn every_pskb_payload_entry_point_admits_exactly_the_consensus_ceiling() {
+    use crate::transaction::model::MAX_PAYLOAD_SIZE;
+
+    let wire = pskb_wire(serde_json::json!([{"global": {}, "inputs": [], "outputs": []}]));
+    let max = vec![0x5a; MAX_PAYLOAD_SIZE];
+    let over = vec![0x5a; MAX_PAYLOAD_SIZE + 1];
+    assert!(set_payload(&wire, &max).is_ok());
+    assert!(set_payload(&wire, &over)
+        .unwrap_err()
+        .contains("consensus limit"));
+    assert!(set_tx_lane(&wire, &"00".repeat(20), 0, 0, &max).is_ok());
+    assert!(set_tx_lane(&wire, &"00".repeat(20), 0, 0, &over)
+        .unwrap_err()
+        .contains("consensus limit"));
+
+    let input = crate::primitives::utxo::UtxoEntry {
+        tx_id: "22".repeat(32),
+        index: 0,
+        amount: 1_000_000,
+        script_public_key: [&[0x20][..], &[0x11; 32], &[0xac]].concat(),
+        block_daa_score: 0,
+        covenant_id: None,
+    };
+    let output = pskb::PskbOutput {
+        amount: 1_000,
+        script: vec![0x51],
+        covenant: None,
+        derivation_hint: None,
+        bip32_derivations: None,
+    };
+    let encode = |payload: &[u8]| {
+        pskb::encode_covenant_with_payload(
+            core::slice::from_ref(&input),
+            core::slice::from_ref(&output),
+            payload,
+        )
+    };
+    assert!(encode(&max).is_ok());
+    assert!(encode(&over).unwrap_err().contains("consensus limit"));
+}
+
+#[test]
+fn review_reads_the_declared_transaction_version_of_a_single_pskt() {
+    use crate::transaction::interchange::pskt::pipeline::test_support::unsigned_document;
+
+    let summary =
+        |documents: Vec<Value>| parse_summary(&pskb_wire(Value::Array(documents)), "kaspa");
+    let zero = unsigned_document(None, 0x11);
+    let mut one = zero.clone();
+    one["global"]["txVersion"] = serde_json::json!(1);
+    assert_eq!(summary(vec![zero.clone()]).expect("v0").tx_version, 0);
+    assert_eq!(summary(vec![one]).expect("v1").tx_version, 1);
+    assert!(summary(vec![zero.clone(), zero])
+        .err()
+        .expect("two entries")
+        .contains("exactly 1"));
+}

@@ -1,8 +1,9 @@
 //! KSPT trailer extensions: derivations, MuSig-45 paths, stealth and covenant bindings.
 
-use super::{parse_derivation, parse_exact_u64, parse_ms45, Params, Transaction, Value};
+use super::{parse_derivation, parse_exact_u64, parse_ms45, Transaction, Value};
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
+use crate::contract::covenant::identity;
 
 pub(crate) fn apply_derivations(
     transaction: &mut Transaction,
@@ -131,13 +132,17 @@ pub(crate) fn apply_persistent_vault_covenant(
     let Some(output) = transaction.outputs.first() else {
         return Ok(());
     };
-    let id = covenant_id(
-        &tx_id,
-        prev_index,
-        0,
-        output.amount,
-        output.script_version,
-        &output.script,
+    let id = identity::covenant_id(
+        identity::GenesisOutpoint {
+            transaction_id: tx_id,
+            index: prev_index,
+        },
+        &[identity::AuthorizedOutput {
+            index: 0,
+            value: output.amount,
+            spk_version: output.script_version,
+            spk_script: &output.script,
+        }],
     );
     transaction.outputs[0].covenant = Some((0, id));
     Ok(())
@@ -243,30 +248,4 @@ pub(crate) fn first_outpoint(inputs: &[Value]) -> Result<Option<([u8; 32], u32)>
     let index = u32::try_from(parse_exact_u64(index_value, "previousOutpoint.index")?)
         .map_err(|_| "input[0] previousOutpoint.index must be a u32".to_string())?;
     Ok(Some((id, index)))
-}
-
-pub(crate) fn covenant_id(
-    prev_tx_id: &[u8; 32],
-    prev_index: u32,
-    output_index: u32,
-    value: u64,
-    version: u16,
-    script: &[u8],
-) -> [u8; 32] {
-    let hash = Params::new()
-        .hash_length(32)
-        .key(b"CovenantID")
-        .to_state()
-        .update(prev_tx_id)
-        .update(&prev_index.to_le_bytes())
-        .update(&1u64.to_le_bytes())
-        .update(&output_index.to_le_bytes())
-        .update(&value.to_le_bytes())
-        .update(&version.to_le_bytes())
-        .update(&(script.len() as u64).to_le_bytes())
-        .update(script)
-        .finalize();
-    let mut output = [0u8; 32];
-    output.copy_from_slice(hash.as_bytes());
-    output
 }

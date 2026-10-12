@@ -207,6 +207,9 @@ fn benchmark_input_validation_covers_each_fail_closed_boundary() {
     let mut too_small = current;
     too_small.m_cost_kib = 1_023;
     ok &= validate_benchmark_inputs(PASSWORD, too_small) == rejected;
+    let mut floor = current;
+    floor.m_cost_kib = 1_024;
+    ok &= validate_benchmark_inputs(PASSWORD, floor) == Ok(());
     let mut no_iterations = current;
     no_iterations.t_cost = 0;
     ok &= validate_benchmark_inputs(PASSWORD, no_iterations) == rejected;

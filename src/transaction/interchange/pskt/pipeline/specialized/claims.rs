@@ -204,7 +204,7 @@ pub(crate) fn validate_merkle_claim(
 /// levels deep, so every bit fits.
 pub(crate) fn merkle_truth_from_proof(proof: &[MerkleProofItem]) -> u16 {
     proof.iter().enumerate().fold(0, |truth, (level, item)| {
-        truth | (u16::from(item.direction) << (level + 1))
+        truth + (u16::from(item.direction) << (level + 1))
     })
 }
 

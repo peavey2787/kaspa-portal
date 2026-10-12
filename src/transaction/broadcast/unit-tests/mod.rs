@@ -190,3 +190,26 @@ fn submission_error_decoder_strips_borsh_prefix_and_keeps_full_node_reason() {
     assert!(error.contains(reason));
     assert!(!error.contains('\u{fffd}'));
 }
+
+#[test]
+fn submission_unwrap_reads_the_declared_length_after_the_tag() {
+    use crate::network::codec::responses::submission::decode_tagged_error;
+
+    // Five bytes cannot hold a tag, length and body: returned whole.
+    assert_eq!(submission::decode(&[1, 2, 3, 4, 5]).unwrap(), "0102030405");
+    // Tagged: the length is bytes 1..5, the body follows and is clipped to it.
+    let mut tagged = vec![1];
+    tagged.extend_from_slice(&3u32.to_le_bytes());
+    tagged.extend_from_slice(&[0xa1, 0xa2, 0xa3, 0xa4]);
+    assert_eq!(submission::decode(&tagged).unwrap(), "a1a2a3");
+    // Untagged: the length is bytes 0..4.
+    let mut untagged = 3u32.to_le_bytes().to_vec();
+    untagged.extend_from_slice(&[0xb1, 0xb2, 0xb3, 0xb4]);
+    assert_eq!(submission::decode(&untagged).unwrap(), "b1b2b3");
+    // A tagged error needs a body byte beyond its length field.
+    assert_eq!(
+        decode_tagged_error(&[0, 1, 0, 0, 0]),
+        "transaction rejected by node"
+    );
+    assert_eq!(decode_tagged_error(&[0, 1, 0, 0, 0, b'x']), "x");
+}

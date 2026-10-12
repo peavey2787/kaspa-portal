@@ -149,19 +149,18 @@ impl GlobalParser<'_> {
                 if value.len() > self.tx.limits.max_payload_bytes.saturating_mul(2) {
                     return Err(PskError::InvalidScriptLen);
                 }
+                let length = value.len() / 2;
                 let mut decoded = alloc::vec::Vec::new();
                 decoded
-                    .try_reserve_exact(value.len() / 2)
+                    .try_reserve_exact(length)
                     .map_err(|_| PskError::StorageExhausted)?;
-                decoded.resize(value.len() / 2, 0);
-                let len = parse_hex_field(value, &mut decoded)?;
-                decoded.truncate(len);
-                self.tx.set_payload(&decoded).map_err(|error| match error {
-                    crate::transaction::model::TransactionStorageError::PayloadTooLarge => {
-                        PskError::InvalidScriptLen
-                    }
-                    _ => PskError::StorageExhausted,
-                })
+                decoded.resize(length, 0);
+                parse_hex_field(value, &mut decoded)?;
+                // The length check above keeps the payload within the model's
+                // limit, so only allocation can fail.
+                self.tx
+                    .set_payload(&decoded)
+                    .map_err(|_| PskError::StorageExhausted)
             }
             _ => Err(PskError::UnexpectedToken),
         }

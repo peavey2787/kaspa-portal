@@ -677,3 +677,35 @@ fn claim_sighash_is_the_single_input_sighash_all_digest() {
     assert_eq!(claim_sighash(&kspt), Err(PsktError::InvalidModel));
     assert!(claim_sighash(b"KSPT").is_err());
 }
+
+#[test]
+fn bind_request_with_the_largest_payload_round_trips_through_an_exact_buffer() {
+    let payload = [1u8; MAX_PAYLOAD_LEN];
+    let request = PrivateSwapRequest {
+        kind: RequestKind::Bind,
+        session_id: [0; SESSION_ID_LEN],
+        host_commitment: [0; 32],
+        key_id: [2; 32],
+        binding_token: [0; 32],
+        adaptor_point: [3; 32],
+        presignature: [0; 64],
+        presignature_negated: false,
+        payload: &payload,
+    };
+    let mut exact = [0u8; REQUEST_HEADER_LEN + MAX_PAYLOAD_LEN];
+    assert_eq!(
+        encode_request(&request, &mut exact),
+        Ok(REQUEST_HEADER_LEN + MAX_PAYLOAD_LEN)
+    );
+    assert_eq!(
+        parse_request(&exact).map(|parsed| parsed.payload.len()),
+        Ok(MAX_PAYLOAD_LEN)
+    );
+    assert_eq!(
+        encode_request(
+            &request,
+            &mut exact[..REQUEST_HEADER_LEN + MAX_PAYLOAD_LEN - 1]
+        ),
+        Err(ProtocolError::OutputTooSmall)
+    );
+}

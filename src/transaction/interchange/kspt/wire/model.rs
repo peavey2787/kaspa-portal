@@ -52,7 +52,11 @@ impl Limits {
 
     /// The widest limits the grammar itself permits.
     pub const fn grammar() -> Self {
-        Self::new(u32::MAX, MAX_OUTPUTS, u16::MAX as usize)
+        Self::new(
+            u32::MAX,
+            MAX_OUTPUTS,
+            crate::transaction::model::MAX_PAYLOAD_SIZE,
+        )
     }
 
     pub(crate) fn validate_inputs(self, input_count: u32) -> Result<(), super::WireError> {

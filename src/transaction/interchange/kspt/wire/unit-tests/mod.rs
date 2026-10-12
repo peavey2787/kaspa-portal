@@ -322,8 +322,8 @@ fn canonical_encoder_owns_trailer_order() {
 fn canonical_extended_script_length_marker_is_ff() {
     for length in [255usize, 512] {
         let wire = encode_vec(&VectorSource::minimal(length)).expect("extended script encode");
-        // header (6) + global (45) + output value/version (10)
-        let prefix = 61usize;
+        // header (6) + global (47) + output value/version (10)
+        let prefix = 63usize;
         assert_eq!(wire[prefix], EXTENDED_SCRIPT_LENGTH);
         assert_eq!(
             u16::from_le_bytes([wire[prefix + 1], wire[prefix + 2]]),
@@ -417,7 +417,7 @@ fn canonical_decoder_rejects_consumer_counts_before_rest_of_global_prefix() {
 
 #[test]
 fn canonical_decoder_applies_consumer_limits_before_variable_length_consumption() {
-    let mut excessive_inputs = [0u8; 51];
+    let mut excessive_inputs = [0u8; 53];
     excessive_inputs[..4].copy_from_slice(&MAGIC);
     excessive_inputs[4] = KSPT_VERSION;
     excessive_inputs[8..12].copy_from_slice(&u32::MAX.to_le_bytes());
@@ -428,12 +428,12 @@ fn canonical_decoder_applies_consumer_limits_before_variable_length_consumption(
         Err(DecodeError::Wire(WireError::TooManyInputs)),
     );
 
-    let mut oversized_payload = [0u8; 51];
+    let mut oversized_payload = [0u8; 53];
     oversized_payload[..4].copy_from_slice(&MAGIC);
     oversized_payload[4] = KSPT_VERSION;
     oversized_payload[8..12].copy_from_slice(&1u32.to_le_bytes());
     oversized_payload[12] = 1;
-    oversized_payload[49..51].copy_from_slice(&1025u16.to_le_bytes());
+    oversized_payload[49..53].copy_from_slice(&1025u32.to_le_bytes());
     assert_eq!(
         super::decode(&oversized_payload, &mut CaptureSink::default(), limits),
         Err(DecodeError::Wire(WireError::PayloadTooLong)),

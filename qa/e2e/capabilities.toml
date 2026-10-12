@@ -1267,10 +1267,34 @@ rust_e2e = "rust_offline_contracts"
 wasm_e2e = "wasm_offline_contracts"
 
 [[capability]]
-id = "contract.vault.covenant_id"
+id = "contract.covenant.id"
 domain = "contract"
-rust_symbol = "VaultApi::covenant_id"
+rust_symbol = "CovenantApi::id"
 wasm_symbols = ["WasmContract::covenant_id"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.covenant.verify_genesis"
+domain = "contract"
+rust_symbol = "CovenantApi::verify_genesis"
+wasm_symbols = ["WasmContract::verify_covenant_genesis"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_contracts"
+wasm_e2e = "wasm_offline_contracts"
+
+[[capability]]
+id = "contract.covenant.verify_redeem_script"
+domain = "contract"
+rust_symbol = "CovenantApi::verify_redeem_script"
+wasm_symbols = ["WasmContract::verify_covenant_genesis"]
 execution = "offline"
 funds_required = false
 resource_profile = "standard"

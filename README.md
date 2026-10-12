@@ -23,7 +23,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for dependency rules and intern
 
 On native targets, one `KaspaPortal` owns one persistent Kaspa wRPC WebSocket. RPC responses and asynchronous notifications are multiplexed on that socket, successful subscriptions are replayed after reconnect, and native transport futures are `Send` so the facade can be used directly from multithreaded async application frameworks. Browser/WASM transport semantics remain target-appropriate.
 
-KSPT v1 payload length remains a `u16`; Portal therefore supports application payloads from 0 through **65,535 bytes** and rejects larger payloads instead of imposing the former 768-byte SDK ceiling. `Transaction.payload` is heap-backed, and PSKT parser bookkeeping uses wider offsets so the JSON/hex representation of a maximum-size KSPT payload does not reintroduce a 65,535-byte parser ceiling. `plan_send_with_payload()` includes payload mass in fee calculation and UTXO selection before encoding the plan.
+Portal supports application payloads from 0 through **250,000 bytes** (`MAX_PAYLOAD_SIZE`, the Toccata transient-mass ceiling for a whole transaction); mass analysis rejects any payload that pushes the complete transaction past a mass limit. KSPT v1 carries the payload length as a `u32`, and `Transaction.payload` is heap-backed. `plan_send_with_payload()` includes payload mass in fee calculation and UTXO selection before encoding the plan.
 
 For the developer-facing method reference, including parameters and return values for the Rust facades and browser/WASM classes, see [docs/PUBLIC_API.md](docs/PUBLIC_API.md) | [docs/E2E_CAPABILITIES.md](docs/E2E_CAPABILITIES.md).
 
@@ -99,6 +99,24 @@ The facade is intentionally thin. Advanced callers can import focused APIs direc
 Consensus-sized integers such as sompi amounts, DAA scores, sequences, lock times and gas are represented canonically as unsigned decimal strings at JSON/WASM boundaries. JavaScript `Number` is not used for consensus monetary/DAA arithmetic. Browser callers should use `BigInt` locally and decimal strings when serializing JSON.
 
 PSKT/PSKB/KSPT parsing is bounded and fuzz-targeted.
+
+## Proving a covenant
+
+A KIP-20 covenant ID is a hash of the outpoint its genesis input spends and every output that input authorizes (index, value, script version and script). Because the ID commits to those preimages, anyone holding them can check what a covenant was created as without trusting an indexer:
+
+```rust
+use kaspa_portal::contract::covenant::identity::{AuthorizedOutput, GenesisOutpoint};
+# fn prove(portal: &kaspa_portal::KaspaPortal, claimed: [u8; 32], p2sh: &[u8], redeem: &[u8]) -> kaspa_portal::Result<()> {
+let covenant = portal.contract().covenant();
+let genesis = GenesisOutpoint { transaction_id: [0x88; 32], index: 3 };
+let outputs = [AuthorizedOutput { index: 0, value: 123_000_000, spk_version: 0, spk_script: p2sh }];
+covenant.verify_genesis(&claimed, genesis, &outputs)?; // the ID really is this genesis
+covenant.verify_redeem_script(&outputs[0], redeem)?; // and it locks this published script
+# Ok(())
+# }
+```
+
+`ConsensusTransaction::covenant_genesis` extracts and verifies the group straight from the genesis transaction, and the browser API exposes `verifyCovenantGenesis`. A live UTXO whose node-reported `covenantId` equals a verified ID belongs to that lineage; consensus enforces every continuation, so what later spends may do is whatever the verified genesis script allows.
 
 ## Lightweight indexer
 

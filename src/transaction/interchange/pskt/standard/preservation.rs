@@ -27,14 +27,17 @@ pub(super) fn capture_unknown(
     let Some(json_end) = json_start.checked_add(parsed.json_len as usize) else {
         return Err(PskError::JsonTooLarge);
     };
-    if start < json_start || start >= end || end > json_end || end > u32::MAX as usize {
+    if start < json_start || start >= end || end > json_end {
         return Err(PskError::JsonTooLarge);
     }
+    let (Ok(start), Ok(end)) = (u32::try_from(start), u32::try_from(end)) else {
+        return Err(PskError::JsonTooLarge);
+    };
     let index = parsed.unknowns_count as usize;
     if index >= MAX_PSKT_UNKNOWN_REGIONS {
         return Err(PskError::TooManyUnknownRegions);
     }
-    parsed.unknowns[index] = (start as u32, end as u32);
+    parsed.unknowns[index] = (start, end);
     parsed.unknown_scopes[index] = scope;
     parsed.unknowns_count += 1;
     Ok(())

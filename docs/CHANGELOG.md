@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+Toccata-sized payloads and covenant genesis proofs.
+
+- `contract::covenant::identity` is the one KIP-20 covenant-ID hash
+  (known-answer tested against rusty-kaspa) and proves what a covenant was
+  created as: `verify_genesis` recomputes the ID from the genesis outpoint and
+  authorized outputs, `verify_redeem_script` proves an output locks a published
+  redeem script, and `ConsensusTransaction::covenant_genesis` extracts and
+  verifies the group from the genesis transaction. Exposed as
+  `CovenantApi::{id, verify_genesis, verify_redeem_script}` and wasm
+  `verifyCovenantGenesis`. `VaultApi::covenant_id` and
+  `vault::compute_covenant_id` are removed (use `CovenantApi::id`).
+- `MAX_PAYLOAD_SIZE` is now 250,000 bytes (`MAX_SERIALIZED_TRANSACTION_BYTES`):
+  the 1,000,000-gram Toccata transient block limit at 4 grams per byte. The
+  former 65,535-byte ceiling came from the KSPT `u16` payload length; mass
+  analysis still decides whether the whole transaction fits.
+- KSPT v1's global payload length is a little-endian `u32` (was `u16`); the
+  global section is 47 bytes. Signer and Companion builds must pin the same
+  Portal revision. The indexer's default `max_payload_bytes` follows
+  `MAX_PAYLOAD_SIZE`.
+
 Finalization runs only through the verify-once PSKT pipeline.
 
 - `TransactionApi::finalize`, `analyze` and `analyze_with_fee_rate` verify

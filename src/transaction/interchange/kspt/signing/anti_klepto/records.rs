@@ -96,3 +96,7 @@ pub fn proof_records(
         Ok(proofs)
     }
 }
+
+#[cfg(test)]
+#[path = "unit-tests/records.rs"]
+mod unit_tests;

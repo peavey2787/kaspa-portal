@@ -362,6 +362,8 @@ fn canonical_integers_reject_non_minimal_negative_and_truncated_pushes() {
         &[0x01, 0x10],
         &[0x01, 0x80],
         &[0x02, 0x01, 0x00],
+        // Redundant zero sign byte above a clear top bit.
+        &[0x02, 0x11, 0x00],
         &[0x02, 0x11],
         &[0x09, 1, 2, 3, 4, 5, 6, 7, 8, 1],
         &[0x0a, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0],

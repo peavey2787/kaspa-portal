@@ -15,7 +15,7 @@
 
 use super::{
     child::{derive_child, master_key_from_seed},
-    constants::{KASPA_ACCOUNT_PATH, KASPA_MULTISIG_ACCOUNT_PREFIX},
+    constants::{HARDENED_BIT, KASPA_ACCOUNT_PATH, KASPA_MULTISIG_ACCOUNT_PREFIX},
     error::Bip32Error,
     extended_private::ExtendedPrivKey,
 };
@@ -156,13 +156,14 @@ pub fn derive_multisig_account_key(
     seed: &[u8; 64],
     account: u32,
 ) -> Result<ExtendedPrivKey, Bip32Error> {
-    if account >= 0x8000_0000 {
+    if account >= HARDENED_BIT {
         return Err(Bip32Error::InvalidKey);
     }
     let path = [
         KASPA_MULTISIG_ACCOUNT_PREFIX[0],
         KASPA_MULTISIG_ACCOUNT_PREFIX[1],
-        account | 0x8000_0000,
+        // `account` is below the hardened bit, so adding it hardens it.
+        account + HARDENED_BIT,
     ];
     derive_path(seed, &path)
 }

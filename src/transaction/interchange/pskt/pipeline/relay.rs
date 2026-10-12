@@ -1,6 +1,5 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
-use blake2b_simd::Params;
 use serde_json::{Map, Value};
 
 use crate::{

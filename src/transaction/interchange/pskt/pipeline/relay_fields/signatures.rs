@@ -13,7 +13,6 @@ pub(crate) fn collect_signatures(fields: &InputFields) -> Result<Vec<Signature>,
     if fields.partial_signatures.is_empty() {
         return Ok(Vec::new());
     }
-    ensure_signature_capacity(fields)?;
     match fields.redeem_script.as_deref() {
         Some(redeem) if parse_multisig_redeem(redeem).is_some() => {
             collect_multisig_signatures(fields, redeem)
@@ -21,15 +20,6 @@ pub(crate) fn collect_signatures(fields: &InputFields) -> Result<Vec<Signature>,
         Some(redeem) => collect_covenant_signatures(fields, redeem),
         None => collect_p2pk_signature(fields),
     }
-}
-
-pub(crate) fn ensure_signature_capacity(fields: &InputFields) -> Result<(), String> {
-    if fields.partial_signatures.len()
-        > crate::transaction::interchange::kspt::wire::MAX_SIGNATURE_RECORDS
-    {
-        return Err("too many partial signatures for signer capabilities".to_string());
-    }
-    Ok(())
 }
 
 pub(crate) fn collect_multisig_signatures(
@@ -108,14 +98,16 @@ pub(crate) fn collect_p2pk_signature(fields: &InputFields) -> Result<Vec<Signatu
     if fields.partial_signatures.len() != 1 {
         return Err("standard P2PK input must contain exactly one partial signature".to_string());
     }
-    validate_p2pk_script(fields)?;
     let (public_key, value) = fields.partial_signatures.iter().next().ok_or_else(|| {
         "standard P2PK input is missing its required partial signature".to_string()
     })?;
     let key = compressed_xonly(public_key)
         .ok_or_else(|| "P2PK partial-signature public key is malformed".to_string())?;
-    if fields.script_public_key.get(1..33) != Some(key.as_slice()) {
-        return Err("P2PK partial-signature public key does not match scriptPublicKey".to_string());
+    if crate::contract::script::p2pk_xonly(&fields.script_public_key) != Some(key) {
+        return Err(
+            "P2PK partial-signature public key does not match a canonical P2PK scriptPublicKey"
+                .to_string(),
+        );
     }
     Ok(vec![Signature {
         position: 0,
@@ -123,42 +115,29 @@ pub(crate) fn collect_p2pk_signature(fields: &InputFields) -> Result<Vec<Signatu
     }])
 }
 
-pub(crate) fn validate_p2pk_script(fields: &InputFields) -> Result<(), String> {
-    if crate::contract::script::p2pk_xonly(&fields.script_public_key).is_none() {
-        return Err(
-            "partial signature is present for a non-P2PK input without redeemScript".to_string(),
-        );
-    }
-    Ok(())
-}
-
+/// The x-only key of a lowercase-hex compressed SEC1 public key.
 pub(crate) fn compressed_xonly(public_key_hex: &str) -> Option<[u8; 32]> {
-    let bytes = public_key_hex.as_bytes();
-    if bytes.len() != 66
-        || !bytes.iter().all(u8::is_ascii_hexdigit)
-        || !(bytes.starts_with(b"02") || bytes.starts_with(b"03"))
-    {
-        return None;
-    }
-    let decoded = super::super::wire::decode_lower_hex(
-        core::str::from_utf8(&bytes[2..]).ok()?,
-        "compressed public key",
-    )
-    .ok()?;
-    decoded.as_slice().try_into().ok()
+    let x = public_key_hex
+        .strip_prefix("02")
+        .or_else(|| public_key_hex.strip_prefix("03"))?;
+    super::super::wire::decode_lower_hex(x, "compressed public key")
+        .ok()?
+        .try_into()
+        .ok()
 }
 
 pub(crate) fn decode_signature(value: &Value) -> Result<[u8; 64], String> {
     let object = value
         .as_object()
         .ok_or_else(|| "partial signature value must be an object".to_string())?;
-    if object.len() != 1 || !object.contains_key("schnorr") {
-        return Err("partial signature object must contain only the schnorr field".to_string());
-    }
-    let text = object
-        .get("schnorr")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "partial sig missing schnorr variant".to_string())?;
+    let text = match object.get("schnorr") {
+        Some(Value::String(text)) if object.len() == 1 => text,
+        _ => {
+            return Err(
+                "partial signature object must contain only the schnorr hex string".to_string(),
+            )
+        }
+    };
     let bytes = super::super::wire::decode_lower_hex(text, "signature")?;
     bytes
         .as_slice()

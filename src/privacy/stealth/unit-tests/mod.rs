@@ -63,11 +63,27 @@ fn raw_scanner_rejects_invalid_identity_lengths_and_script_bounds() {
 
 #[test]
 fn stealth_key_and_tweak_helpers_cover_roundtrip_and_validation() {
-    use k256::SecretKey;
+    use k256::{elliptic_curve::sec1::ToEncodedPoint, SecretKey};
 
     let secret = SecretKey::from_slice(&[1u8; 32]).expect("valid secret key");
     let public = secret.public_key();
     let xonly = super::keys::x_only_pub(&public);
+    // secret 0x0101..01: its public key's x coordinate.
+    let expected = k256::ProjectivePoint::GENERATOR
+        * super::keys::scalar_from_bytes(&[1u8; 32]).expect("valid scalar");
+    let encoded = expected.to_affine().to_encoded_point(true);
+    assert_eq!(&xonly[..], &encoded.as_bytes()[1..]);
+    let generator = SecretKey::from_slice(&{
+        let mut one = [0u8; 32];
+        one[31] = 1;
+        one
+    })
+    .expect("scalar one")
+    .public_key();
+    assert_eq!(
+        hex::encode(super::keys::x_only_pub(&generator)),
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    );
     let restored = super::keys::pubkey_from_xonly(&xonly).expect("x-only public key");
     assert_eq!(super::keys::x_only_bytes(&restored), xonly);
     assert!(super::keys::pubkey_from_xonly(&xonly[..31]).is_err());

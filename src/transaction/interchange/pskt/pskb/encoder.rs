@@ -55,7 +55,7 @@ fn encode_document(
 ) -> Result<String, String> {
     if payload.is_some_and(|value| value.len() > crate::transaction::model::MAX_PAYLOAD_SIZE) {
         return Err(format!(
-            "transaction payload exceeds KSPT v1 limit of {} bytes",
+            "transaction payload exceeds the {}-byte consensus limit",
             crate::transaction::model::MAX_PAYLOAD_SIZE
         ));
     }
@@ -103,7 +103,7 @@ pub(crate) fn encode_pskt_value(mut pskt: Value) -> Result<String, String> {
     global
         .entry("subnetworkId".to_string())
         .or_insert_with(|| Value::String("00".repeat(20)));
-    crate::transaction::interchange::pskt::exact_json::canonicalize_pskt_exact_fields(&mut pskt)?;
+    crate::transaction::interchange::pskt::exact_json::validate_pskt_exact_fields(&pskt)?;
 
     let document = Value::Array(vec![pskt]);
     let json_bytes =

@@ -1,111 +1,72 @@
-//! Kaspa SIGHASH_ALL digest of a compact KSPT transaction.
+//! Kaspa SIGHASH_ALL digest of a compact KSPT transaction, computed by the
+//! signer's single sighash implementation.
 
-use super::{Params, Transaction};
+use super::Transaction;
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
+use crate::transaction::{
+    model::SigHashType,
+    sighash::{calculate_sighash, SighashInput, SighashOutput, SighashSource},
+};
 
-pub(crate) fn signing_hash_state() -> blake2b_simd::State {
-    Params::new()
-        .hash_length(32)
-        .key(b"TransactionSigningHash")
-        .to_state()
-}
-
-pub(crate) fn finish_hash(state: blake2b_simd::State) -> [u8; 32] {
-    let hash = state.finalize();
-    let mut out = [0u8; 32];
-    out.copy_from_slice(hash.as_bytes());
-    out
-}
-
-pub(crate) fn hash_previous_outputs(transaction: &Transaction) -> [u8; 32] {
-    let mut state = signing_hash_state();
-    for input in &transaction.inputs {
-        state.update(&input.tx_id);
-        state.update(&input.index.to_le_bytes());
+impl SighashSource for Transaction {
+    fn version(&self) -> u16 {
+        self.version
     }
-    finish_hash(state)
-}
-
-pub(crate) fn hash_sequences(transaction: &Transaction) -> [u8; 32] {
-    let mut state = signing_hash_state();
-    for input in &transaction.inputs {
-        state.update(&input.sequence.to_le_bytes());
+    fn input_count(&self) -> usize {
+        self.inputs.len()
     }
-    finish_hash(state)
-}
-
-pub(crate) fn hash_sig_op_counts(transaction: &Transaction) -> [u8; 32] {
-    let mut state = signing_hash_state();
-    for input in &transaction.inputs {
-        state.update(&[input.sig_op_count]);
-    }
-    finish_hash(state)
-}
-
-pub(crate) fn hash_outputs(transaction: &Transaction) -> [u8; 32] {
-    let mut state = signing_hash_state();
-    for output in &transaction.outputs {
-        state.update(&output.amount.to_le_bytes());
-        state.update(&output.script_version.to_le_bytes());
-        state.update(&(output.script.len() as u64).to_le_bytes());
-        state.update(&output.script);
-        if transaction.version >= 1 {
-            match output.covenant {
-                Some((authorizing_input, id)) => {
-                    state.update(&[1]);
-                    state.update(&authorizing_input.to_le_bytes());
-                    state.update(&id);
-                }
-                None => {
-                    state.update(&[0]);
-                }
-            }
+    fn input(&self, index: usize) -> SighashInput<'_> {
+        let input = &self.inputs[index];
+        SighashInput {
+            transaction_id: &input.tx_id,
+            index: input.index,
+            sequence: input.sequence,
+            sig_op_count: input.sig_op_count,
+            script_version: input.script_version,
+            script: &input.script,
+            amount: input.amount,
         }
     }
-    finish_hash(state)
-}
-
-pub(crate) fn hash_payload(transaction: &Transaction) -> [u8; 32] {
-    if transaction.subnetwork == [0u8; 20] && transaction.payload.is_empty() {
-        return [0u8; 32];
+    fn output_count(&self) -> usize {
+        self.outputs.len()
     }
-    let mut state = signing_hash_state();
-    state.update(&(transaction.payload.len() as u64).to_le_bytes());
-    state.update(&transaction.payload);
-    finish_hash(state)
+    fn output(&self, index: usize) -> SighashOutput<'_> {
+        let output = &self.outputs[index];
+        SighashOutput {
+            value: output.amount,
+            script_version: output.script_version,
+            script: &output.script,
+            covenant: output
+                .covenant
+                .as_ref()
+                .map(|(authorizing_input, id)| (*authorizing_input, id)),
+        }
+    }
+    fn locktime(&self) -> u64 {
+        self.locktime
+    }
+    fn subnetwork_id(&self) -> &[u8; 20] {
+        &self.subnetwork
+    }
+    fn gas(&self) -> u64 {
+        self.gas
+    }
+    fn payload(&self) -> &[u8] {
+        &self.payload
+    }
 }
 
 pub(crate) fn sighash_all(
     transaction: &Transaction,
     input_index: usize,
 ) -> Result<[u8; 32], String> {
-    let input = transaction
-        .inputs
-        .get(input_index)
-        .ok_or_else(|| "sighash input index out of range".to_string())?;
-    let mut state = signing_hash_state();
-    state.update(&transaction.version.to_le_bytes());
-    state.update(&hash_previous_outputs(transaction));
-    state.update(&hash_sequences(transaction));
-    if transaction.version == 0 {
-        state.update(&hash_sig_op_counts(transaction));
+    if input_index >= transaction.inputs.len() {
+        return Err("sighash input index out of range".to_string());
     }
-    state.update(&input.tx_id);
-    state.update(&input.index.to_le_bytes());
-    state.update(&input.script_version.to_le_bytes());
-    state.update(&(input.script.len() as u64).to_le_bytes());
-    state.update(&input.script);
-    state.update(&input.amount.to_le_bytes());
-    state.update(&input.sequence.to_le_bytes());
-    if transaction.version == 0 {
-        state.update(&[input.sig_op_count]);
-    }
-    state.update(&hash_outputs(transaction));
-    state.update(&transaction.locktime.to_le_bytes());
-    state.update(&transaction.subnetwork);
-    state.update(&transaction.gas.to_le_bytes());
-    state.update(&hash_payload(transaction));
-    state.update(&[0x01]);
-    Ok(finish_hash(state))
+    Ok(calculate_sighash(
+        transaction,
+        input_index,
+        SigHashType::All,
+    ))
 }

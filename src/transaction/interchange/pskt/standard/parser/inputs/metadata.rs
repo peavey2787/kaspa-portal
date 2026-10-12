@@ -11,11 +11,9 @@ use super::super::{
     helpers::{expect, expect_string, skip_until_matching},
 };
 
-fn parse_partial_sig_pubkey(
-    tok: &mut Tokenizer<'_>,
-    input: &TransactionInput,
-    count: usize,
-) -> Result<[u8; 33], PskError> {
+// Duplicate keys never reach these parsers: the canonical JSON validator
+// rejects them at every depth before tokenizing.
+fn parse_partial_sig_pubkey(tok: &mut Tokenizer<'_>) -> Result<[u8; 33], PskError> {
     let pubkey_hex = expect_string(tok)?;
     if pubkey_hex.len() != 66 {
         return Err(PskError::InvalidPubkeyLen);
@@ -24,12 +22,6 @@ fn parse_partial_sig_pubkey(
     hex_decode_strict(pubkey_hex, &mut pubkey)?;
     if !matches!(pubkey[0], 0x02 | 0x03) {
         return Err(PskError::InvalidPubkeyLen);
-    }
-    if input.incoming_partial_sigs[..count]
-        .iter()
-        .any(|previous| previous.pubkey == pubkey)
-    {
-        return Err(PskError::DuplicateField);
     }
     Ok(pubkey)
 }
@@ -87,7 +79,7 @@ fn parse_partial_sig_slot(
     if count >= MAX_SIGS_PER_INPUT {
         return Err(PskError::TooManyPartialSigs);
     }
-    let pubkey = parse_partial_sig_pubkey(tok, input, count)?;
+    let pubkey = parse_partial_sig_pubkey(tok)?;
     let signature = parse_schnorr_signature(tok)?;
     let slot = &mut input.incoming_partial_sigs[count];
     slot.pubkey = pubkey;
@@ -120,22 +112,17 @@ pub(super) fn parse_partial_sigs(
 fn parse_bip32_derivation_entry(
     tok: &mut Tokenizer<'_>,
     input: &mut TransactionInput,
-    pubkeys: &mut [[u8; 33]; MAX_SIGS_PER_INPUT],
     count: usize,
-) -> Result<[u8; 33], PskError> {
-    let pubkey = parse_derivation_pubkey(tok, pubkeys, count)?;
+) -> Result<(), PskError> {
+    parse_derivation_pubkey(tok, count)?;
     expect(tok, Tok::Colon)?;
     let value_start = tok.position();
     parse_derivation_value(tok)?;
     install_first_ms45_hint(input, tok.source(), value_start, tok.position());
-    Ok(pubkey)
+    Ok(())
 }
 
-fn parse_derivation_pubkey(
-    tok: &mut Tokenizer<'_>,
-    pubkeys: &[[u8; 33]; MAX_SIGS_PER_INPUT],
-    count: usize,
-) -> Result<[u8; 33], PskError> {
+fn parse_derivation_pubkey(tok: &mut Tokenizer<'_>, count: usize) -> Result<(), PskError> {
     if count >= MAX_SIGS_PER_INPUT {
         return Err(PskError::TooManyPartialSigs);
     }
@@ -148,10 +135,7 @@ fn parse_derivation_pubkey(
     if !matches!(pubkey[0], 0x02 | 0x03) {
         return Err(PskError::InvalidPubkeyLen);
     }
-    if pubkeys[..count].contains(&pubkey) {
-        return Err(PskError::DuplicateField);
-    }
-    Ok(pubkey)
+    Ok(())
 }
 
 fn install_first_ms45_hint(
@@ -188,11 +172,9 @@ pub(super) fn parse_bip32_derivations(
         tok.next_token()?;
         return Ok(());
     }
-    let mut pubkeys = [[0u8; 33]; MAX_SIGS_PER_INPUT];
     let mut count = 0usize;
     loop {
-        let pubkey = parse_bip32_derivation_entry(tok, input, &mut pubkeys, count)?;
-        pubkeys[count] = pubkey;
+        parse_bip32_derivation_entry(tok, input, count)?;
         count += 1;
         if !object_continues(tok)? {
             break;

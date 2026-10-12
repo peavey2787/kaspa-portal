@@ -99,3 +99,25 @@ fn subscription_bodies_carry_scope_and_addresses() {
     assert_eq!(&utxos[..7], &[1, 0, 4, 2, 0, 0, 0]);
     assert_eq!(utxos.len(), 7 + 2 * 38);
 }
+
+#[test]
+fn notification_decoder_needs_both_no_request_id_and_notification_kind() {
+    let mut body = WireWriter::new();
+    body.write_u16(1);
+    body.write_u64(1);
+    let valid = frame(
+        VIRTUAL_DAA_SCORE_CHANGED_NOTIFICATION_OPERATION,
+        6,
+        &body.into_vec(),
+    );
+    assert!(notification::decode(&valid).unwrap().is_some());
+    // Same frame tagged as a success response.
+    let mut success = valid.clone();
+    success[1] = 0;
+    assert!(notification::decode(&success).is_err());
+    // Same frame carrying a request id.
+    let mut with_id = vec![1];
+    with_id.extend_from_slice(&9u64.to_le_bytes());
+    with_id.extend_from_slice(&valid[1..]);
+    assert!(notification::decode(&with_id).is_err());
+}

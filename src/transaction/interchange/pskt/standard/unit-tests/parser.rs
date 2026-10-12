@@ -533,6 +533,7 @@ fn tokenizer_number_string_and_keyword_boundaries_are_exact() {
         (b"1,".as_slice(), b"1".as_slice(), 1usize),
         (b"12345}".as_slice(), b"12345".as_slice(), 5usize),
         (b"9".as_slice(), b"9".as_slice(), 1usize),
+        (b"0".as_slice(), b"0".as_slice(), 1usize),
     ] {
         let mut tokenizer = Tokenizer::new(source);
         assert_eq!(tokenizer.next_token().expect("number"), Tok::Num(expected));
@@ -1143,5 +1144,93 @@ fn global_payload_and_input_count_limits_are_exact() {
     assert_eq!(
         parse_json(PSKT_MAGIC, declared(limits.max_inputs + 1).as_bytes()).err(),
         Some(PskError::TooManyInputs)
+    );
+}
+
+#[test]
+fn global_flags_and_payload_parse_exactly() {
+    for flag in ["inputsModifiable", "outputsModifiable"] {
+        let valid = format!(",\"{flag}\":false");
+        assert!(parse_json(PSKT_MAGIC, &transaction_json(&valid, "", "")).is_ok());
+        let invalid = format!(",\"{flag}\":7");
+        assert!(
+            parse_json(PSKT_MAGIC, &transaction_json(&invalid, "", "")).is_err(),
+            "{flag}"
+        );
+    }
+    let (tx, _, _) = parse_json(
+        PSKT_MAGIC,
+        &transaction_json(",\"txPayload\":\"abcd\"", "", ""),
+    )
+    .unwrap();
+    assert_eq!(tx.payload, vec![0xab, 0xcd]);
+    assert_eq!(
+        parse_json(
+            PSKT_MAGIC,
+            &transaction_json(",\"txPayload\":\"abc\"", "", "")
+        )
+        .unwrap_err(),
+        PskError::OddHexLength
+    );
+}
+
+#[test]
+fn input_min_time_accepts_decimal_strings_and_numbers() {
+    for value in ["\"5\"", "5", "null"] {
+        let field = format!(",\"minTime\":{value}");
+        assert!(
+            parse_json(PSKT_MAGIC, &transaction_json("", &field, "")).is_ok(),
+            "{value}"
+        );
+    }
+    assert!(parse_json(PSKT_MAGIC, &transaction_json("", ",\"minTime\":\"05\"", "")).is_err());
+}
+
+#[test]
+fn per_input_key_maps_hold_at_most_the_signature_capacity() {
+    use crate::transaction::model::MAX_SIGS_PER_INPUT;
+
+    let key = |index: usize| format!("02{index:064x}");
+    let derivations = |count: usize| {
+        let entries = (0..count)
+            .map(|index| format!("\"{}\":null", key(index)))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(",\"bip32Derivations\":{{{entries}}}")
+    };
+    assert!(parse_json(
+        PSKT_MAGIC,
+        &transaction_json("", &derivations(MAX_SIGS_PER_INPUT), "")
+    )
+    .is_ok());
+    assert_eq!(
+        parse_json(
+            PSKT_MAGIC,
+            &transaction_json("", &derivations(MAX_SIGS_PER_INPUT + 1), "")
+        )
+        .unwrap_err(),
+        PskError::TooManyPartialSigs
+    );
+
+    let signatures = |count: usize| {
+        let entries = (0..count)
+            .map(|index| format!("\"{}\":{{\"schnorr\":\"{}\"}}", key(index), "00".repeat(64)))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(",\"partialSigs\":{{{entries}}}")
+    };
+    let mut scratch = vec![0u8; 4096];
+    let mut tx = Transaction::try_new().expect("transaction storage");
+    let mut parsed = PsktParsed::empty();
+    let two = encode_wire(PSKT_MAGIC, &transaction_json("", &signatures(2), ""));
+    let _ = parse_pskt(&two, &mut scratch, &mut tx, &mut parsed);
+    assert_eq!(tx.inputs[0].incoming_partial_sigs_count, 2);
+    assert_eq!(
+        parse_json(
+            PSKT_MAGIC,
+            &transaction_json("", &signatures(MAX_SIGS_PER_INPUT + 1), "")
+        )
+        .unwrap_err(),
+        PskError::TooManyPartialSigs
     );
 }

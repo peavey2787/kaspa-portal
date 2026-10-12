@@ -17,6 +17,7 @@
 
 use crate::wallet::derivation::bip32::{
     derive_multisig_account_key, derive_path, Bip32Error, ExtendedPrivKey, ExtendedPubKey,
+    HARDENED_BIT,
 };
 use crate::wallet::derivation::hmac::zeroize_buf;
 use crate::wallet::key::account::{
@@ -92,14 +93,14 @@ pub fn derive_multisig_account_parts(
     seed: &[u8; 64],
     account: u32,
 ) -> Result<KpubParts, Bip32Error> {
-    if account >= 0x8000_0000 {
+    if account >= HARDENED_BIT {
         return Err(Bip32Error::InvalidKey);
     }
     let parent_path = [0x8000_002D, 0x8001_B207];
     let parent = derive_path(seed, &parent_path)?;
     let parent_pubkey = parent.public_key_compressed()?;
     let account_key = derive_multisig_account_key(seed, account)?;
-    let child = account | 0x8000_0000;
+    let child = account + HARDENED_BIT;
     Ok(KpubParts {
         depth: 3,
         parent_fp: parent_fingerprint(&parent_pubkey),

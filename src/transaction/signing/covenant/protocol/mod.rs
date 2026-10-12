@@ -359,7 +359,9 @@ pub fn known_script_binds(
             let pattern = fixed_checksigfromstack_pattern(commitment, pubkey_x);
             script == pattern.as_slice()
         }
-        KnownScheme::OracleV1 => oracle_v1_script_binds(script, commitment, pubkey_x),
+        KnownScheme::OracleV1 => {
+            crate::contract::covenant::oracle_v1_script_commits_to(script, commitment, pubkey_x)
+        }
         KnownScheme::None => false,
     }
 }
@@ -372,47 +374,6 @@ fn fixed_checksigfromstack_pattern(commitment: &[u8; 32], pubkey_x: &[u8; 32]) -
     pattern[34..66].copy_from_slice(pubkey_x);
     pattern[66] = 0xd7;
     pattern
-}
-
-/// Whether `push` is exactly one canonical non-negative script integer.
-fn canonical_u64_push(push: &[u8]) -> bool {
-    crate::contract::script::read_canonical_u64(push, 0).is_some_and(|(_, end)| end == push.len())
-}
-
-fn oracle_v1_script_binds(script: &[u8], commitment: &[u8; 32], oracle: &[u8; 32]) -> bool {
-    let Some(tail) = script.len().checked_sub(107) else {
-        return false;
-    };
-    if tail < 54 || !oracle_v1_fixed_layout(script, tail) || !canonical_u64_push(&script[53..tail])
-    {
-        return false;
-    }
-    script.get(tail + 38..tail + 70) == Some(commitment.as_slice())
-        && script.get(tail + 71..tail + 103) == Some(oracle.as_slice())
-}
-
-fn oracle_v1_fixed_layout(script: &[u8], tail: usize) -> bool {
-    let fixed = [
-        (0usize, 0x10),
-        (17, 0x75),
-        (18, 0x63),
-        (19, 0x20),
-        (52, 0xad),
-        (tail, 0xb0),
-        (tail + 1, 0x51),
-        (tail + 2, 0x67),
-        (tail + 3, 0x20),
-        (tail + 36, 0xad),
-        (tail + 37, 0x20),
-        (tail + 70, 0x20),
-        (tail + 103, 0xd7),
-        (tail + 104, 0x69),
-        (tail + 105, 0x51),
-        (tail + 106, 0x68),
-    ];
-    fixed
-        .iter()
-        .all(|(index, expected)| script.get(*index) == Some(expected))
 }
 
 #[cfg(test)]

@@ -62,7 +62,7 @@ fn json_string_of(bytes: usize) -> Value {
 }
 
 #[test]
-fn the_largest_signer_compatible_body_round_trips_and_one_more_byte_fails() {
+fn the_largest_body_round_trips_and_one_more_byte_fails() {
     let max = super::super::MAX_PSKT_JSON_BYTES;
     let body = super::super::encode_json_body(&json_string_of(max)).expect("max body");
     assert_eq!(body.len(), 2 * max);
@@ -212,6 +212,13 @@ fn canonical_relay_and_merge_cover_multisig_metadata_and_signature_ordering() {
     let signed_doc = sign_first_input(original_doc, &[0x33, 0x11]);
     let signed_source = encode_pskb(signed_doc.clone());
     let signed_kspt = encode_pskt(&signed_source, Network::Mainnet).expect("signed KSPT");
+    let relayed = super::super::compact::parse(
+        &signed_kspt,
+        crate::transaction::interchange::kspt::wire::Limits::grammar(),
+    )
+    .expect("parse signed KSPT");
+    assert_eq!(relayed.inputs[0].ms45, Some((2, 0, 17)));
+    assert_eq!(relayed.outputs[0].ms45, Some((2, 1, 18)));
     let merged =
         merge_signed_kspt(&original, &signed_kspt, Network::Mainnet).expect("merge multisig");
     assert!(merge_signed_kspt(&original, b"BAD", Network::Mainnet).is_err());
@@ -392,22 +399,40 @@ fn relay_input_parser_covers_covenant_id_execution_and_optional_boundaries() {
 
 #[test]
 fn relay_persistent_vault_detection_covers_absent_false_true_and_invalid_metadata() {
-    let plain = encode_pskb(base_document(json!({}), None));
-    assert!(!encode_pskt(&plain, Network::Mainnet)
-        .expect("plain relay")
-        .is_empty());
+    use crate::contract::covenant::identity;
+    use crate::transaction::interchange::kspt::wire::Limits;
+
+    let relayed_covenants = |document: Value| {
+        let kspt = encode_pskt(&encode_pskb(document), Network::Mainnet).expect("relay");
+        super::super::compact::parse(&kspt, Limits::grammar())
+            .expect("parse relay")
+            .outputs
+            .iter()
+            .map(|output| output.covenant)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(relayed_covenants(base_document(json!({}), None)), [None]);
 
     let mut disabled = base_document(json!({}), None);
     disabled["inputs"][0]["proprietaries"] = json!({"persistentVault": false});
-    assert!(!encode_pskt(&encode_pskb(disabled), Network::Mainnet)
-        .expect("disabled persistent vault")
-        .is_empty());
+    assert_eq!(relayed_covenants(disabled), [None]);
 
     let mut enabled = base_document(json!({}), None);
     enabled["inputs"][0]["proprietaries"] = json!({"persistentVault": true});
-    assert!(!encode_pskt(&encode_pskb(enabled), Network::Mainnet)
-        .expect("derived persistent vault covenant")
-        .is_empty());
+    let output_script = [&[0x20][..], &[0x33; 32], &[0xac]].concat();
+    let expected = identity::covenant_id(
+        identity::GenesisOutpoint {
+            transaction_id: [0x22; 32],
+            index: 0,
+        },
+        &[identity::AuthorizedOutput {
+            index: 0,
+            value: 90_000,
+            spk_version: 0,
+            spk_script: &output_script,
+        }],
+    );
+    assert_eq!(relayed_covenants(enabled.clone()), [Some((0, expected))]);
 
     let mut invalid = base_document(json!({}), None);
     invalid["inputs"][0]["proprietaries"] = json!({"persistentVault": "true"});

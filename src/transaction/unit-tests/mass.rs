@@ -109,3 +109,51 @@ fn mass_validity_holds_only_at_or_below_every_limit() {
         [true, true, false, false]
     );
 }
+
+#[test]
+fn serialized_size_estimate_matches_rusty_kaspa_field_by_field() {
+    use crate::transaction::consensus::{
+        ConsensusInput, ConsensusOutput, ConsensusTransaction, InputEncoding,
+    };
+
+    let transaction = |tx_version: u16, covenant: Option<(u16, [u8; 32])>| ConsensusTransaction {
+        tx_version,
+        input_encoding: InputEncoding::Compact,
+        inputs: vec![ConsensusInput {
+            prev_tx_id: [1; 32],
+            prev_index: 0,
+            sig_script: vec![0; 66],
+            sequence: 0,
+            sig_op_count: 1,
+        }],
+        outputs: vec![ConsensusOutput {
+            value: 1,
+            spk_version: 0,
+            spk_script: vec![0; 34],
+            covenant,
+        }],
+        locktime: 0,
+        subnetwork_id: [0; 20],
+        gas: 0,
+        payload: vec![0; 5],
+        storage_mass: 0,
+    };
+    // version 2, input count 8, outpoint 36, script 8 + 66, sequence 8,
+    // output count 8, value 8, spk version 2, script 8 + 34, locktime 8,
+    // subnetwork 20, gas 8, payload hash 32, payload 8 + 5.
+    const V0: u64 = 2 + 8 + (36 + 8 + 66 + 8) + 8 + (8 + 2 + 8 + 34) + 8 + 20 + 8 + 32 + 8 + 5;
+    assert_eq!(
+        super::estimated_serialized_size(&transaction(0, None)),
+        Ok(V0)
+    );
+    // Version 1 inputs carry a u16 compute budget.
+    assert_eq!(
+        super::estimated_serialized_size(&transaction(1, None)),
+        Ok(V0 + 2)
+    );
+    // A covenant binding adds its authorizing input and id.
+    assert_eq!(
+        super::estimated_serialized_size(&transaction(1, Some((0, [7; 32])))),
+        Ok(V0 + 2 + 34)
+    );
+}

@@ -12,7 +12,7 @@ use crate::transaction::interchange::pskt::PsktFormat;
 pub fn set_payload(wire_hex: &str, payload: &[u8]) -> Result<String, String> {
     if payload.len() > crate::transaction::model::MAX_PAYLOAD_SIZE {
         return Err(format!(
-            "set_payload: payload exceeds KSPT v1 limit of {} bytes",
+            "set_payload: payload exceeds the {}-byte consensus limit",
             crate::transaction::model::MAX_PAYLOAD_SIZE
         ));
     }
@@ -39,7 +39,7 @@ pub fn set_tx_lane(
 ) -> Result<String, String> {
     if payload.len() > crate::transaction::model::MAX_PAYLOAD_SIZE {
         return Err(format!(
-            "set_tx_lane: payload exceeds KSPT v1 limit of {} bytes",
+            "set_tx_lane: payload exceeds the {}-byte consensus limit",
             crate::transaction::model::MAX_PAYLOAD_SIZE
         ));
     }

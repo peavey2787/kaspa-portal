@@ -368,6 +368,21 @@ fn serializer_keeps_multiple_input_signature_maps_scope_separated() {
         .expect("serialize two input signature maps");
     assert_eq!(count_subslice(&emitted, b"\"partialSigs\":{"), 2);
     assert_eq!(count_subslice(&emitted, b"\"bip32Derivations\":{"), 3);
+    let document: serde_json::Value =
+        serde_json::from_slice(&emitted).expect("serializer emits valid JSON");
+    let second = &document["inputs"][1];
+    assert_eq!(second.get("finalScriptSig"), Some(&serde_json::Value::Null));
+    assert_eq!(
+        second["partialSigs"][hex::encode([0x61u8; 33])]["schnorr"],
+        hex::encode([0x71u8; 64])
+    );
+    assert_eq!(
+        second["bip32Derivations"]
+            .as_object()
+            .expect("derivations")
+            .len(),
+        2
+    );
     // This fixture intentionally uses arbitrary bytes to test serializer scope
     // separation only; parser acceptance is covered by the cryptographic
     // round-trip test above and must reject arbitrary fake signatures.
@@ -614,4 +629,29 @@ fn consensus_committed_globals_round_trip_from_transaction_model_not_opaque_pres
     assert!(contains_subslice(&emitted, b"\"txPayload\":\"abcd\""));
     assert!(!contains_subslice(&emitted, b"\"gas\":\"99\""));
     assert!(!contains_subslice(&emitted, b"\"txPayload\":\"deadbeef\""));
+}
+
+#[test]
+fn covenant_execution_selectors_round_trip_through_the_standard_codec() {
+    let json = transaction_json("", "", "");
+    let (tx, parsed, scratch) = parse_json(PSKT_MAGIC, &json).expect("parse fixture");
+    let plain =
+        serialize_json(&tx, &parsed, &scratch, TxInputFormat::PsktSingle).expect("serialize");
+    assert!(!contains_subslice(&plain, b"covenantExecution"));
+
+    let mut tx = tx;
+    tx.inputs[0].covenant_execution_present = true;
+    tx.inputs[0].covenant_execution_mask = 0b11;
+    tx.inputs[0].covenant_execution_true_mask = 0b01;
+    let emitted = serialize_json(&tx, &parsed, &scratch, TxInputFormat::PsktSingle)
+        .expect("serialize selectors");
+    let document: serde_json::Value = serde_json::from_slice(&emitted).expect("valid JSON");
+    assert_eq!(
+        document["inputs"][0]["covenantExecution"],
+        serde_json::json!({"suppliedMask": 3, "suppliedTrueMask": 1})
+    );
+    let (reparsed, _, _) = parse_json(PSKT_MAGIC, &emitted).expect("reparse selectors");
+    assert!(reparsed.inputs[0].covenant_execution_present);
+    assert_eq!(reparsed.inputs[0].covenant_execution_mask, 0b11);
+    assert_eq!(reparsed.inputs[0].covenant_execution_true_mask, 0b01);
 }

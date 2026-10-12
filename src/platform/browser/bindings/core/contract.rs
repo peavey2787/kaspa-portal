@@ -3,7 +3,10 @@ use wasm_bindgen::prelude::*;
 
 use super::{decimal, js_error};
 use crate::contract::{
-    crowdfund::CrowdfundScript, shipping_escrow::ShippingEscrowScriptRequest, ContractApi,
+    covenant::identity::{AuthorizedOutput, GenesisOutpoint},
+    crowdfund::CrowdfundScript,
+    shipping_escrow::ShippingEscrowScriptRequest,
+    ContractApi,
 };
 
 #[wasm_bindgen(js_name = KaspaContract)]
@@ -286,28 +289,41 @@ impl WasmContract {
         prev_index: u32,
         outputs_json: &str,
     ) -> Result<String, JsValue> {
-        let outputs: Vec<BrowserVaultOutput> = serde_json::from_str(outputs_json)
-            .map_err(|error| JsValue::from_str(&format!("invalid vault outputs JSON: {error}")))?;
-        let owned = outputs
-            .into_iter()
-            .map(|output| {
-                Ok((
-                    output.index,
-                    decimal(&output.amount_sompi, "output amount")?,
-                    output.version,
-                    bytes_hex(&output.script_hex, "output script")?,
-                ))
-            })
-            .collect::<Result<Vec<_>, JsValue>>()?;
-        let refs = owned
-            .iter()
-            .map(|(index, amount, version, script)| (*index, *amount, *version, script.as_slice()))
-            .collect::<Vec<_>>();
-        Ok(hex::encode(self.inner.vault().covenant_id(
-            &fixed32(prev_txid_hex, "previous transaction id")?,
-            prev_index,
-            &refs,
-        )))
+        let owned = covenant_outputs(outputs_json)?;
+        let outputs = authorized_outputs(&owned);
+        let genesis = genesis_outpoint(prev_txid_hex, prev_index)?;
+        Ok(hex::encode(self.inner.covenant().id(genesis, &outputs)))
+    }
+
+    /// Proves `claimedIdHex` is the covenant created by the input spending
+    /// `prevTxidHex:prevIndex` with exactly `outputsJson`; outputs carrying
+    /// `redeemScriptHex` must also lock that script. Throws on any mismatch.
+    #[wasm_bindgen(js_name = verifyCovenantGenesis)]
+    pub fn verify_covenant_genesis(
+        &self,
+        claimed_id_hex: &str,
+        prev_txid_hex: &str,
+        prev_index: u32,
+        outputs_json: &str,
+    ) -> Result<(), JsValue> {
+        let owned = covenant_outputs(outputs_json)?;
+        let outputs = authorized_outputs(&owned);
+        let covenant = self.inner.covenant();
+        covenant
+            .verify_genesis(
+                &fixed32(claimed_id_hex, "covenant id")?,
+                genesis_outpoint(prev_txid_hex, prev_index)?,
+                &outputs,
+            )
+            .map_err(js_error)?;
+        for (output, owned) in outputs.iter().zip(&owned) {
+            if let Some(redeem) = &owned.redeem_script {
+                covenant
+                    .verify_redeem_script(output, redeem)
+                    .map_err(js_error)?;
+            }
+        }
+        Ok(())
     }
 
     #[wasm_bindgen(js_name = zkTrustedSetup)]
@@ -387,11 +403,60 @@ struct BrowserShippingEscrow {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BrowserVaultOutput {
+struct BrowserCovenantOutput {
     index: u32,
     amount_sompi: String,
     version: u16,
     script_hex: String,
+    #[serde(default)]
+    redeem_script_hex: Option<String>,
+}
+
+struct CovenantOutput {
+    index: u32,
+    value: u64,
+    version: u16,
+    script: Vec<u8>,
+    redeem_script: Option<Vec<u8>>,
+}
+
+fn covenant_outputs(outputs_json: &str) -> Result<Vec<CovenantOutput>, JsValue> {
+    let outputs: Vec<BrowserCovenantOutput> = serde_json::from_str(outputs_json)
+        .map_err(|error| JsValue::from_str(&format!("invalid covenant outputs JSON: {error}")))?;
+    outputs
+        .into_iter()
+        .map(|output| {
+            Ok(CovenantOutput {
+                index: output.index,
+                value: decimal(&output.amount_sompi, "output amount")?,
+                version: output.version,
+                script: bytes_hex(&output.script_hex, "output script")?,
+                redeem_script: output
+                    .redeem_script_hex
+                    .map(|redeem| bytes_hex(&redeem, "redeem script"))
+                    .transpose()?,
+            })
+        })
+        .collect()
+}
+
+fn authorized_outputs(owned: &[CovenantOutput]) -> Vec<AuthorizedOutput<'_>> {
+    owned
+        .iter()
+        .map(|output| AuthorizedOutput {
+            index: output.index,
+            value: output.value,
+            spk_version: output.version,
+            spk_script: &output.script,
+        })
+        .collect()
+}
+
+fn genesis_outpoint(prev_txid_hex: &str, prev_index: u32) -> Result<GenesisOutpoint, JsValue> {
+    Ok(GenesisOutpoint {
+        transaction_id: fixed32(prev_txid_hex, "previous transaction id")?,
+        index: prev_index,
+    })
 }
 
 fn fixed32(value: &str, name: &str) -> Result<[u8; 32], JsValue> {

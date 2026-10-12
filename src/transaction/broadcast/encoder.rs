@@ -107,7 +107,7 @@ fn encode_output(output: &ConsensusOutput) -> Result<Vec<u8>, NetworkError> {
     writer.write_bytes(&[0])?;
 
     if let Some((authorizing_input, covenant_id)) = output.covenant {
-        let mut binding = WireWriter::with_capacity(35);
+        let mut binding = WireWriter::new();
         binding.write_u8(1);
         binding.write_u16(authorizing_input);
         binding.write_raw(&covenant_id);

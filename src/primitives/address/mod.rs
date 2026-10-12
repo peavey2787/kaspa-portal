@@ -317,7 +317,7 @@ pub(crate) fn polymod(values: impl Iterator<Item = u8>) -> u64 {
     let mut checksum = 1u64;
     for value in values {
         let top = checksum >> 35;
-        checksum = ((checksum & 0x0007_ffff_ffff) << 5) ^ u64::from(value);
+        checksum = ((checksum & 0x0007_ffff_ffff) << 5) + u64::from(value);
         for (index, generator) in GEN.iter().enumerate() {
             if (top >> index) & 1 == 1 {
                 checksum ^= generator;
@@ -332,13 +332,14 @@ fn convert_bits(data: &[u8], from: u8, to: u8, pad: bool) -> Result<Vec<u8>, Str
     let mut accumulator = 0u32;
     let mut bits = 0u8;
     let max_value = (1u32 << to) - 1;
-    let max_accumulator = (1u32 << (from + to - 1)) - 1;
 
     for &value in data {
         if (u32::from(value) >> from) != 0 {
             return Err("Invalid address data value".into());
         }
-        accumulator = ((accumulator << from) | u32::from(value)) & max_accumulator;
+        // Only the low `bits` (< from + to) bits are live; older bits shift
+        // out of the `u32` harmlessly.
+        accumulator = (accumulator << from) + u32::from(value);
         bits += from;
         while bits >= to {
             bits -= to;

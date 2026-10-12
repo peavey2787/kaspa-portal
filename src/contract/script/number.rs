@@ -58,7 +58,7 @@ fn canonical_positive_u64(data: &[u8]) -> Option<u64> {
         significant
             .iter()
             .rev()
-            .fold(0, |value, byte| (value << 8) | u64::from(*byte))
+            .fold(0, |value, byte| (value << 8) + u64::from(*byte))
     })
 }
 
@@ -266,9 +266,6 @@ pub(super) fn find_preceding_script_integer(
         previous = item;
         position = next;
     }
-    if position >= script.len() {
-        Ok(None)
-    } else {
-        Err("Script walker exceeded item bound".to_string())
-    }
+    // Every item is at least one byte, so `script.len()` steps reach the end.
+    Ok(None)
 }

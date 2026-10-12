@@ -4,6 +4,7 @@ use super::{
     selection,
 };
 use crate::{
+    contract::covenant::identity,
     network::{self, client::NetworkClient},
     primitives::address,
     transaction::interchange::pskt,
@@ -328,10 +329,17 @@ fn compute_genesis_binding(
 
     let mut transaction_id = [0u8; 32];
     transaction_id.copy_from_slice(&funding_txid);
-    let covenant_id = crate::contract::vault::script::compute_covenant_id(
-        &transaction_id,
-        funding.index,
-        &[(0u32, adjusted_send, 0u16, covenant_script)],
+    let covenant_id = identity::covenant_id(
+        identity::GenesisOutpoint {
+            transaction_id,
+            index: funding.index,
+        },
+        &[identity::AuthorizedOutput {
+            index: 0,
+            value: adjusted_send,
+            spk_version: 0,
+            spk_script: covenant_script,
+        }],
     );
 
     Ok((0u16, covenant_id))

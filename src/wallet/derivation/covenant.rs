@@ -15,13 +15,14 @@
 
 use sha2::{Digest, Sha256};
 
-use super::bip32::{derive_child, derive_path, Bip32Error, ExtendedPrivKey};
+use super::bip32::{
+    derive_child, derive_path, Bip32Error, ExtendedPrivKey, HARDENED_BIT as HARDENED,
+};
 use crate::crypto::{
     anti_klepto,
     schnorr::{self, SchnorrError, SchnorrSignature},
 };
 
-const HARDENED: u32 = 0x8000_0000;
 const COVENANT_PURPOSE: u32 = 0x8000_2720;
 const KASPA_COIN_TYPE: u32 = 0x8001_b207;
 const COVENANT_ACCOUNT: u32 = HARDENED;

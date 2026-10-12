@@ -24,6 +24,8 @@ examine_globs = [
   "src/transaction/policy/**/*.rs",
   "src/transaction/builder/planning/amounts.rs",
   "src/contract/covenant/branch.rs",
+  "src/contract/covenant/identity.rs",
+  "src/contract/covenant/script/oracle_v1.rs",
   "src/contract/script/**/*.rs",
   # Serializers and parsers.
   "src/transaction/interchange/kspt/**/*.rs",

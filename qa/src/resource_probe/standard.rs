@@ -2,7 +2,11 @@ use std::hint::black_box;
 
 use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
-    contract::{crowdfund::CrowdfundScript, shipping_escrow::ShippingEscrowScriptRequest},
+    contract::{
+        covenant::identity::{AuthorizedOutput, GenesisOutpoint},
+        crowdfund::CrowdfundScript,
+        shipping_escrow::ShippingEscrowScriptRequest,
+    },
     primitives::address::address_to_script_pubkey,
     transaction::{
         interchange::{
@@ -147,12 +151,24 @@ pub fn run(iteration: usize) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let tagged = contract.vault().tagged(&owner);
     let split = contract.vault().split(&owner);
-    let _ = contract.vault().covenant_id(
-        &[0x88; 32],
-        3,
+    let _ = contract.covenant().id(
+        GenesisOutpoint {
+            transaction_id: [0x88; 32],
+            index: 3,
+        },
         &[
-            (0, 123_000_000, 0, tagged.as_slice()),
-            (1, 45_000_000, 0, split.as_slice()),
+            AuthorizedOutput {
+                index: 0,
+                value: 123_000_000,
+                spk_version: 0,
+                spk_script: tagged.as_slice(),
+            },
+            AuthorizedOutput {
+                index: 1,
+                value: 45_000_000,
+                spk_version: 0,
+                spk_script: split.as_slice(),
+            },
         ],
     );
     black_box((payload, analysis.normalized_mass, tagged, split));

@@ -113,8 +113,8 @@ fn parse_top_level_field(
     let key_start = tok.position();
     let key = expect_string(tok)?;
     expect(tok, Tok::Colon)?;
-    let known = mark_schema_field(tok, seen, Scope::TopLevel, key)?;
-    dispatch_top_level_field(tok, tx, parsed, context, key_start, key, known)
+    mark_schema_field(tok, seen, Scope::TopLevel, key)?;
+    dispatch_top_level_field(tok, tx, parsed, context, key_start, key)
 }
 
 fn dispatch_top_level_field(
@@ -124,12 +124,12 @@ fn dispatch_top_level_field(
     context: &mut ParseContext,
     key_start: usize,
     key: &[u8],
-    known: bool,
 ) -> Result<(), PskError> {
     if let Some(result) = dispatch_known_top_level_field(tok, tx, parsed, context, key) {
         return result;
     }
-    dispatch_unknown_top_level_field(tok, parsed, key_start, known)
+    // Every schema field is dispatched above, so this key is unknown.
+    dispatch_unknown_top_level_field(tok, parsed, key_start)
 }
 
 fn dispatch_known_top_level_field(
@@ -151,11 +151,8 @@ fn dispatch_unknown_top_level_field(
     tok: &mut Tokenizer<'_>,
     parsed: &mut PsktParsed,
     key_start: usize,
-    known: bool,
 ) -> Result<(), PskError> {
-    if !known
-        && crate::transaction::interchange::pskt::schema::EXTENSION_GRAMMAR.preserve_unknown_fields
-    {
+    if crate::transaction::interchange::pskt::schema::EXTENSION_GRAMMAR.preserve_unknown_fields {
         preserve_unknown_top_level(tok, parsed, key_start)
     } else {
         Err(PskError::UnexpectedToken)

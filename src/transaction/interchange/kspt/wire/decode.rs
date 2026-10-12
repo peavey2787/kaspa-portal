@@ -218,7 +218,7 @@ fn read_global_tail(
     let locktime = reader.u64()?;
     let subnetwork_id = reader.array::<20>()?;
     let gas = reader.u64()?;
-    let payload_len = usize::from(reader.u16()?);
+    let payload_len = usize::try_from(reader.u32()?).map_err(|_| WireError::CountOverflow)?;
     limits.validate_payload(payload_len)?;
     Ok((locktime, subnetwork_id, gas, payload_len))
 }

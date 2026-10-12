@@ -1,7 +1,4 @@
 pub fn scan_raw_for_preimage(raw: &[u8], transaction_id: &[u8]) -> Option<Vec<u8>> {
-    if !scan_input_valid(raw, transaction_id) {
-        return None;
-    }
     for position in 4..raw.len().saturating_sub(50) {
         let Some(script) = candidate_script(raw, transaction_id, position) else {
             continue;
@@ -11,10 +8,6 @@ pub fn scan_raw_for_preimage(raw: &[u8], transaction_id: &[u8]) -> Option<Vec<u8
         }
     }
     None
-}
-
-fn scan_input_valid(raw: &[u8], transaction_id: &[u8]) -> bool {
-    transaction_id.len() == 32 && raw.len() >= 50
 }
 
 fn candidate_script<'a>(raw: &'a [u8], transaction_id: &[u8], position: usize) -> Option<&'a [u8]> {

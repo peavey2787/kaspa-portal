@@ -194,7 +194,8 @@ pub(crate) fn estimate_non_contextual_fee_for_shape(
     let transient = estimated_serialized_bytes
         .checked_mul(TRANSIENT_BYTE_TO_MASS_FACTOR)
         .ok_or_else(|| "transient mass overflow".to_string())?;
-    if compute > MAX_COMPUTE_MASS || transient > MAX_TRANSIENT_MASS {
+    let [_, _, _, within_limits] = mass_validity(compute, transient, 0);
+    if !within_limits {
         return Err("planned transaction exceeds Kaspa non-contextual mass limits".into());
     }
     let normalized_transient = normalize_mass(transient, MAX_COMPUTE_MASS, MAX_TRANSIENT_MASS)?;
@@ -283,8 +284,10 @@ fn estimated_serialized_size(transaction: &ConsensusTransaction) -> Result<u64, 
     for output in &transaction.outputs {
         let script_len = u64::try_from(output.spk_script.len())
             .map_err(|_| "script length exceeds u64".to_string())?;
+        // A covenant binding adds its authorizing input (u16) and id (32 bytes).
+        let binding = if output.covenant.is_some() { 2 + 32 } else { 0 };
         size = size
-            .checked_add(8 + 2 + 8 + script_len)
+            .checked_add(8 + 2 + 8 + script_len + binding)
             .ok_or_else(|| "transaction size overflow".to_string())?;
     }
     size.checked_add(

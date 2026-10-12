@@ -3,7 +3,8 @@ use crate::{
     primitives::utxo::UtxoEntry,
 };
 
-const MAX_BLOB_BYTES: usize = 16 * 1024 * 1024;
+/// 16 MiB.
+const MAX_BLOB_BYTES: usize = 16_777_216;
 const MAX_UTXOS: usize = 1_000_000;
 
 fn entries_blob(data: &[u8]) -> Result<&[u8], NetworkError> {
@@ -23,7 +24,8 @@ pub(crate) fn decode_entries(entries_blob: &[u8]) -> Result<Vec<UtxoEntry>, Netw
     if count > MAX_UTXOS {
         return Err(NetworkError::InvalidLength);
     }
-    let mut entries = Vec::with_capacity(count);
+    // The count is untrusted: reserve a bounded amount, grow as entries parse.
+    let mut entries = Vec::with_capacity(count.min(4096));
     for index_in_response in 0..count {
         let entry_blob = reader.read_bytes(MAX_BLOB_BYTES)?;
         entries.push(decode_entry(entry_blob, index_in_response)?);

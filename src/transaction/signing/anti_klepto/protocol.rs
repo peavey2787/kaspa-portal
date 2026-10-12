@@ -247,8 +247,9 @@ impl Commitment<'_> {
         self.count
     }
 
+    /// Always false: [`parse_commitment`] refuses a commitment without records.
     pub const fn is_empty(&self) -> bool {
-        self.count == 0
+        false
     }
 
     pub fn record(&self, index: usize) -> Option<NonceCommitment> {
@@ -336,10 +337,10 @@ pub fn parse_signed(input: &[u8]) -> Result<Signed<'_>, WireError> {
     let tx_start = length_offset
         .checked_add(4)
         .ok_or(WireError::InvalidLength)?;
-    if tx_start > input.len() {
-        return Err(WireError::Truncated);
-    }
-    let transaction_len = read_u32(&input[length_offset..tx_start])?;
+    let length_bytes = input
+        .get(length_offset..tx_start)
+        .ok_or(WireError::Truncated)?;
+    let transaction_len = read_u32(length_bytes)?;
     let transaction = exact_tail(input, tx_start, transaction_len)?;
     Ok(Signed {
         session_id: header.session_id,

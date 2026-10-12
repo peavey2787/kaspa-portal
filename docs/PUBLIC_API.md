@@ -119,7 +119,7 @@ Native `NetworkApi` calls share one persistent WebSocket per Portal transport. N
 | `analyze` | `wire_hex: &str` | `async Result<TransactionAnalysis>` |
 | `analyze_with_fee_rate` | `wire_hex: &str`, `recommended_fee_rate_sompi_per_gram: u64` | `Result<TransactionAnalysis>` |
 
-`plan_send_with_payload` incorporates the payload length into non-contextual mass/fee estimation before final UTXO selection and rechecks the resulting plan before PSKB encoding. KSPT v1 uses a `u16` payload length, so the supported application payload range is 0 through 65,535 bytes. Larger payloads are rejected.
+`plan_send_with_payload` incorporates the payload length into non-contextual mass/fee estimation before final UTXO selection and rechecks the resulting plan before PSKB encoding. The supported application payload range is 0 through `MAX_PAYLOAD_SIZE` (250,000 bytes, the Toccata transient-mass ceiling for a whole transaction); a payload that leaves the complete transaction over a mass limit is rejected by mass analysis.
 When a computed fee makes the would-be change output dust, Portal omits that change and accounts the complete input-minus-output remainder as the transaction fee; fee solving does not alternate between one-output and two-output estimates.
 
 `analyze` and `analyze_with_fee_rate` operate on a signed/finalizable PSKB because exact serialized mass depends on the completed input signature scripts. Use the planner fee estimates while a transaction is still unsigned.
@@ -243,6 +243,9 @@ When a computed fee makes the would-be change output dust, Portal omits that cha
 
 | Method | Parameters | Returns |
 | --- | --- | --- |
+| `id` | `genesis: GenesisOutpoint`, `outputs: &[AuthorizedOutput<'_>]` | `[u8; 32]` (KIP-20 covenant ID) |
+| `verify_genesis` | `claimed: &[u8; 32]`, `genesis: GenesisOutpoint`, `outputs: &[AuthorizedOutput<'_>]` | `Result<()>` |
+| `verify_redeem_script` | `output: &AuthorizedOutput<'_>`, `redeem_script: &[u8]` | `Result<()>` |
 | `dms` | `owner: &[u8; 32]`, `heir: &[u8; 32]`, `inactivity_daa: u64` | `Vec<u8>` |
 | `private_swap` | `owner: &[u8; 32]`, `claimer: &[u8; 32]`, `claimer_spk: &[u8]`, `refund_daa: u64`, `salt: &[u8; 16]` | `Result<Vec<u8>>` |
 | `piggy_bank` | `owner: &[u8; 32]`, `threshold_sompi: u64`, `deadline_daa: u64`, `salt: &[u8; 8]` | `Vec<u8>` |
@@ -265,7 +268,6 @@ When a computed fee makes the would-be change output dust, Portal omits that cha
 | `ShippingEscrowApi::build` | `request: ShippingEscrowScriptRequest<'_>` | `Result<Vec<u8>>` |
 | `VaultApi::tagged` | `owner: &[u8; 32]` | `Vec<u8>` |
 | `VaultApi::split` | `owner: &[u8; 32]` | `Vec<u8>` |
-| `VaultApi::covenant_id` | `prev_txid: &[u8; 32]`, `prev_index: u32`, `outputs: &[(u32, u64, u16, &[u8])]` | `[u8; 32]` |
 | `ZkApi::trusted_setup` | none | `Result<(Vec<u8>, Vec<u8>)>` |
 | `ZkApi::prove_crowdfund` | `proving_key: &[u8]`, `amounts_sompi: &[u64]` | `Result<(Vec<u8>, Vec<u8>, u64)>` |
 | `ZkApi::verify` | `verifying_key: &[u8]`, `proof: &[u8]`, `public_input: &[u8]` | `Result<bool>` |
@@ -366,7 +368,7 @@ Common indexer request objects:
 - `dedupe_window: usize`
 - `scanner_stale_after_ms: u64`
 - `transaction_ttl_ms: u64`
-- `max_payload_bytes: usize` (defaults to 65,535, matching the KSPT v1 application-payload ceiling)
+- `max_payload_bytes: usize` (defaults to `MAX_PAYLOAD_SIZE`, 250,000 bytes)
 - `max_addresses_per_transaction: usize`
 - `max_query_page: usize`
 
@@ -533,7 +535,8 @@ All Rust contract sub-facades are flattened into this browser class.
 | `shippingEscrow(requestJson)` | JSON containing seller/deliverer/buyer/arbiter keys, amount/fee/deadline decimal strings, and 8-byte salt | script bytes |
 | `taggedVault(ownerHex)` | 32-byte key | script bytes |
 | `splitVault(ownerHex)` | 32-byte key | script bytes |
-| `covenantId(prevTxidHex, prevIndex, outputsJson)` | genesis outpoint and output descriptors | covenant-ID hex |
+| `covenantId(prevTxidHex, prevIndex, outputsJson)` | genesis outpoint and `[{index, amountSompi, version, scriptHex}]` | covenant-ID hex |
+| `verifyCovenantGenesis(claimedIdHex, prevTxidHex, prevIndex, outputsJson)` | claimed ID, genesis outpoint, outputs (optional `redeemScriptHex` each) | throws unless the ID and every given redeem script are proven |
 | `zkTrustedSetup()` | none | JSON with proving/verifying key hex |
 | `zkProveCrowdfund(provingKeyHex, amountsJson)` | proving-key hex, JSON array of decimal amount strings | proof/public-input/total JSON |
 | `zkVerify(verifyingKeyHex, proofHex, publicInputHex)` | three hex values | `boolean` |

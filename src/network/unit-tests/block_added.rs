@@ -306,3 +306,14 @@ fn large_payloads_decode_and_malformed_verbose_data_yields_no_id() {
     trailing.push(0);
     assert_eq!(with_verbose(&trailing), None);
 }
+
+#[test]
+fn notification_decoder_routes_block_added_frames() {
+    use crate::network::wrpc::notification::{self, Notification};
+
+    let frame = block_added_frame([0x6a; 32], 7, [0x7b; 32], b"app");
+    let Some(Notification::BlockAdded(block)) = notification::decode(&frame).unwrap() else {
+        panic!("expected BlockAdded");
+    };
+    assert_eq!(block.daa_score, 7);
+}

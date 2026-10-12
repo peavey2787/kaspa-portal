@@ -420,21 +420,6 @@ fn bind_validation_covers_known_and_key_present_shapes() {
     );
 }
 
-#[test]
-fn canonical_u64_script_numbers_cover_small_large_sign_and_padding_rules() {
-    assert!(canonical_u64_push(&[0x00]));
-    assert!(canonical_u64_push(&[0x51]));
-    assert!(canonical_u64_push(&[0x60]));
-    assert!(canonical_u64_push(&[0x01, 0x11]));
-    assert!(canonical_u64_push(&[0x02, 0x80, 0x00]));
-    assert!(!canonical_u64_push(&[]));
-    assert!(!canonical_u64_push(&[0x00, 0x00]));
-    assert!(!canonical_u64_push(&[0x01, 0x10]));
-    assert!(!canonical_u64_push(&[0x01, 0x80]));
-    assert!(!canonical_u64_push(&[0x02, 0x01, 0x00]));
-    assert!(!canonical_u64_push(&[0x09, 1, 2, 3, 4, 5, 6, 7, 8, 1]));
-}
-
 fn invariant_request(kind: RequestKind) -> CovenantSignRequest<'static> {
     match kind {
         RequestKind::KeyInfo => CovenantSignRequest {
@@ -1128,4 +1113,37 @@ fn key_scan_finds_the_key_in_every_push_form_after_other_opcodes() {
     longer.extend_from_slice(&key);
     assert!(!script_contains_xonly_key(&longer, &key));
     assert!(!script_contains_xonly_key(&[], &key));
+}
+
+#[test]
+fn request_encoding_fits_an_exact_buffer_and_reveal_needs_both_identifiers() {
+    let request = signing_request(b"script", b"context");
+    let total = request_total_len(6, 7).expect("request length");
+    let mut exact = vec![0u8; total];
+    assert_eq!(encode_request(&request, &mut exact), Ok(total));
+    let mut short = vec![0u8; total - 1];
+    assert_eq!(
+        encode_request(&request, &mut short),
+        Err(ProtocolError::OutputTooSmall)
+    );
+
+    let mut wire = [0u8; REVEAL_LEN];
+    let valid = CovenantSignReveal {
+        session_id: [5; SESSION_ID_LEN],
+        key_id: [6; 32],
+        commitment: [7; 32],
+        host_secret: [8; 32],
+    };
+    let mut no_session = valid;
+    no_session.session_id = [0; SESSION_ID_LEN];
+    assert_eq!(
+        encode_reveal(&no_session, &mut wire),
+        Err(ProtocolError::InvalidFields)
+    );
+    let mut no_key = valid;
+    no_key.key_id = [0; 32];
+    assert_eq!(
+        encode_reveal(&no_key, &mut wire),
+        Err(ProtocolError::InvalidFields)
+    );
 }

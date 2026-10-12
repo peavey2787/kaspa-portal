@@ -19,10 +19,12 @@ mod blake2b;
 mod components;
 mod digest;
 mod signing;
+mod source;
 
 pub use blake2b::{blake2b_hash, KaspaBlake2b};
 pub use digest::calculate_sighash;
 pub use signing::{sign_input, sign_input_with_entropy};
+pub use source::{SighashInput, SighashOutput, SighashSource};
 
 #[cfg(test)]
 use crate::transaction::model::*;

@@ -279,6 +279,11 @@ fn status_is_empty_for_missing_or_out_of_range_inputs() {
     none.num_inputs = 0;
     assert_eq!(kspt_status(&none), (0, 0));
     assert!(!kspt_is_fully_signed(&none));
+    // Exactly as many input slots as inputs is the tightest valid model.
+    let mut exact = complete();
+    exact.inputs.truncate(1);
+    assert_eq!(kspt_status(&exact), (1, 1));
+    assert!(kspt_is_fully_signed(&exact));
     let mut beyond = complete();
     beyond.num_inputs = beyond.inputs.len() + 1;
     assert_eq!(pskt_status(&beyond), (0, 0));

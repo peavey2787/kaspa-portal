@@ -104,3 +104,29 @@ fn fee_response_accepts_length_prefix_whose_first_byte_is_sentinel() {
     assert_eq!(estimate.normal_sompi_per_gram, 1.0);
     assert_eq!(estimate.low_sompi_per_gram, 1.0);
 }
+
+#[test]
+fn suggested_fee_prices_a_2300_gram_transaction_above_the_floor() {
+    let estimate = fee::decode(&fee_payload(&[(10.0, 5.0)], &[])).expect("fee response");
+    assert_eq!(estimate.suggested_fee, 23_000);
+    assert_eq!(
+        (estimate.low_sompi_per_gram, estimate.low_seconds),
+        (1.0, 1800.0)
+    );
+}
+
+#[test]
+fn six_byte_response_is_decoded_not_treated_as_missing() {
+    assert!(fee::decode(&[1, 0, 0, 0, 0, 0]).is_err());
+    assert!(fee::decode(&[1, 0, 0, 0, 0]).is_ok());
+}
+
+#[test]
+fn fee_response_accepts_the_maximum_bucket_count_and_large_blobs() {
+    let buckets = vec![(4.0, 5.0); 10_000];
+    let estimate = fee::decode(&fee_payload(&buckets, &[])).expect("maximum bucket count");
+    assert_eq!(
+        (estimate.normal_sompi_per_gram, estimate.normal_seconds),
+        (4.0, 5.0)
+    );
+}

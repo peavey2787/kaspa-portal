@@ -9,77 +9,51 @@ pub(crate) fn parse_exact_u64(value: &Value, field: &str) -> Result<u64, String>
     }
 }
 
-pub(crate) fn canonicalize_pskt_exact_fields(pskt: &mut Value) -> Result<(), String> {
+/// Require every exact-integer PSKT field to be a canonical decimal string:
+/// the output amounts always, the optional global and input fields when present.
+pub(crate) fn validate_pskt_exact_fields(pskt: &Value) -> Result<(), String> {
     let document = pskt
-        .as_object_mut()
+        .as_object()
         .ok_or_else(|| "PSKT must be an object".to_string())?;
-    canonicalize_global(document)?;
-    canonicalize_inputs(document)?;
-    canonicalize_outputs(document)
-}
-
-fn canonicalize_global(document: &mut Map<String, Value>) -> Result<(), String> {
-    let Some(global) = document.get_mut("global").and_then(Value::as_object_mut) else {
-        return Ok(());
-    };
-    canonicalize_optional_field(global, "fallbackLockTime")?;
-    canonicalize_optional_field(global, "gas")
-}
-
-fn canonicalize_inputs(document: &mut Map<String, Value>) -> Result<(), String> {
-    let Some(inputs) = document.get_mut("inputs").and_then(Value::as_array_mut) else {
-        return Ok(());
-    };
-    for (index, input) in inputs.iter_mut().enumerate() {
-        canonicalize_input(input, index)?;
+    if let Some(global) = document.get("global").and_then(Value::as_object) {
+        validate_optional_fields(global, &["fallbackLockTime", "gas"])?;
+    }
+    for (index, input) in array(document, "inputs").iter().enumerate() {
+        let object = input
+            .as_object()
+            .ok_or_else(|| format!("input[{index}] must be an object"))?;
+        validate_optional_fields(object, &["sequence", "minTime"])?;
+        if let Some(utxo) = object.get("utxoEntry").and_then(Value::as_object) {
+            validate_optional_fields(utxo, &["amount", "blockDaaScore"])?;
+        }
+    }
+    for (index, output) in array(document, "outputs").iter().enumerate() {
+        let amount = output
+            .as_object()
+            .ok_or_else(|| format!("output[{index}] must be an object"))?
+            .get("amount")
+            .ok_or_else(|| "missing amount".to_string())?;
+        parse_exact_u64(amount, "amount")?;
     }
     Ok(())
 }
 
-fn canonicalize_input(input: &mut Value, index: usize) -> Result<(), String> {
-    let object = input
-        .as_object_mut()
-        .ok_or_else(|| format!("input[{index}] must be an object"))?;
-    canonicalize_optional_field(object, "sequence")?;
-    canonicalize_optional_field(object, "minTime")?;
-    if let Some(utxo) = object.get_mut("utxoEntry").and_then(Value::as_object_mut) {
-        canonicalize_optional_field(utxo, "amount")?;
-        canonicalize_optional_field(utxo, "blockDaaScore")?;
-    }
-    Ok(())
-}
-
-fn canonicalize_outputs(document: &mut Map<String, Value>) -> Result<(), String> {
-    let Some(outputs) = document.get_mut("outputs").and_then(Value::as_array_mut) else {
-        return Ok(());
-    };
-    for (index, output) in outputs.iter_mut().enumerate() {
-        let object = output
-            .as_object_mut()
-            .ok_or_else(|| format!("output[{index}] must be an object"))?;
-        canonicalize_required_field(object, "amount")?;
-    }
-    Ok(())
-}
-
-fn canonicalize_required_field(object: &mut Map<String, Value>, field: &str) -> Result<(), String> {
-    let value = object
+fn array<'a>(document: &'a Map<String, Value>, field: &str) -> &'a [Value] {
+    document
         .get(field)
-        .ok_or_else(|| format!("missing {field}"))?;
-    let parsed = parse_exact_u64(value, field)?;
-    object.insert(field.to_string(), Value::String(parsed.to_string()));
-    Ok(())
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice)
 }
 
-fn canonicalize_optional_field(object: &mut Map<String, Value>, field: &str) -> Result<(), String> {
-    let Some(value) = object.get(field) else {
-        return Ok(());
-    };
-    if value.is_null() {
-        return Ok(());
+fn validate_optional_fields(object: &Map<String, Value>, fields: &[&str]) -> Result<(), String> {
+    for field in fields {
+        match object.get(*field) {
+            None | Some(Value::Null) => {}
+            Some(value) => {
+                parse_exact_u64(value, field)?;
+            }
+        }
     }
-    let parsed = parse_exact_u64(value, field)?;
-    object.insert(field.to_string(), Value::String(parsed.to_string()));
     Ok(())
 }
 

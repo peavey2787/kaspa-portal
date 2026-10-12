@@ -92,3 +92,27 @@ fn get_blocks_response_requires_the_payload_marker() {
     assert!(blocks::decode(&unmarked).is_err());
     assert!(blocks::decode(&[]).is_err());
 }
+
+#[test]
+fn block_and_hash_count_limit_is_inclusive() {
+    let mut inner = WireWriter::new();
+    inner.write_u16(1);
+    inner.write_u32(100_000);
+    let mut outer = WireWriter::new();
+    outer.write_u8(1);
+    outer.write_bytes(&inner.into_vec()).unwrap();
+    let at_limit = blocks::decode(&outer.into_vec()).unwrap_err();
+    assert!(
+        !matches!(at_limit, NetworkError::InvalidLength),
+        "{at_limit:?}"
+    );
+
+    let mut inner = WireWriter::new();
+    inner.write_u16(1);
+    inner.write_u32(100_001);
+    let mut outer = WireWriter::new();
+    outer.write_u8(1);
+    outer.write_bytes(&inner.into_vec()).unwrap();
+    let over = blocks::decode(&outer.into_vec()).unwrap_err();
+    assert!(matches!(over, NetworkError::InvalidLength), "{over:?}");
+}

@@ -36,3 +36,7 @@ pub fn wrap_v1_raw(data: &[u8], out: &mut [u8]) -> Option<usize> {
     out[1..needed].copy_from_slice(data);
     Some(needed)
 }
+
+#[cfg(test)]
+#[path = "unit-tests/qr_payload.rs"]
+mod unit_tests;
