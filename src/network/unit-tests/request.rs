@@ -21,10 +21,7 @@ fn request_encoding_is_stable() {
 #[test]
 fn block_subscription_vector_is_stable() {
     let encoded = subscription::block_added(7).expect("subscription should encode");
-    assert_eq!(
-        hex::encode(encoded),
-        "010700000000000000030c000000010000000000020000000100"
-    );
+    assert_eq!(hex::encode(encoded), "0107000000000000000303000000010000");
 }
 
 #[test]
@@ -65,14 +62,18 @@ fn all_request_codec_boundaries_are_covered() {
     assert!(utxo::encode(&["not-an-address".to_string()]).is_err());
 
     let changed = subscription::utxos_changed(&mainnet, 9).expect("UTXO subscription");
-    assert_eq!(changed.len(), 68);
+    // rusty-kaspa `Scope` framing: u16 version, u8 variant, Borsh fields.
+    assert_eq!(changed.len(), 59);
     assert_eq!(changed[0], 1);
     assert_eq!(&changed[1..9], &9u64.to_le_bytes());
     assert_eq!(changed[9], Operation::Subscribe.code());
-    assert_eq!(&changed[10..14], &54u32.to_le_bytes());
+    assert_eq!(&changed[10..14], &45u32.to_le_bytes());
     assert_eq!(&changed[14..16], &1u16.to_le_bytes());
-    assert_eq!(&changed[16..20], &4u32.to_le_bytes());
-    assert_eq!(&changed[20..24], &44u32.to_le_bytes());
+    assert_eq!(changed[16], 4, "UtxosChanged variant index");
+    assert_eq!(&changed[17..21], &1u32.to_le_bytes(), "address count");
+    assert_eq!(&changed[21..23], &[0, 0], "mainnet prefix, PubKey version");
+    assert_eq!(&changed[23..27], &32u32.to_le_bytes(), "payload length");
+    assert_eq!(&changed[27..], &[0x11; 32]);
 
     assert_eq!(fee::encode(), vec![1, 0]);
     assert_eq!(block::encode_empty_query(), vec![1, 0]);

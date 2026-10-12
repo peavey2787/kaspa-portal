@@ -92,10 +92,10 @@ fn unsupported_or_mislabelled_notifications_fail_closed() {
 #[test]
 fn subscription_bodies_carry_scope_and_addresses() {
     let daa = subscription::virtual_daa_score_changed_payload().unwrap();
-    assert_eq!(&daa[..6], &[1, 0, 6, 0, 0, 0]);
+    assert_eq!(daa, [1, 0, 6]);
     let address =
         "kaspatest:qpq863qwr7nqmfyz8qs3acpd0w6u6cert23pw55fqc6y9ar9vl8ajn9f0y8kl".to_string();
     let utxos = subscription::utxos_changed_payload(&[address.clone(), address]).unwrap();
-    assert_eq!(&utxos[..6], &[1, 0, 4, 0, 0, 0]);
-    assert!(utxos.len() > daa.len());
+    assert_eq!(&utxos[..7], &[1, 0, 4, 2, 0, 0, 0]);
+    assert_eq!(utxos.len(), 7 + 2 * 38);
 }
