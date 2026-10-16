@@ -25,7 +25,7 @@ use kaspa_portal::{
 use serde_json::Value;
 
 pub const DEFAULT_STANDARD_NETWORK: &str = "testnet-10";
-pub const DEFAULT_COVENANT_NETWORK: &str = "testnet-12";
+pub const DEFAULT_COVENANT_NETWORK: &str = "testnet-10";
 
 pub fn standard_network_name() -> String {
     std::env::var("KASPA_PORTAL_E2E_STANDARD_NETWORK")

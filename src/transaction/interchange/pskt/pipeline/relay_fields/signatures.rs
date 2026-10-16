@@ -103,7 +103,7 @@ pub(crate) fn collect_p2pk_signature(fields: &InputFields) -> Result<Vec<Signatu
     })?;
     let key = compressed_xonly(public_key)
         .ok_or_else(|| "P2PK partial-signature public key is malformed".to_string())?;
-    if crate::contract::script::p2pk_xonly(&fields.script_public_key) != Some(key) {
+    if crate::primitives::address::p2pk_xonly(&fields.script_public_key) != Some(key) {
         return Err(
             "P2PK partial-signature public key does not match a canonical P2PK scriptPublicKey"
                 .to_string(),

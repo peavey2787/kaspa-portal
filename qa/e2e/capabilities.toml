@@ -1,7 +1,7 @@
 schema = 1
 surface = "public-developer-api"
 standard_network = "testnet-10"
-covenant_network = "testnet-12"
+covenant_network = "testnet-10"
 
 [[rust_exclusion]]
 symbol = "NetworkClient::new"

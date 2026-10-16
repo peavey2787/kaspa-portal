@@ -89,7 +89,7 @@ pub fn standard_network() -> NetworkId {
 
 pub fn covenant_network() -> NetworkId {
     let name = std::env::var("KASPA_PORTAL_E2E_COVENANT_NETWORK")
-        .unwrap_or_else(|_| "testnet-12".to_owned());
+        .unwrap_or_else(|_| "testnet-10".to_owned());
     NetworkId::parse(&name).expect("valid covenant resource network")
 }
 

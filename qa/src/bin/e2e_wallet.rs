@@ -124,7 +124,10 @@ fn serialize_kpub(xprv: &str) -> Result<String, String> {
         .map_err(|error| format!("E2E KPUB is not UTF-8: {error}"))
 }
 
-fn wallet_address(xprv: &str, network: NetworkId) -> Result<String, String> {
+/// Every receive and change address of the E2E wallet, receive index 0 first.
+/// The funded tests move coins between these addresses, so the funded balance
+/// is their sum, not the balance of the address shown for funding.
+fn wallet_addresses(xprv: &str, network: NetworkId) -> Result<Vec<String>, String> {
     let kpub = serialize_kpub(xprv)?;
     let portal = KaspaPortal::builder()
         .network(network)
@@ -134,11 +137,15 @@ fn wallet_address(xprv: &str, network: NetworkId) -> Result<String, String> {
         .wallet()
         .import_kpub(&kpub)
         .map_err(|error| format!("derive E2E wallet: {error}"))?;
-    wallet
+    let addresses: Vec<String> = wallet
         .receive_addresses
-        .first()
-        .cloned()
-        .ok_or_else(|| "E2E wallet produced no receive address".to_owned())
+        .into_iter()
+        .chain(wallet.change_addresses)
+        .collect();
+    if addresses.is_empty() {
+        return Err("E2E wallet produced no receive address".to_owned());
+    }
+    Ok(addresses)
 }
 
 fn generate_xprv() -> Result<String, String> {
@@ -210,12 +217,24 @@ fn parse_rest_balance(value: &serde_json::Value) -> Result<u64, String> {
     Err("REST balance must be a u64 number or decimal string".to_owned())
 }
 
-async fn rest_balance(address: &str, args: &Args) -> Result<u64, String> {
+fn sum_rest_balances(value: &serde_json::Value) -> Result<u64, String> {
+    value
+        .as_array()
+        .ok_or_else(|| "REST balances response is not an array".to_owned())?
+        .iter()
+        .try_fold(0u64, |total, entry| {
+            total
+                .checked_add(parse_rest_balance(entry)?)
+                .ok_or_else(|| "REST balances overflow u64".to_owned())
+        })
+}
+
+async fn rest_balance(addresses: &[String], args: &Args) -> Result<u64, String> {
     if args.rest_endpoint.trim().is_empty() {
         return Err("no REST endpoint configured".to_owned());
     }
     let url = format!(
-        "{}/addresses/{address}/balance",
+        "{}/addresses/balances",
         args.rest_endpoint.trim_end_matches('/')
     );
     let client = reqwest::Client::builder()
@@ -223,7 +242,8 @@ async fn rest_balance(address: &str, args: &Args) -> Result<u64, String> {
         .build()
         .map_err(|error| format!("build REST client: {error}"))?;
     let response = client
-        .get(&url)
+        .post(&url)
+        .json(&serde_json::json!({ "addresses": addresses }))
         .send()
         .await
         .map_err(|error| format!("query {url}: {error}"))?
@@ -233,16 +253,16 @@ async fn rest_balance(address: &str, args: &Args) -> Result<u64, String> {
         .json::<serde_json::Value>()
         .await
         .map_err(|error| format!("decode {url}: {error}"))?;
-    parse_rest_balance(&value)
+    sum_rest_balances(&value)
 }
 
 async fn funded_balance(
     xprv: &str,
-    address: &str,
+    addresses: &[String],
     args: &Args,
     network: NetworkId,
 ) -> Result<u64, String> {
-    match rest_balance(address, args).await {
+    match rest_balance(addresses, args).await {
         Ok(balance) => return Ok(balance),
         Err(error) if !args.rest_endpoint.trim().is_empty() => {
             eprintln!(
@@ -306,12 +326,13 @@ async fn run() -> Result<i32, String> {
         (xprv, Some(args.state_path.as_path()))
     };
 
-    let address = wallet_address(&xprv, network)?;
+    let addresses = wallet_addresses(&xprv, network)?;
+    let address = &addresses[0];
     if created {
         write_state(&args.state_path, &xprv)?;
         println!("Created a dedicated local Kaspa E2E wallet.");
     }
-    print_wallet(&address, &args, state);
+    print_wallet(address, &args, state);
     if created {
         println!("The private XPRV is intentionally not printed to the console.");
     }
@@ -325,7 +346,7 @@ async fn run() -> Result<i32, String> {
         "Checking the wallet balance on public {}...",
         args.network_name
     );
-    let balance = funded_balance(&xprv, &address, &args, network).await;
+    let balance = funded_balance(&xprv, &addresses, &args, network).await;
     xprv.zeroize();
     let balance = balance?;
     if balance < REQUIRED_SOMPI {
@@ -357,7 +378,7 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_rest_balance;
+    use super::{parse_rest_balance, sum_rest_balances};
 
     #[test]
     fn parses_rest_balance_number_and_decimal_string() {
@@ -375,5 +396,14 @@ mod tests {
     fn rejects_missing_or_invalid_rest_balance() {
         assert!(parse_rest_balance(&serde_json::json!({})).is_err());
         assert!(parse_rest_balance(&serde_json::json!({"balance": -1})).is_err());
+    }
+
+    #[test]
+    fn sums_rest_balances_across_wallet_addresses() {
+        let value = serde_json::json!([{"balance": 7}, {"balance": "5"}]);
+        assert_eq!(sum_rest_balances(&value).unwrap(), 12);
+        assert!(sum_rest_balances(&serde_json::json!({"balance": 1})).is_err());
+        let overflow = serde_json::json!([{"balance": u64::MAX}, {"balance": 1}]);
+        assert!(sum_rest_balances(&overflow).is_err());
     }
 }

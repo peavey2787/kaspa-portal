@@ -7,13 +7,17 @@ pub const FUNDED_XPRV_ENV: &str = "KASPA_PORTAL_E2E_XPRV";
 pub const MIN_FUNDED_BALANCE_SOMPI: u64 = 1_000_000_000;
 pub const SPEND_AMOUNT_SOMPI: u64 = 100_000_000;
 pub const PRIORITY_FEE_SOMPI: u64 = 300_000;
+/// Starting fee for multisig spends: above the planner's standard-fee floor
+/// for a signed 1-of-2 HD45 input (311,700 sompi), so the requested fee is the
+/// one the plan charges and the destination amount balances exactly.
+pub const MULTISIG_PRIORITY_FEE_SOMPI: u64 = 400_000;
 
 pub fn standard_network_name() -> String {
     std::env::var("KASPA_PORTAL_E2E_STANDARD_NETWORK").unwrap_or_else(|_| "testnet-10".to_owned())
 }
 
 pub fn covenant_network_name() -> String {
-    std::env::var("KASPA_PORTAL_E2E_COVENANT_NETWORK").unwrap_or_else(|_| "testnet-12".to_owned())
+    std::env::var("KASPA_PORTAL_E2E_COVENANT_NETWORK").unwrap_or_else(|_| "testnet-10".to_owned())
 }
 
 pub fn standard_network() -> NetworkId {
@@ -32,7 +36,7 @@ pub fn standard_endpoint() -> String {
 
 pub fn covenant_endpoint() -> String {
     std::env::var("KASPA_PORTAL_E2E_COVENANT_ENDPOINT")
-        .unwrap_or_else(|_| "ws://tn12-node.kaspa.com:17210".to_owned())
+        .expect("KASPA_PORTAL_E2E_COVENANT_ENDPOINT is set by qa/scripts/run-e2e-rust")
 }
 
 pub fn deterministic_multisig_kpub(seed_byte: u8) -> String {

@@ -14,4 +14,4 @@ pub(crate) use envelope::{
 pub(crate) use envelope::{format_wire_error, ErrorStyle};
 #[cfg(test)]
 pub(crate) use mutation::inject_tx_payload;
-pub use mutation::{set_payload, set_tx_lane};
+pub use mutation::{append_output, set_payload, set_tx_lane};

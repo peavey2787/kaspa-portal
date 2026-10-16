@@ -272,6 +272,97 @@ impl CovenantFeeShape {
     }
 }
 
+/// A covenant thread spend that pays `withdraw` to a standard address and
+/// returns the remainder to the covenant thread.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ThreadWithdrawFee {
+    pub thread_amount: u64,
+    pub withdraw: u64,
+    /// Fee floor; the remainder is estimated after it.
+    pub minimum_fee: u64,
+    pub fee_rate_sompi_per_gram: u64,
+}
+
+impl ThreadWithdrawFee {
+    /// Compute mass of a one-input, two-output covenant thread spend.
+    const COMPUTE_MASS: u64 = 2_500;
+    /// Script-public-key lengths of the payout (P2PK) and the covenant (P2SH).
+    const PAYOUT_SCRIPT_LEN: usize = 34;
+    const COVENANT_SCRIPT_LEN: usize = 35;
+
+    /// The larger of the compute and KIP-9 storage mass at the fee rate, never
+    /// below the floor. Refuses a withdrawal whose remainder pushes storage
+    /// mass past the consensus limit.
+    pub fn calculate(self) -> Result<u64, String> {
+        let remainder = self
+            .thread_amount
+            .checked_sub(self.withdraw)
+            .and_then(|value| value.checked_sub(self.minimum_fee))
+            .filter(|value| *value > 0 && self.withdraw > 0);
+        let Some(remainder) = remainder else {
+            return Ok(self.minimum_fee);
+        };
+        use crate::transaction::builder::planning::amounts::{
+            storage_mass_estimate, utxo_plurality,
+        };
+        let covenant = utxo_plurality(Self::COVENANT_SCRIPT_LEN, true);
+        let storage = storage_mass_estimate(
+            &[(self.thread_amount, covenant)],
+            &[
+                (
+                    self.withdraw,
+                    utxo_plurality(Self::PAYOUT_SCRIPT_LEN, false),
+                ),
+                (remainder, covenant),
+            ],
+        )?;
+        if storage > MAX_STORAGE_MASS {
+            return Err("withdrawal leaves too small a remainder (storage mass)".to_string());
+        }
+        let fee = storage
+            .max(Self::COMPUTE_MASS)
+            .checked_mul(self.fee_rate_sompi_per_gram)
+            .ok_or_else(|| "thread withdrawal fee overflow".to_string())?;
+        Ok(fee.max(self.minimum_fee))
+    }
+
+    /// The largest withdrawal, at most `cap`, whose priced fee still leaves
+    /// `minimum_return` in the covenant. `withdraw` is ignored; returns 0 when
+    /// no withdrawal fits.
+    #[must_use]
+    pub fn maximum_withdraw(self, cap: u64, minimum_return: u64) -> u64 {
+        let mut low = 0u64;
+        let mut high = self
+            .thread_amount
+            .saturating_sub(minimum_return)
+            .saturating_sub(self.minimum_fee)
+            .min(cap);
+        let mut best = 0;
+        while low <= high {
+            let candidate = low + (high - low) / 2;
+            if self.leaves_return(candidate, minimum_return) {
+                best = candidate;
+                low = candidate + 1;
+            } else if candidate == 0 {
+                break;
+            } else {
+                high = candidate - 1;
+            }
+        }
+        best
+    }
+
+    fn leaves_return(self, withdraw: u64, minimum_return: u64) -> bool {
+        let priced = Self { withdraw, ..self }.calculate();
+        priced.is_ok_and(|fee| {
+            self.thread_amount
+                .checked_sub(withdraw)
+                .and_then(|left| left.checked_sub(fee))
+                .is_some_and(|left| left >= minimum_return)
+        })
+    }
+}
+
 fn estimated_serialized_size(transaction: &ConsensusTransaction) -> Result<u64, String> {
     let mut size = 2u64 + 8 + 8 + 8 + 20 + 8 + 32 + 8;
     for input in &transaction.inputs {

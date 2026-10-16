@@ -3,7 +3,7 @@ import { expect } from '@playwright/test';
 
 export const DEFAULT_STANDARD_NETWORK = 'testnet-10';
 export const DEFAULT_STANDARD_GENESIS_HASH = 'f896a3034873be1739fc4359236899fd3d65d2bc94f9780df0d0da3eb1cc4370';
-export const DEFAULT_COVENANT_NETWORK = 'testnet-12';
+export const DEFAULT_COVENANT_NETWORK = 'testnet-10';
 export const INDEXED_FIXTURE_TXID = '5201b38ed218ca4cf392a71ce446d75fd667b954e2efdebec1acf83e48892e2a';
 
 export async function readJsonEnv(name, required = true) {

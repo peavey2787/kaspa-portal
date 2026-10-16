@@ -138,7 +138,7 @@ fn p2pk_xonly_for_position(
         .script
         .get(..input.utxo_entry.script_public_key.script_len)
         .ok_or(SignatureValidationError::InvalidModel)?;
-    crate::contract::script::p2pk_xonly(script).ok_or(SignatureValidationError::InvalidBinding)
+    crate::primitives::address::p2pk_xonly(script).ok_or(SignatureValidationError::InvalidBinding)
 }
 
 fn multisig_xonly_for_position(

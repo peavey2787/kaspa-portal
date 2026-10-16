@@ -18,6 +18,31 @@ pub struct ShippingEscrowScriptRequest<'a> {
     pub salt: &'a [u8; 8],
 }
 
+/// How a shipment escrow splits: the seller is paid `first` at pickup and
+/// `second` on delivery; `remainder` stays locked between the two.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ShippingEscrowTranches {
+    pub total: u64,
+    pub first: u64,
+    pub second: u64,
+    pub remainder: u64,
+}
+
+impl ShippingEscrowTranches {
+    pub fn new(product_sompi: u64, fee_sompi: u64) -> Result<Self, String> {
+        let total = product_sompi
+            .checked_add(fee_sompi)
+            .ok_or("Shipping escrow total exceeds supported monetary range".to_string())?;
+        let first = product_sompi / 2;
+        Ok(Self {
+            total,
+            first,
+            second: product_sompi - first,
+            remainder: total - first,
+        })
+    }
+}
+
 pub fn build_ship_escrow_script(
     request: ShippingEscrowScriptRequest<'_>,
 ) -> Result<Vec<u8>, String> {
@@ -32,13 +57,9 @@ pub fn build_ship_escrow_script(
         cltv2_deadline,
         salt,
     } = request;
-    let first_tranche = product_sompi / 2;
-    let total = product_sompi
-        .checked_add(fee_sompi)
-        .ok_or("Shipping escrow total exceeds supported monetary range".to_string())?;
-    let remainder = total
-        .checked_sub(first_tranche)
-        .ok_or("Shipping escrow remainder underflow".to_string())?;
+    let ShippingEscrowTranches {
+        total, remainder, ..
+    } = ShippingEscrowTranches::new(product_sompi, fee_sompi)?;
     let seller_spk = p2pk_script_public_key(seller_pubkey);
     let deliverer_spk = p2pk_script_public_key(deliverer_pubkey);
     let buyer_spk = p2pk_script_public_key(buyer_pubkey);

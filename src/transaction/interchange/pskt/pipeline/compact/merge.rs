@@ -127,7 +127,7 @@ pub(crate) fn merge_p2pk(
     signed: &Input,
     index: usize,
 ) -> Result<(), String> {
-    let key = crate::contract::script::p2pk_xonly(&signed.script)
+    let key = crate::primitives::address::p2pk_xonly(&signed.script)
         .ok_or_else(|| format!("input[{index}] is not a standard P2PK input"))?;
     if signed.signatures.len() != 1 {
         return Err(format!(

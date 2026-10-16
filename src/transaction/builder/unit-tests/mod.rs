@@ -202,7 +202,8 @@ fn typed_sweep_matches_the_browser_pskb_shape() {
 
     assert_eq!(
         super::pskb::encode_wire(&typed).expect("typed wire"),
-        super::pskb::encode_pskt_value(source).expect("source wire")
+        crate::transaction::interchange::pskt::pskb::encode_pskt_document(source)
+            .expect("source wire")
     );
 }
 
@@ -264,7 +265,8 @@ fn typed_p2pk_sweep_matches_the_stealth_pskb_shape() {
 
     assert_eq!(
         super::pskb::encode_wire(&typed).expect("typed wire"),
-        super::pskb::encode_pskt_value(source).expect("source wire")
+        crate::transaction::interchange::pskt::pskb::encode_pskt_document(source)
+            .expect("source wire")
     );
 }
 
@@ -358,7 +360,8 @@ fn global_thread_allowance_withdrawal_matches_browser_wire_shape() {
 
     assert_eq!(
         super::pskb::encode_wire(&planned.plan).expect("typed wire"),
-        super::pskb::encode_pskt_value(source).expect("source wire")
+        crate::transaction::interchange::pskt::pskb::encode_pskt_document(source)
+            .expect("source wire")
     );
 }
 
@@ -492,7 +495,8 @@ fn global_thread_topup_matches_mixed_input_shape() {
 
     assert_eq!(
         super::pskb::encode_wire(&planned.plan).expect("typed wire"),
-        super::pskb::encode_pskt_value(source).expect("source wire")
+        crate::transaction::interchange::pskt::pskb::encode_pskt_document(source)
+            .expect("source wire")
     );
 }
 

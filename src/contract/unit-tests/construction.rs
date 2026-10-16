@@ -251,3 +251,45 @@ fn template_recognizers_return_exactly_the_built_fields() {
     assert_eq!(private_swap_script_fields(&[]), None);
     assert_eq!(merkle_whitelist_script_fields(&[0x51; 4]), None);
 }
+
+#[test]
+fn commit_reveal_reveal_reads_the_preimage_and_checks_the_commitment() {
+    use crate::contract::{
+        commit_reveal::{build_commit_reveal_script, read_commit_reveal_reveal},
+        script::push_data,
+    };
+    use crate::primitives::hash::blake2b_256;
+
+    let (part_a, part_b) = (b"salt0001".as_slice(), b"hello".as_slice());
+    let committed = blake2b_256(&[part_a, part_b].concat());
+    let redeem = build_commit_reveal_script(&[5; 32], &committed, 1_000);
+    let reveal_script = |redeem: &[u8], selector: u8| {
+        let mut script = Vec::new();
+        push_data(&mut script, part_a);
+        push_data(&mut script, part_b);
+        push_data(&mut script, &[9; 65]);
+        script.push(selector);
+        push_data(&mut script, redeem);
+        script
+    };
+
+    let reveal = read_commit_reveal_reveal(&reveal_script(&redeem, 0x00)).unwrap();
+    assert_eq!(reveal.preimage, b"salt0001hello");
+    assert_eq!(reveal.fields.committed_hash, committed);
+    assert!(reveal.matches());
+
+    let other = build_commit_reveal_script(&[5; 32], &[6; 32], 1_000);
+    assert!(!read_commit_reveal_reveal(&reveal_script(&other, 0x00))
+        .unwrap()
+        .matches());
+    assert_eq!(
+        read_commit_reveal_reveal(&reveal_script(&redeem, 0x51)),
+        None
+    );
+    assert_eq!(
+        read_commit_reveal_reveal(&reveal_script(&[0x51], 0x00)),
+        None
+    );
+    let script = reveal_script(&redeem, 0x00);
+    assert_eq!(read_commit_reveal_reveal(&script[..script.len() - 1]), None);
+}

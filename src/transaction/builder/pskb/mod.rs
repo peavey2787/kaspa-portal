@@ -15,7 +15,7 @@ pub use model::{
 pub use sweep::SweepInputPolicy;
 
 #[cfg(test)]
-pub(crate) use encoder::{encode_pskt_value, encode_wire};
+pub(crate) use encoder::encode_wire;
 #[cfg(test)]
 pub(crate) use global_thread::{
     plan_global_thread_topup, plan_global_thread_withdrawal, MIN_THREAD_CONTINUATION_SOMPI,

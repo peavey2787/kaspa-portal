@@ -5,7 +5,7 @@ schema = 1
 # the covenant network stays pinned here unless explicitly overridden by env.
 [defaults]
 standard_network = "testnet-10"
-covenant_network = "testnet-12"
+covenant_network = "testnet-10"
 
 [network.testnet-10]
 wrpc_endpoint = "resolver"

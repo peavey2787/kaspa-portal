@@ -1,5 +1,13 @@
 use std::{env, fs, path::PathBuf, time::Duration};
 
+#[path = "../../tests/e2e/funded_support.rs"]
+mod funded_support;
+
+use funded_support::{
+    covenant_endpoint, covenant_network, covenant_network_name, deterministic_multisig_kpub,
+    standard_endpoint, standard_network, standard_network_name, FUNDED_XPRV_ENV,
+    MIN_FUNDED_BALANCE_SOMPI, MULTISIG_PRIORITY_FEE_SOMPI, PRIORITY_FEE_SOMPI, SPEND_AMOUNT_SOMPI,
+};
 use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
     contract::script::p2sh::script_to_address,
@@ -15,34 +23,13 @@ use kaspa_portal::{
     },
     wallet::{
         key::xpub::{
-            derive_and_serialize_multisig_kpub, import_xprv_with_metadata, serialize_account_kpub,
-            ImportedAccountXprv, KPUB_MAX_LEN,
+            import_xprv_with_metadata, serialize_account_kpub, ImportedAccountXprv, KPUB_MAX_LEN,
         },
         multisig::{build_redeem_script, MultisigDescriptor},
     },
     KaspaPortal,
 };
 use serde_json::{json, Value};
-
-const FUNDED_XPRV_ENV: &str = "KASPA_PORTAL_E2E_XPRV";
-const MIN_FUNDED_BALANCE_SOMPI: u64 = 1_000_000_000;
-const PRIORITY_FEE_SOMPI: u64 = 300_000;
-
-fn role_network(role: &str, default: &str) -> (String, NetworkId) {
-    let name = env::var(format!(
-        "KASPA_PORTAL_E2E_{}_NETWORK",
-        role.to_ascii_uppercase()
-    ))
-    .unwrap_or_else(|_| default.to_owned());
-    let network = NetworkId::parse(&name).expect("valid configured E2E network");
-    (name, network)
-}
-
-/// Set by the QA runner (resolved public node or explicit override).
-fn role_endpoint(role: &str) -> String {
-    let name = format!("KASPA_PORTAL_E2E_{}_ENDPOINT", role.to_ascii_uppercase());
-    env::var(&name).unwrap_or_else(|_| panic!("{name} is set by the QA network loader"))
-}
 
 fn role_skipped(role: &str) -> bool {
     env::var(format!(
@@ -185,16 +172,6 @@ async fn broadcast_bootstrap(portal: &KaspaPortal, signed_wire: &str, destinatio
     txid
 }
 
-fn deterministic_multisig_kpub(seed_byte: u8) -> String {
-    let seed = [seed_byte; 64];
-    let mut encoded = [0u8; KPUB_MAX_LEN];
-    let len = derive_and_serialize_multisig_kpub(&seed, &mut encoded)
-        .expect("derive deterministic multisig kpub");
-    std::str::from_utf8(&encoded[..len])
-        .expect("multisig kpub text")
-        .to_owned()
-}
-
 fn multisig_fixture(network: NetworkId) -> (String, String) {
     let first = deterministic_multisig_kpub(0x71);
     let second = deterministic_multisig_kpub(0x72);
@@ -227,8 +204,8 @@ async fn require_balance(
 }
 
 async fn build_standard_fixture() -> Value {
-    let (network_name, network) = role_network("standard", "testnet-10");
-    let endpoint = role_endpoint("standard");
+    let (network_name, network) = (standard_network_name(), standard_network());
+    let endpoint = standard_endpoint();
     let portal = KaspaPortal::builder()
         .network(network)
         .endpoint(endpoint.clone())
@@ -259,7 +236,7 @@ async fn build_standard_fixture() -> Value {
                 network_name: &network_name,
             },
             &multisig_address,
-            100_000_000,
+            SPEND_AMOUNT_SOMPI,
             None,
         )
         .await;
@@ -291,15 +268,15 @@ async fn build_standard_fixture() -> Value {
             network_name: &network_name,
         },
         &destination,
-        100_000_000,
+        SPEND_AMOUNT_SOMPI,
         Some(payload.as_bytes()),
     )
     .await;
     eprintln!("browser funded {network_name} broadcast fee: {adaptive_fee} sompi");
     let multisig_amount = source
         .amount
-        .checked_sub(adaptive_fee)
-        .expect("multisig source covers adaptive fee");
+        .checked_sub(MULTISIG_PRIORITY_FEE_SOMPI)
+        .expect("multisig source covers the multisig fee");
     let sources_json = serde_json::to_string(&vec![json!({
         "address": multisig_address,
         "tx_id": source.tx_id,
@@ -317,7 +294,8 @@ async fn build_standard_fixture() -> Value {
         "multisig": {
             "descriptor": descriptor,
             "sourcesJson": sources_json,
-            "amountSompi": multisig_amount.to_string()
+            "amountSompi": multisig_amount.to_string(),
+            "feeSompi": MULTISIG_PRIORITY_FEE_SOMPI.to_string()
         },
         "feeSompi": adaptive_fee.to_string()
     });
@@ -328,8 +306,8 @@ async fn build_standard_fixture() -> Value {
 }
 
 async fn build_covenant_fixture() -> Value {
-    let (network_name, network) = role_network("covenant", "testnet-12");
-    let endpoint = role_endpoint("covenant");
+    let (network_name, network) = (covenant_network_name(), covenant_network());
+    let endpoint = covenant_endpoint();
     let portal = KaspaPortal::builder()
         .network(network)
         .endpoint(endpoint.clone())

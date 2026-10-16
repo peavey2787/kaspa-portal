@@ -72,6 +72,28 @@ pub fn set_tx_lane(
     encode_root(format, &root)
 }
 
+/// Append a plain output paying `amount` to the version-0 `script` on the
+/// first PSKT of an existing PSKB wire, keeping `global.outputCount` exact.
+pub fn append_output(wire_hex: &str, amount: u64, script: &[u8]) -> Result<String, String> {
+    if detect_format_hex(wire_hex) != PsktFormat::Pskb {
+        return Err("append_output: not a PSKB wire".into());
+    }
+    let (format, mut root) = decode_root(wire_hex)?;
+    let pskt = first_pskt_from_pskb_mut(&mut root)?;
+    let output = crate::transaction::interchange::pskt::pskb::plain_output_value(amount, script);
+    let outputs = pskt
+        .get_mut("outputs")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "missing outputs".to_string())?;
+    outputs.push(output);
+    let count = outputs.len();
+    pskt.get_mut("global")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| "missing global".to_string())?
+        .insert("outputCount".to_string(), Value::from(count));
+    encode_root(format, &root)
+}
+
 #[cfg(test)]
 pub(crate) fn inject_tx_payload(wire_hex: &str, payload: &[u8]) -> Result<String, String> {
     set_payload(wire_hex, payload)

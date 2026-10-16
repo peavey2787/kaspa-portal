@@ -7,10 +7,10 @@ pub(crate) fn classify_input_script(
     spk: &[u8],
     redeem: Option<&[u8]>,
 ) -> (String, Option<u8>, Option<u8>) {
-    if crate::contract::script::p2sh_hash(spk).is_some() {
+    if crate::primitives::address::p2sh_hash(spk).is_some() {
         return classify_p2sh_redeem(redeem);
     }
-    if crate::contract::script::p2pk_xonly(spk).is_some() {
+    if crate::primitives::address::p2pk_xonly(spk).is_some() {
         return ("p2pk".into(), None, None);
     }
     ("unknown".into(), None, None)
@@ -33,7 +33,7 @@ fn classify_p2sh_redeem(redeem: Option<&[u8]>) -> (String, Option<u8>, Option<u8
 
 pub(crate) fn classify_output_script(spk: &[u8], network_prefix: &str) -> (String, Option<String>) {
     // P2SH
-    if let Some(hash) = crate::contract::script::p2sh_hash(spk) {
+    if let Some(hash) = crate::primitives::address::p2sh_hash(spk) {
         return (
             "p2sh".into(),
             Some(crate::primitives::address::encode_p2sh_address(
@@ -43,7 +43,7 @@ pub(crate) fn classify_output_script(spk: &[u8], network_prefix: &str) -> (Strin
         );
     }
     // P2PK
-    if let Some(pk) = crate::contract::script::p2pk_xonly(spk) {
+    if let Some(pk) = crate::primitives::address::p2pk_xonly(spk) {
         return (
             "p2pk".into(),
             Some(crate::primitives::address::encode_p2pk_address(

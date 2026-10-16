@@ -35,7 +35,7 @@ use kaspa_portal::{
 use funded_support::{
     covenant_endpoint, covenant_network, covenant_network_name, deterministic_multisig_kpub,
     standard_endpoint, standard_network, standard_network_name, FUNDED_XPRV_ENV,
-    MIN_FUNDED_BALANCE_SOMPI, PRIORITY_FEE_SOMPI, SPEND_AMOUNT_SOMPI,
+    MIN_FUNDED_BALANCE_SOMPI, MULTISIG_PRIORITY_FEE_SOMPI, PRIORITY_FEE_SOMPI, SPEND_AMOUNT_SOMPI,
 };
 
 fn funded_wallet(
@@ -169,7 +169,7 @@ async fn plan_multisig_spend_with_adaptive_fee(
     network_name: &str,
 ) -> (ConsensusTransaction, u64) {
     let tx = portal.transaction();
-    let mut fee = PRIORITY_FEE_SOMPI;
+    let mut fee = MULTISIG_PRIORITY_FEE_SOMPI;
     for _ in 0..6 {
         let amount = source_amount
             .checked_sub(fee)

@@ -177,23 +177,68 @@ pub fn validate_kaspa_address(addr: &[u8]) -> bool {
 pub fn address_to_script_pubkey(addr: &str) -> Result<Vec<u8>, String> {
     let decoded = decode_address_bytes(addr)?;
     // The decoder has already bound the payload length to the version.
+    let payload: [u8; 32] = decoded
+        .payload
+        .as_slice()
+        .try_into()
+        .map_err(|_| format!("Unsupported script version: {:#x}", decoded.version))?;
     match decoded.version {
-        0x00 => {
-            let mut script = Vec::with_capacity(34);
-            script.push(0x20);
-            script.extend_from_slice(&decoded.payload);
-            script.push(0xac);
-            Ok(script)
-        }
-        0x08 => {
-            let mut script = Vec::with_capacity(35);
-            script.extend_from_slice(&[0xaa, 0x20]);
-            script.extend_from_slice(&decoded.payload);
-            script.push(0x87);
-            Ok(script)
-        }
+        0x00 => Ok(p2pk_script(&payload).to_vec()),
+        0x08 => Ok(p2sh_script(&payload).to_vec()),
         version => Err(format!("Unsupported script version: {version:#x}")),
     }
+}
+
+/// The standard pay-to-public-key lock: `OP_DATA_32 <x-only key> OP_CHECKSIG`.
+#[must_use]
+pub fn p2pk_script(xonly: &[u8; 32]) -> [u8; 34] {
+    use crate::primitives::opcode::{OP_CHECKSIG, OP_DATA_32};
+    let mut script = [0u8; 34];
+    script[0] = OP_DATA_32;
+    script[1..33].copy_from_slice(xonly);
+    script[33] = OP_CHECKSIG;
+    script
+}
+
+/// The standard pay-to-script-hash lock: `OP_BLAKE2B OP_DATA_32 <hash> OP_EQUAL`.
+#[must_use]
+pub fn p2sh_script(script_hash: &[u8; 32]) -> [u8; 35] {
+    use crate::primitives::opcode::{OP_BLAKE2B, OP_DATA_32, OP_EQUAL};
+    let mut script = [0u8; 35];
+    script[0] = OP_BLAKE2B;
+    script[1] = OP_DATA_32;
+    script[2..34].copy_from_slice(script_hash);
+    script[34] = OP_EQUAL;
+    script
+}
+
+/// The x-only key locked by a pay-to-pubkey script `<32-byte key> OP_CHECKSIG`.
+#[must_use]
+pub fn p2pk_xonly(script: &[u8]) -> Option<[u8; 32]> {
+    use crate::primitives::opcode::{OP_CHECKSIG, OP_DATA_32};
+    match script {
+        [OP_DATA_32, key @ .., OP_CHECKSIG] => key.try_into().ok(),
+        _ => None,
+    }
+}
+
+/// The redeem-script hash locked by `OP_BLAKE2B <32-byte hash> OP_EQUAL`.
+#[must_use]
+pub fn p2sh_hash(script: &[u8]) -> Option<[u8; 32]> {
+    use crate::primitives::opcode::{OP_BLAKE2B, OP_DATA_32, OP_EQUAL};
+    match script {
+        [OP_BLAKE2B, OP_DATA_32, hash @ .., OP_EQUAL] => hash.try_into().ok(),
+        _ => None,
+    }
+}
+
+/// The address a standard P2PK or P2SH locking script pays, under `prefix`.
+#[must_use]
+pub fn script_address(script: &[u8], prefix: &str) -> Option<String> {
+    if let Some(key) = p2pk_xonly(script) {
+        return Some(encode_p2pk_address(&key, prefix));
+    }
+    p2sh_hash(script).map(|hash| encode_p2sh_address(&hash, prefix))
 }
 
 struct DecodedAddress {

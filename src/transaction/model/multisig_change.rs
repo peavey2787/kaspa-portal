@@ -1,7 +1,7 @@
 //! Descriptor-backed 45' multisig change verification.
 
 use super::{multisig::MultisigConfig, transaction::Transaction};
-use crate::contract::script::p2sh_hash;
+use crate::primitives::address::p2sh_hash;
 
 /// Find the first 45' output change claim contradicted by a descriptor already
 /// proven against one of this transaction's inputs. Unknown/unverifiable claims

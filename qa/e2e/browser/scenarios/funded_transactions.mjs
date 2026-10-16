@@ -42,7 +42,7 @@ export async function wasm_funded_standard_network_transactions(page, funded) {
       funded.multisig.sourcesJson,
       funded.wallet.receive_addresses[2],
       funded.multisig.amountSompi,
-      fee,
+      funded.multisig.feeSompi,
       0,
       0,
     );

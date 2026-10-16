@@ -66,7 +66,7 @@ for runner in [ROOT/'qa/scripts/run-all.sh', ROOT/'qa/scripts/run-all.cmd']:
 network_config = (ROOT/'qa/e2e/networks.toml').read_text(errors='replace')
 for required_fragment in [
     'standard_network = "testnet-10"',
-    'covenant_network = "testnet-12"',
+    'covenant_network = "testnet-10"',
     '[network.testnet-10]',
     '[network.testnet-12]',
     '[network.mainnet]',
@@ -97,6 +97,9 @@ for runner in funding_runners:
         fail(f'funding flow must stay in the same invocation; remove rerun instruction: {runner.relative_to(ROOT)}')
     if '--check-funded' not in runner_text:
         fail(f'funding flow does not verify the selected network balance: {runner.relative_to(ROOT)}')
+    first_step = 'goto :fund_check\n\n:fund_prompt' if runner.suffix == '.cmd' else 'answer=Y\nwhile true'
+    if first_step not in runner_text:
+        fail(f'funding flow must check the balance before prompting: {runner.relative_to(ROOT)}')
     if '[Y/N]' not in runner_text:
         fail(f'funding flow is missing the Y/N same-session prompt: {runner.relative_to(ROOT)}')
     if 'SKIP_' not in runner_text or 'FUNDED' not in runner_text:
@@ -109,7 +112,7 @@ for runner in funding_runners:
     if runner.suffix == '.sh':
         if 'read -r answer' not in runner_text or 'while true' not in runner_text:
             fail('Linux funding helper must keep the Y/N loop in-process')
-        if '[[ "$rc" -eq 10 ]]' not in runner_text:
+        if '[[ "$rc" -ne 10 ]]' not in runner_text:
             fail('Linux funding helper must recognize the underfunded exit code')
 
     # A user's N decision must remain sticky for the rest of the parent run.

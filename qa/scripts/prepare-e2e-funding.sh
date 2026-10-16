@@ -41,12 +41,9 @@ fi
 state_file="$ROOT/.kaspa-portal-e2e/wallet.env"
 wallet_args=(--state-file "$state_file" --network "$network" --endpoint "$endpoint" --rest-endpoint "$rest_endpoint" --faucet "$faucet")
 cargo run --quiet --manifest-path qa/Cargo.toml --bin e2e_wallet -- "${wallet_args[@]}"
+# A wallet that already holds enough KAS needs no prompt.
+answer=Y
 while true; do
-  printf '\nHave you funded the %s E2E wallet with at least 10 KAS? [Y/N] ' "$network"
-  if ! IFS= read -r answer; then
-    echo "ERROR: Could not read Y/N funding choice." >&2
-    return 1
-  fi
   case "$answer" in
     [Yy])
       set +e
@@ -65,11 +62,10 @@ while true; do
         export "$verified_var=1"
         unset "$skip_var" || true
         break
-      elif [[ "$rc" -eq 10 ]]; then
-        echo "The wallet still needs at least 10 KAS on $network. Fund the address shown above, then press Y; press N to skip only this network's funded tests."
-      else
+      elif [[ "$rc" -ne 10 ]]; then
         return "$rc"
       fi
+      echo "The wallet needs at least 10 KAS on $network. Fund the address shown above, then press Y; press N to skip only this network's funded tests."
       ;;
     [Nn])
       export "$skip_var=1"
@@ -78,5 +74,11 @@ while true; do
       ;;
     *) echo "Please enter Y or N." ;;
   esac
+  printf '
+Have you funded the %s E2E wallet with at least 10 KAS? [Y/N] ' "$network"
+  if ! IFS= read -r answer; then
+    echo "ERROR: Could not read Y/N funding choice." >&2
+    return 1
+  fi
 done
 unset role upper network_var endpoint_var rest_endpoint_var faucet_var supported_var verified_var skip_var network endpoint rest_endpoint faucet supported state_file wallet_args answer rc xprv_line

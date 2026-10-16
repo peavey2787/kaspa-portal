@@ -88,14 +88,16 @@ fn encode_document(
         global["txPayload"] = Value::String(hex::encode(payload));
     }
 
-    encode_pskt_value(json!({
+    encode_pskt_document(json!({
         "global": global,
         "inputs": inputs_json,
         "outputs": outputs_json
     }))
 }
 
-pub(crate) fn encode_pskt_value(mut pskt: Value) -> Result<String, String> {
+/// Wrap one PSKT JSON document in the canonical PSKB wire after checking its
+/// exact u64 fields; a missing `subnetworkId` defaults to the native lane.
+pub fn encode_pskt_document(mut pskt: Value) -> Result<String, String> {
     let global = pskt
         .get_mut("global")
         .and_then(Value::as_object_mut)

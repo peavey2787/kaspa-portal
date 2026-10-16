@@ -1,6 +1,7 @@
 use serde_json::{json, Map, Value};
 
 use super::{PskbInputPlan, PskbOutputPlan, PskbPlan};
+use crate::transaction::interchange::pskt::pskb::encode_pskt_document;
 
 /// Standard PSKT maps (`proprietaries`, `bip32Derivations`, `xpubs`) are JSON
 /// objects; an unset or empty-array value is encoded as `{}`.
@@ -101,15 +102,9 @@ pub fn encode_wire(plan: &PskbPlan) -> Result<String, String> {
         global.insert("txPayload".to_string(), Value::String(hex::encode(payload)));
     }
 
-    encode_pskt_value(json!({
+    encode_pskt_document(json!({
         "global": Value::Object(global),
         "inputs": inputs,
         "outputs": outputs
     }))
-}
-
-/// Encode a preassembled PSKT object in the established PSKB wire envelope.
-/// Specialized planners can use this when their metadata is already assembled.
-pub fn encode_pskt_value(pskt: Value) -> Result<String, String> {
-    crate::transaction::interchange::pskt::pskb::encode_pskt_value(pskt)
 }

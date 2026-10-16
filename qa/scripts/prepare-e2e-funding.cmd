@@ -33,6 +33,8 @@ set "FUND_STATE=%FUND_ROOT%\.kaspa-portal-e2e\wallet.env"
 
 cargo run --quiet --manifest-path qa\Cargo.toml --bin e2e_wallet -- --state-file "%FUND_STATE%" --network "%FUND_NETWORK%" --endpoint "%FUND_ENDPOINT%" --rest-endpoint "%FUND_REST_ENDPOINT%" --faucet "%FUND_FAUCET%"
 if errorlevel 1 exit /b %ERRORLEVEL%
+rem A wallet that already holds enough KAS needs no prompt.
+goto :fund_check
 
 :fund_prompt
 echo.
@@ -47,7 +49,7 @@ cargo run --quiet --manifest-path qa\Cargo.toml --bin e2e_wallet -- --state-file
 set "FUND_RC=%ERRORLEVEL%"
 if "%FUND_RC%"=="0" goto :fund_verified
 if "%FUND_RC%"=="10" (
-    echo The wallet still needs at least 10 KAS on %FUND_NETWORK%. Fund the address shown above, then press Y; press N to skip only this network's funded tests.
+    echo The wallet needs at least 10 KAS on %FUND_NETWORK%. Fund the address shown above, then press Y; press N to skip only this network's funded tests.
     goto :fund_prompt
 )
 exit /b %FUND_RC%

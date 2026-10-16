@@ -20,7 +20,7 @@
 
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
-use crate::{contract::script::p2sh_hash, primitives::address::script_hash};
+use crate::primitives::address::{p2sh_hash, script_hash};
 
 /// Domain key of the consensus `CovenantID` BLAKE2b hasher.
 const COVENANT_ID_DOMAIN: &[u8] = b"CovenantID";
@@ -100,10 +100,10 @@ pub fn covenant_id(genesis: GenesisOutpoint, outputs: &[AuthorizedOutput<'_>]) -
 ///     covenant_id, verify_genesis, verify_redeem_script, AuthorizedOutput, GenesisOutpoint,
 /// };
 ///
+/// use kaspa_portal::primitives::address::{p2sh_script, script_hash};
+///
 /// let redeem = [0x51];
-/// let mut p2sh = vec![0xaa, 0x20];
-/// p2sh.extend_from_slice(&kaspa_portal::primitives::address::script_hash(&redeem));
-/// p2sh.push(0x87);
+/// let p2sh = p2sh_script(&script_hash(&redeem));
 /// let genesis = GenesisOutpoint { transaction_id: [0x88; 32], index: 3 };
 /// let outputs = [AuthorizedOutput { index: 0, value: 1_000, spk_version: 0, spk_script: &p2sh }];
 /// let claimed = covenant_id(genesis, &outputs); // as published, e.g. by a node

@@ -135,7 +135,7 @@ fn main() {
     let (standard_network_name, standard_network) =
         configured_network("KASPA_PORTAL_E2E_STANDARD_NETWORK", "testnet-10");
     let (_, covenant_network) =
-        configured_network("KASPA_PORTAL_E2E_COVENANT_NETWORK", "testnet-12");
+        configured_network("KASPA_PORTAL_E2E_COVENANT_NETWORK", "testnet-10");
     let portal = KaspaPortal::builder()
         .network(standard_network)
         .build()

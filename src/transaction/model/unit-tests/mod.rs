@@ -364,6 +364,19 @@ fn v106_hd45_script_hash_vector_is_exact() {
     assert!(parsed.is_hd45());
     assert_eq!((parsed.threshold(), parsed.participant_count()), (2, 5));
     assert_eq!(config.write_descriptor(&mut text[..length - 1]), None);
+    let grammar = crate::wallet::multisig::grammar::parse_multisig_descriptor::<
+        { crate::transaction::model::MAX_MULTISIG_KEYS },
+    >(&text[..length])
+    .expect("grammar");
+    let mut restored = MultisigConfig::from_descriptor(&grammar);
+    restored.cosigner_index = config.cosigner_index;
+    restored.chain = config.chain;
+    restored.addr_index = config.addr_index;
+    assert!(restored.build_script() > 0);
+    assert_eq!(
+        &restored.script[..restored.script_len],
+        &config.script[..config.script_len]
+    );
 
     let mut legacy = config.clone();
     legacy.v45 = false;

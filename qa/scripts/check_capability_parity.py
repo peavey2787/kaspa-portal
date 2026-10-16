@@ -223,8 +223,8 @@ def main() -> int:
         errors.append("capability registry surface must be public-developer-api")
     if data.get("standard_network") != "testnet-10":
         errors.append("default standard E2E network must be testnet-10")
-    if data.get("covenant_network") != "testnet-12":
-        errors.append("default covenant E2E network must be testnet-12")
+    if data.get("covenant_network") != "testnet-10":
+        errors.append("default covenant E2E network must be testnet-10")
 
     capabilities = data.get("capability", [])
     exclusions = data.get("rust_exclusion", [])

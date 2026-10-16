@@ -21,7 +21,7 @@ pub(crate) mod wire;
 pub use model::{InputSummary, OutputSummary, PartialSigInfo, PsktFormat, PsktSummary};
 pub use review::parse_summary;
 pub use scripts::push_redeem_script;
-pub use wire::{detect_format_hex, set_payload, set_tx_lane};
+pub use wire::{append_output, detect_format_hex, set_payload, set_tx_lane};
 
 #[cfg(test)]
 #[path = "unit-tests/mod.rs"]

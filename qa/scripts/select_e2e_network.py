@@ -237,7 +237,7 @@ def main():
 
     _, defaults, profiles = read_config(CONFIG)
     standard_default = normalize_network(str(defaults.get("standard_network", "testnet-10")))
-    covenant_default = normalize_network(str(defaults.get("covenant_network", "testnet-12")))
+    covenant_default = normalize_network(str(defaults.get("covenant_network", "testnet-10")))
 
     standard_env = os.environ.get("KASPA_PORTAL_E2E_STANDARD_NETWORK")
     covenant_env = os.environ.get("KASPA_PORTAL_E2E_COVENANT_NETWORK")

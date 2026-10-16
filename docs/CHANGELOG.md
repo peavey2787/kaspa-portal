@@ -4,6 +4,10 @@
 
 One implementation per primitive.
 
+- E2E covenant workflows default to testnet-10 (covenants are live there
+  since Toccata). The funding helpers check the wallet balance first and
+  only prompt when it holds less than 10 KAS.
+
 - `primitives::script::{read_element, elements}` is the only script-push
   reader; the covenant branch resolver, execution tracer, script-integer
   walker, key scanner and stealth scanner use it.
@@ -13,7 +17,28 @@ One implementation per primitive.
   pipeline's hand-written template parsers and the signer's own Private Swap
   parser are removed.
 - `contract::krc20::krc20_operation` decodes a Kasplex reveal envelope.
-- `MultisigConfig::{address, cosigner_parts, write_descriptor}`.
+- `MultisigConfig::{address, cosigner_parts, write_descriptor, from_descriptor}`.
+- `primitives::address::{p2pk_script, p2sh_script}` build the standard locks
+  and `{p2pk_xonly, p2sh_hash}` recognize them (moved from
+  `contract::script`); `script_address` maps a standard lock to its address.
+- `transaction::mass::ThreadWithdrawFee` prices a covenant-thread withdrawal at its
+  KIP-9 storage mass and refuses remainders the storage-mass limit rejects.
+- `transaction::interchange::pskt::append_output` appends a plain output to a
+  PSKB wire and keeps `global.outputCount` exact; `pskb::plain_output_value` is
+  the canonical output JSON it uses.
+- `contract::shipping_escrow::ship_escrow_terms` reads a shipment-escrow redeem
+  script back into its terms; `ShippingEscrowTranches` is the one place the
+  pickup/delivery split is computed.
+- The browser funded fixture shares the Rust E2E funded support module and
+  prices the multisig consolidation with the multisig fee, not the
+  single-key broadcast fee.
+- `contract::covenant::spend_path::{spend_path, is_single_path}` read which
+  path a two-branch covenant spend took from its signature script.
+- `contract::commit_reveal::read_commit_reveal_reveal` reads a reveal spend's
+  preimage and opened script; `CommitRevealReveal::matches` checks the commitment.
+- `transaction::interchange::pskt::pskb::encode_pskt_document` wraps a PSKT JSON
+  document in the canonical PSKB wire; `ThreadWithdrawFee::maximum_withdraw`
+  finds the largest withdrawal that still prices.
 - `primitives::hash::{blake2b_256, Blake2b256}` is Portal's only BLAKE2b
   (unkeyed and keyed). The hand-written keyed compression in
   `transaction::sighash`, `sighash::{blake2b_hash, KaspaBlake2b}` and the

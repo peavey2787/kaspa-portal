@@ -4,7 +4,7 @@ Kaspa Portal keeps a machine-readable inventory of the public developer-facing S
 
 ## Live-network rule
 
-Real-world E2E is role-based. Ordinary/non-covenant functionality uses the **standard network** (`testnet-10` by default), while covenant functionality uses the independently configured **covenant network** (`testnet-12` by default). The defaults and known network profiles live in [`../qa/e2e/networks.toml`](../qa/e2e/networks.toml). A simulated transport is reserved for conditions that cannot be requested safely or deterministically from a public node, such as malformed, duplicated, mismatched, or deliberately delayed RPC responses.
+Real-world E2E is role-based. Ordinary/non-covenant functionality uses the **standard network** (`testnet-10` by default), while covenant functionality uses the independently configured **covenant network** (`testnet-10` by default). The defaults and known network profiles live in [`../qa/e2e/networks.toml`](../qa/e2e/networks.toml). A simulated transport is reserved for conditions that cannot be requested safely or deterministically from a public node, such as malformed, duplicated, mismatched, or deliberately delayed RPC responses.
 
 ## Registry fields
 
@@ -63,7 +63,7 @@ On Windows Command Prompt:
 scripts\run-e2e-rust-windows.cmd
 ```
 
-`--read-only` is available for diagnostics when funded wallets are unavailable, but it explicitly does not represent a complete Rust E2E pass. Interactive runs prompt for the ordinary network: `1. testnet-10`, `2. testnet-12`, `3. mainnet`, or `4. custom`. Pressing Enter uses `defaults.standard_network` from `qa/e2e/networks.toml`; custom accepts future values such as `testnet-14`. The covenant role remains independently pinned by `defaults.covenant_network` (TN12 today).
+`--read-only` is available for diagnostics when funded wallets are unavailable, but it explicitly does not represent a complete Rust E2E pass. Interactive runs prompt for the ordinary network: `1. testnet-10`, `2. testnet-12`, `3. mainnet`, or `4. custom`. Pressing Enter uses `defaults.standard_network` from `qa/e2e/networks.toml`; custom accepts future values such as `testnet-14`. The covenant role remains independently pinned by `defaults.covenant_network` (TN10 today).
 
 If no XPRV is supplied, the runner creates one dedicated local wallet and stores its secret only in the Git-ignored `.kaspa-portal-e2e/wallet.env`. The same XPRV is reused across network roles, while each role derives/checks its address and balance on its own network. Standard and covenant funding each get an independent `Y/N` loop: `Y` checks the selected network immediately and repeats if the balance is below 10 KAS; `N` skips only that role's funded scenarios. Mainnet spending is disabled unless `KASPA_PORTAL_E2E_ALLOW_MAINNET_SPEND=1` is explicitly set. Secrets are never written to fixtures or the capability registry.
 

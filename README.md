@@ -249,7 +249,7 @@ run-all-windows.cmd --from-resources-e2e
 QA deliberately separates the network used for ordinary functionality from the network used for covenant functionality:
 
 - **standard / non-covenant:** `testnet-10` by default;
-- **covenant:** `testnet-12` by default, because covenant validation is kept on the covenant-capable test network independently of ordinary SDK coverage.
+- **covenant:** `testnet-10` by default (covenants are live there since Toccata); it stays independently configurable through `defaults.covenant_network` or `KASPA_PORTAL_E2E_COVENANT_NETWORK`.
 
 The single editable source of defaults, public resolver/fallback endpoints, REST endpoints, faucets, and genesis hashes is [`qa/e2e/networks.toml`](qa/e2e/networks.toml). Change `defaults.standard_network` or `defaults.covenant_network` there when Kaspa moves either validation role to another network. The SDK network parser accepts future names such as `testnet-14` (suffixes 1 through 127), so moving to a future testnet does not require adding another `NetworkId` enum variant.
 

@@ -164,6 +164,24 @@ fn transaction_lane_mutation_sets_all_lane_fields() {
 }
 
 #[test]
+fn append_output_adds_a_plain_output_and_counts_it() {
+    let wire = pskb_wire(serde_json::json!([{
+        "global": {"outputCount": 0},
+        "inputs": [],
+        "outputs": []
+    }]));
+    let result = append_output(&wire, u64::MAX, &[0x51]).unwrap();
+    let (_, root) = decode_root(&result).unwrap();
+    assert_eq!(root[0]["global"]["outputCount"], Value::from(1));
+    let output = &root[0]["outputs"][0];
+    assert_eq!(output["amount"], Value::String(u64::MAX.to_string()));
+    assert_eq!(output["scriptPublicKey"], Value::String("000051".into()));
+    assert!(append_output("4b535054", 1, &[0x51])
+        .unwrap_err()
+        .contains("not a PSKB"));
+}
+
+#[test]
 fn transaction_lane_mutation_preserves_u64_gas_exactness() {
     let wire = pskb_wire(serde_json::json!([{
         "global": {},

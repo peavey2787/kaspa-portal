@@ -232,3 +232,62 @@ fn polymod_matches_reference_values() {
     assert_eq!(polymod([0u8].into_iter()), 32);
     assert_eq!(polymod([31u8].into_iter()), 63);
 }
+
+#[test]
+fn standard_script_recognizers_require_the_exact_shape() {
+    let mut p2pk = vec![0x20];
+    p2pk.extend_from_slice(&[7; 32]);
+    p2pk.push(0xac);
+    assert_eq!(p2pk_xonly(&p2pk), Some([7; 32]));
+    let mut p2sh = vec![0xaa, 0x20];
+    p2sh.extend_from_slice(&[9; 32]);
+    p2sh.push(0x87);
+    assert_eq!(p2sh_hash(&p2sh), Some([9; 32]));
+    assert_eq!(p2pk_xonly(&p2sh), None);
+    assert_eq!(p2sh_hash(&p2pk), None);
+
+    for script in [&p2pk, &p2sh] {
+        for index in 0..script.len() {
+            let mut altered = script.clone();
+            altered[index] ^= 0x01;
+            let is_payload = if script.len() == 34 {
+                (1..33).contains(&index)
+            } else {
+                (2..34).contains(&index)
+            };
+            let recognized = p2pk_xonly(&altered).is_some() || p2sh_hash(&altered).is_some();
+            assert_eq!(recognized, is_payload, "byte {index} of {script:02x?}");
+        }
+        assert_eq!(p2pk_xonly(&script[..script.len() - 1]), None);
+        assert_eq!(p2sh_hash(&script[..script.len() - 1]), None);
+        let mut longer = script.clone();
+        longer.push(0);
+        assert_eq!(p2pk_xonly(&longer), None);
+        assert_eq!(p2sh_hash(&longer), None);
+    }
+}
+
+#[test]
+fn standard_script_builders_round_trip_through_recognizers_and_addresses() {
+    let p2pk = p2pk_script(&[7; 32]);
+    let p2sh = p2sh_script(&[9; 32]);
+    assert_eq!(p2pk_xonly(&p2pk), Some([7; 32]));
+    assert_eq!(p2sh_hash(&p2sh), Some([9; 32]));
+    let p2pk_address = encode_p2pk_address(&[7; 32], "kaspatest");
+    let p2sh_address = encode_p2sh_address(&[9; 32], "kaspa");
+    assert_eq!(
+        script_address(&p2pk, "kaspatest"),
+        Some(p2pk_address.clone())
+    );
+    assert_eq!(script_address(&p2sh, "kaspa"), Some(p2sh_address.clone()));
+    assert_eq!(
+        address_to_script_pubkey(&p2pk_address).unwrap(),
+        p2pk.to_vec()
+    );
+    assert_eq!(
+        address_to_script_pubkey(&p2sh_address).unwrap(),
+        p2sh.to_vec()
+    );
+    assert_eq!(script_address(&p2pk[..33], "kaspa"), None);
+    assert_eq!(script_address(&[], "kaspa"), None);
+}

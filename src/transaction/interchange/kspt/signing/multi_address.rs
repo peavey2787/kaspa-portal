@@ -336,7 +336,7 @@ fn sign_account_input(
 }
 
 fn p2pk_target(tx: &Transaction, input_index: usize) -> Option<[u8; 32]> {
-    crate::contract::script::p2pk_xonly(
+    crate::primitives::address::p2pk_xonly(
         tx.inputs[input_index]
             .utxo_entry
             .script_public_key

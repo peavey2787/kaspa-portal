@@ -227,6 +227,25 @@ impl MultisigConfig {
         serialized_parts(&self.cosigner_parts(index))
     }
 
+    /// The wallet a parsed hierarchical descriptor names, with its
+    /// participants in descriptor order; call [`Self::build_script`] once the
+    /// address family, chain and index are chosen.
+    #[must_use]
+    pub fn from_descriptor(
+        parsed: &crate::wallet::multisig::grammar::ParsedMultisigDescriptor<MAX_MULTISIG_KEYS>,
+    ) -> Self {
+        let mut config = Self::new();
+        config.m = parsed.threshold;
+        config.n = parsed.participant_count;
+        config.v45 = parsed.is_hd45();
+        config.cosigner_pubkeys = parsed.public_keys;
+        config.cosigner_chain_codes = parsed.chain_codes;
+        config.cosigner_depth = parsed.depths;
+        config.cosigner_parent_fp = parsed.parent_fingerprints;
+        config.cosigner_child_num = parsed.child_numbers;
+        config
+    }
+
     /// The account key of cosigner `index` as kpub parts.
     #[must_use]
     pub fn cosigner_parts(&self, index: usize) -> KpubParts {

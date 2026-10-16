@@ -157,3 +157,67 @@ fn serialized_size_estimate_matches_rusty_kaspa_field_by_field() {
         Ok(V0 + 2 + 34)
     );
 }
+
+#[test]
+fn thread_withdraw_fee_prices_kip9_storage_mass_and_floors() {
+    use super::ThreadWithdrawFee;
+    let fee = |thread_amount, withdraw, fee_rate_sompi_per_gram| {
+        ThreadWithdrawFee {
+            thread_amount,
+            withdraw,
+            minimum_fee: 300_000,
+            fee_rate_sompi_per_gram,
+        }
+        .calculate()
+    };
+    // Outputs 10,000 + 4,445 grams less the arithmetic input mass of 4,000.
+    assert_eq!(fee(1_000_000_000, 100_000_000, 100), Ok(1_044_500));
+    assert_eq!(fee(1_000_000_000, 100_000_000, 1), Ok(300_000));
+    // Storage mass of 600 grams stays under the compute-mass estimate.
+    assert_eq!(fee(10_000_000_000, 5_000_000_000, 1_000), Ok(2_500_000));
+    // A 0.01 KAS payout carries 1,000,000 grams of storage mass.
+    assert!(fee(1_000_000_000, 1_000_000, 1).is_err());
+    // Nothing remains to return, or nothing is withdrawn: only the floor.
+    assert_eq!(fee(1_000_000, 700_000, 100), Ok(300_000));
+    assert_eq!(fee(1_000_000, 900_000, 100), Ok(300_000));
+    assert_eq!(fee(1_000_000_000, 0, 100), Ok(300_000));
+    assert_eq!(fee(1_000, 2_000, 100), Ok(300_000));
+}
+
+#[test]
+fn thread_maximum_withdraw_is_the_largest_amount_that_still_prices() {
+    use super::ThreadWithdrawFee;
+    let thread = |thread_amount| ThreadWithdrawFee {
+        thread_amount,
+        withdraw: 0,
+        minimum_fee: 300_000,
+        fee_rate_sompi_per_gram: 1,
+    };
+    let minimum_return = 10_000_000;
+    let best = thread(1_000_000_000).maximum_withdraw(u64::MAX, minimum_return);
+    let fee = ThreadWithdrawFee {
+        withdraw: best,
+        ..thread(1_000_000_000)
+    }
+    .calculate()
+    .unwrap();
+    assert!(1_000_000_000 - best - fee >= minimum_return);
+    let over = ThreadWithdrawFee {
+        withdraw: best + 1,
+        ..thread(1_000_000_000)
+    }
+    .calculate();
+    assert!(over.map_or(true, |fee| 1_000_000_000 - best - 1 - fee < minimum_return));
+    assert_eq!(
+        thread(1_000_000_000).maximum_withdraw(5_000, minimum_return),
+        0
+    );
+    assert_eq!(
+        thread(1_000_000_000).maximum_withdraw(200_000_000, minimum_return),
+        200_000_000
+    );
+    assert_eq!(
+        thread(5_000_000).maximum_withdraw(u64::MAX, minimum_return),
+        0
+    );
+}

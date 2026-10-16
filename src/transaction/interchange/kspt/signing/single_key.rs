@@ -175,7 +175,7 @@ fn sign_raw_if_matching(
 }
 
 fn input_matches_xonly(tx: &Transaction, input_index: usize, xonly: &[u8]) -> bool {
-    crate::contract::script::p2pk_xonly(
+    crate::primitives::address::p2pk_xonly(
         tx.inputs[input_index]
             .utxo_entry
             .script_public_key

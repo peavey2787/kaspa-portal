@@ -30,7 +30,8 @@ impl PskbApi {
 
     /// Encode a preassembled PSKT/PSKB document into the canonical PSKB wire envelope.
     pub fn encode_document(&self, document: Value) -> Result<String> {
-        encoder::encode_pskt_value(document).map_err(Error::Transaction)
+        crate::transaction::interchange::pskt::pskb::encode_pskt_document(document)
+            .map_err(Error::Transaction)
     }
 
     #[must_use]
