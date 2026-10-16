@@ -33,12 +33,15 @@ impl ShippingEscrowTranches {
         let total = product_sompi
             .checked_add(fee_sompi)
             .ok_or("Shipping escrow total exceeds supported monetary range".to_string())?;
-        let first = product_sompi / 2;
+        let first_tranche = product_sompi / 2;
+        let underflow = || "Shipping escrow tranche underflow".to_string();
         Ok(Self {
             total,
-            first,
-            second: product_sompi - first,
-            remainder: total - first,
+            first: first_tranche,
+            second: product_sompi
+                .checked_sub(first_tranche)
+                .ok_or_else(underflow)?,
+            remainder: total.checked_sub(first_tranche).ok_or_else(underflow)?,
         })
     }
 }
