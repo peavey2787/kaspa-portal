@@ -29,6 +29,8 @@ One implementation per primitive.
 - `contract::shipping_escrow::ship_escrow_terms` reads a shipment-escrow redeem
   script back into its terms; `ShippingEscrowTranches` is the one place the
   pickup/delivery split is computed, with checked arithmetic throughout.
+- `MultisigConfig::DESCRIPTOR_MAX_LEN` is the exact longest descriptor
+  `write_descriptor` emits, so callers size its buffer from the owner.
 - The browser funded fixture shares the Rust E2E funded support module and
   prices the multisig consolidation with the multisig fee, not the
   single-key broadcast fee.

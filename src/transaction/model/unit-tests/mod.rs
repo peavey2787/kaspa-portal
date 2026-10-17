@@ -356,8 +356,14 @@ fn v106_hd45_script_hash_vector_is_exact() {
         0
     );
 
-    let mut text = [0u8; 1024];
+    let mut text = [0u8; MultisigConfig::DESCRIPTOR_MAX_LEN];
     let length = config.write_descriptor(&mut text).expect("45' descriptor");
+    // A full 45' key set is the longest descriptor: the bound is exact.
+    assert_eq!(
+        usize::from(config.n),
+        crate::transaction::model::MAX_MULTISIG_KEYS
+    );
+    assert_eq!(length, MultisigConfig::DESCRIPTOR_MAX_LEN);
     let descriptor = core::str::from_utf8(&text[..length]).unwrap();
     assert!(descriptor.starts_with("multi_hd45(2,kpub1"));
     let parsed = crate::wallet::multisig::MultisigDescriptor::parse(descriptor).expect("parses");

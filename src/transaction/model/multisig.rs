@@ -47,7 +47,24 @@ impl Default for MultisigConfig {
     }
 }
 
+/// Widest key [`MultisigConfig::write_descriptor`] emits: a 45' kpub, or a
+/// legacy compressed pubkey and chain code in hex.
+const DESCRIPTOR_KEY_MAX_LEN: usize = {
+    let legacy = 2 * (33 + 32);
+    let kpub = crate::wallet::key::xpub::KPUB_MAX_LEN;
+    if kpub > legacy {
+        kpub
+    } else {
+        legacy
+    }
+};
+
 impl MultisigConfig {
+    /// Longest descriptor [`Self::write_descriptor`] emits: `multi_hd45(`, a
+    /// one-digit threshold, a full key set and the closing parenthesis.
+    pub const DESCRIPTOR_MAX_LEN: usize =
+        b"multi_hd45(".len() + 1 + MAX_MULTISIG_KEYS * (1 + DESCRIPTOR_KEY_MAX_LEN) + 1;
+
     pub const fn new() -> Self {
         Self {
             m: 0,
