@@ -55,6 +55,7 @@ fn push_classification_covers_op_0_through_pushdata4() {
 fn elements_walk_a_script_and_report_malformed_tails() {
     let script = [0x51, 0x02, 7, 8, 0xac];
     let mut walker = elements(&script);
+    assert!(!walker.is_complete());
     let opcodes = walker
         .by_ref()
         .map(|element| element.opcode)

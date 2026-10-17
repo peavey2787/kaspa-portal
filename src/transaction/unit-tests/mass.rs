@@ -177,6 +177,14 @@ fn thread_withdraw_fee_prices_kip9_storage_mass_and_floors() {
     assert_eq!(fee(10_000_000_000, 5_000_000_000, 1_000), Ok(2_500_000));
     // A 0.01 KAS payout carries 1,000,000 grams of storage mass.
     assert!(fee(1_000_000_000, 1_000_000, 1).is_err());
+    // Exactly at the consensus storage limit: 495,194 + 100,000 - 95,194 grams.
+    let at_limit = ThreadWithdrawFee {
+        thread_amount: 42_019_407,
+        withdraw: 2_019_407,
+        minimum_fee: 0,
+        fee_rate_sompi_per_gram: 1,
+    };
+    assert_eq!(at_limit.calculate(), Ok(500_000));
     // Nothing remains to return, or nothing is withdrawn: only the floor.
     assert_eq!(fee(1_000_000, 700_000, 100), Ok(300_000));
     assert_eq!(fee(1_000_000, 900_000, 100), Ok(300_000));

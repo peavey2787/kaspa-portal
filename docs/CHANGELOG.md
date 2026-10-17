@@ -4,6 +4,12 @@
 
 One implementation per primitive.
 
+- `ThreadWithdrawFee::maximum_withdraw` fixes its answer bit by bit in a
+  bounded 64-step search instead of an open `while` loop.
+- `element_integer` drops any trailing zero sign byte (value-preserving).
+- Tests pin the KRC-20 envelope payload rule, `Elements::is_complete`, the
+  storage-mass limit boundary and the Private Swap destination length bounds.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.

@@ -331,25 +331,21 @@ impl ThreadWithdrawFee {
     /// no withdrawal fits.
     #[must_use]
     pub fn maximum_withdraw(self, cap: u64, minimum_return: u64) -> u64 {
-        let mut low = 0u64;
-        let mut high = self
+        let ceiling = self
             .thread_amount
             .saturating_sub(minimum_return)
             .saturating_sub(self.minimum_fee)
             .min(cap);
-        let mut best = 0;
-        while low <= high {
-            let candidate = low + (high - low) / 2;
-            if self.leaves_return(candidate, minimum_return) {
-                best = candidate;
-                low = candidate + 1;
-            } else if candidate == 0 {
-                break;
+        // Fixes the answer one bit at a time from the top; a fit is monotone
+        // in the amount, so this is a bounded 64-step binary search.
+        (0..u64::BITS).rev().fold(0, |best, bit| {
+            let candidate = best + (1 << bit);
+            if candidate <= ceiling && self.leaves_return(candidate, minimum_return) {
+                candidate
             } else {
-                high = candidate - 1;
+                best
             }
-        }
-        best
+        })
     }
 
     fn leaves_return(self, withdraw: u64, minimum_return: u64) -> bool {

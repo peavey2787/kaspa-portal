@@ -22,5 +22,7 @@ fn private_swap_rejects_invalid_configuration_boundaries() {
     assert!(build_private_swap_script(&owner, &claimer, &valid_destination, 1, &[0; 16]).is_err());
     assert!(build_private_swap_script(&owner, &claimer, &[0; 2], 1, &salt).is_err());
     assert!(build_private_swap_script(&owner, &claimer, &[0; 74], 1, &salt).is_err());
+    assert!(build_private_swap_script(&owner, &claimer, &[0; 3], 1, &salt).is_ok());
+    assert!(build_private_swap_script(&owner, &claimer, &[0; 73], 1, &salt).is_ok());
     assert!(build_private_swap_script(&owner, &owner, &valid_destination, 1, &salt).is_err());
 }

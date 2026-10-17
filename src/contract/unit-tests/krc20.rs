@@ -63,3 +63,17 @@ fn anything_but_a_closed_kasplex_krc20_envelope_is_ignored() {
     assert!(krc20_operation(&loose).is_none());
     assert!(krc20_operation(&[]).is_none());
 }
+
+#[test]
+fn the_payload_is_the_last_non_empty_push_inside_the_envelope() {
+    let transfer = br#"{"p":"krc-20","op":"transfer","tick":"NACHO"}"#;
+    // A trailing empty push does not hide the JSON.
+    let mut padded = reveal(transfer, b"kasplex", false);
+    padded.extend_from_slice(&[0x00, 0x68]);
+    assert!(krc20_operation(&padded).is_some());
+    // The protocol tag itself is never the payload, wherever the envelope starts.
+    let mut empty = alloc::vec![0xac, 0x00, 0x63];
+    push_data(&mut empty, b"kasplex");
+    empty.push(0x68);
+    assert_eq!(super::envelope_payload(&empty), None);
+}

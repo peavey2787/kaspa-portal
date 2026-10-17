@@ -66,16 +66,15 @@ fn classify_element(element: &crate::primitives::script::Element<'_>) -> ScriptI
 }
 
 /// The non-negative integer an element pushes: `OP_0`, `OP_1..=OP_16`, or
-/// little-endian bytes (a ninth, zero sign byte is allowed above `i64::MAX`).
+/// little-endian bytes (a trailing zero sign byte is allowed, which a ninth
+/// byte needs above `i64::MAX`; dropping it never changes the value).
 /// Callers rebuild the script to reject non-minimal encodings.
 pub(crate) fn element_integer(element: &crate::primitives::script::Element<'_>) -> Option<u64> {
     let element = match element.data {
-        [value @ .., 0] if element.is_push() && value.len() == 8 => {
-            crate::primitives::script::Element {
-                opcode: element.opcode,
-                data: value,
-            }
-        }
+        [value @ .., 0] => crate::primitives::script::Element {
+            opcode: element.opcode,
+            data: value,
+        },
         _ => *element,
     };
     match classify_element(&element) {
