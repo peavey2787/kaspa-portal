@@ -13,6 +13,9 @@ serde_json = "1"
 hex = "0.4"
 kaspa-portal = { path = "../../.." }
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "address"
 path = "fuzz_targets/address.rs"
@@ -79,6 +82,13 @@ bench = false
 [[bin]]
 name = "signed_transaction"
 path = "fuzz_targets/signed_transaction.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "qr_session"
+path = "fuzz_targets/qr_session.rs"
 test = false
 doc = false
 bench = false

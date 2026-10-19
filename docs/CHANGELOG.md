@@ -10,6 +10,12 @@ One implementation per primitive.
 - Tests pin the KRC-20 envelope payload rule, `Elements::is_complete`, the
   storage-mass limit boundary and the Private Swap destination length bounds.
 
+- Fuzz harness bodies live in the `kaspa-portal-fuzz` library. A stable
+  smoke test drives every harness with seeds and deterministic mutations in
+  run-all and CI; KSPT, PSKT/PSKB and QR frames must round-trip and a QR
+  session must reassemble in any frame order. New `qr_session` target; a
+  nightly `fuzz` workflow runs each libFuzzer target for five minutes.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.

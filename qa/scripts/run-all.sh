@@ -52,6 +52,9 @@ if [[ "$resume_stage" == "full" ]]; then
   cargo clippy --no-default-features --features self-test,kdf-benchmark --target thumbv7em-none-eabihf -- -D warnings
   cargo test --manifest-path qa/benches/Cargo.toml --no-run
   cargo check --manifest-path qa/tests/fuzz/Cargo.toml
+  # Fuzz harnesses and their round-trip oracles on seeds and mutations.
+  cargo test --manifest-path qa/tests/fuzz/Cargo.toml --lib
+  cargo clippy --manifest-path qa/tests/fuzz/Cargo.toml --lib --tests -- -D warnings
 fi
 
 if [[ "$resume_stage" == "full" || "$resume_stage" == "wasm" ]]; then

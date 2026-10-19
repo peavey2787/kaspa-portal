@@ -1,0 +1,59 @@
+name: fuzz
+
+# Bounded coverage-guided fuzzing of every libFuzzer target in qa/tests/fuzz.
+# The stable smoke test (cargo test --manifest-path qa/tests/fuzz/Cargo.toml
+# --lib) runs the same harnesses on every push; this explores far beyond it.
+
+on:
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'qa/tests/fuzz/**'
+      - '.github/workflows/fuzz.yml'
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  target:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - address
+          - beacon_proof
+          - indexer_transaction
+          - kspt
+          - pskb
+          - pskt
+          - qr_frame
+          - qr_session
+          - rpc_response
+          - script
+          - signed_transaction
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install nightly toolchain
+        run: rustup toolchain install nightly --profile minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: qa/tests/fuzz
+      - name: Install cargo-fuzz
+        run: cargo +nightly install cargo-fuzz --version 0.12.0 --locked
+      - name: Fuzz ${{ matrix.target }}
+        run: >
+          cargo +nightly fuzz run --fuzz-dir qa/tests/fuzz ${{ matrix.target }}
+          -- -max_total_time=300 -rss_limit_mb=2048
+      - name: Upload crash reproducers
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: qa/tests/fuzz/artifacts
+          if-no-files-found: ignore

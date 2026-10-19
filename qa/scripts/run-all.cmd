@@ -124,6 +124,11 @@ call :run cargo test --manifest-path qa\benches\Cargo.toml --no-run
 if errorlevel 1 exit /b 1
 call :run cargo check --manifest-path qa\tests\fuzz\Cargo.toml
 if errorlevel 1 exit /b 1
+rem Fuzz harnesses and their round-trip oracles on seeds and mutations.
+call :run cargo test --manifest-path qa\tests\fuzz\Cargo.toml --lib
+if errorlevel 1 exit /b 1
+call :run cargo clippy --manifest-path qa\tests\fuzz\Cargo.toml --lib --tests -- -D warnings
+if errorlevel 1 exit /b 1
 
 :wasm_compile_qa
 where rustup >nul 2>&1

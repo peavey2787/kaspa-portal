@@ -2,6 +2,8 @@
 /qa/target/
 /qa/benches/target/
 /qa/tests/fuzz/target/
+/qa/tests/fuzz/artifacts/
+/qa/tests/fuzz/corpus/
 /qa/e2e/wasm/target/
 /node_modules/
 **/node_modules/
