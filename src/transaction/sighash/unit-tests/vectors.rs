@@ -420,3 +420,6 @@ fn payload_is_byte_exact_for_every_mode_and_non_native_empty_payload() {
         "018ffeecd45ca1b316cac30e3a31e0391b09a5e4f77422777f38f912e07e882a"
     );
 }
+
+#[path = "rusty_kaspa_vectors.rs"]
+mod rusty_kaspa_vectors;
