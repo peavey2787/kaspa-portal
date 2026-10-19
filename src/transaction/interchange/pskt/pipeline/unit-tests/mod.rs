@@ -66,9 +66,18 @@ fn derivation_helpers_own_kaskold_proprietary_encoding() {
         "700"
     );
 
-    assert!(attach_input_derivation(&original, 0, derivation(0, 0x8000_0000)).is_err());
-    assert!(attach_input_derivation(&original, 0, derivation(2, 500)).is_err());
-    assert!(attach_output_derivation(&original, 0, derivation(1, 0x8000_0000)).is_err());
+    crate::test_support::assert_err_text(
+        &attach_input_derivation(&original, 0, derivation(0, 0x8000_0000)),
+        "derivation hint needs branch 0 or 1 and a non-hardened index",
+    );
+    crate::test_support::assert_err_text(
+        &attach_input_derivation(&original, 0, derivation(2, 500)),
+        "derivation hint needs branch 0 or 1 and a non-hardened index",
+    );
+    crate::test_support::assert_err_text(
+        &attach_output_derivation(&original, 0, derivation(1, 0x8000_0000)),
+        "derivation hint needs branch 0 or 1 and a non-hardened index",
+    );
 }
 
 fn test_pskb(input_key: [u8; 32], _index: u32) -> String {
@@ -363,13 +372,22 @@ fn partial_signature_fields_are_strictly_shaped() {
         decode_signature(&json!({"schnorr": schnorr})),
         Ok([0x22; 64])
     );
-    for malformed in [
-        json!({"ecdsa": schnorr}),
-        json!({"schnorr": schnorr, "extra": 1}),
-        json!({"schnorr": 7}),
-        json!([]),
+    for (malformed, expected) in [
+        (
+            json!({"ecdsa": schnorr}),
+            "partial signature object must contain only the schnorr hex string",
+        ),
+        (
+            json!({"schnorr": schnorr, "extra": 1}),
+            "partial signature object must contain only the schnorr hex string",
+        ),
+        (
+            json!({"schnorr": 7}),
+            "partial signature object must contain only the schnorr hex string",
+        ),
+        (json!([]), "partial signature value must be an object"),
     ] {
-        assert!(decode_signature(&malformed).is_err(), "{malformed}");
+        crate::test_support::assert_err_text(&decode_signature(&malformed), expected);
     }
     assert!(decode_signature(&json!({"schnorr": "22".repeat(63)}))
         .unwrap_err()
@@ -508,8 +526,14 @@ fn specialized_routes_carry_exactly_one_signature() {
         specialized_signature_count(&input, 0)
     };
     assert_eq!(with(vec![plan_signature(0, 1)]), Ok(1));
-    assert!(with(Vec::new()).is_err());
-    assert!(with(vec![plan_signature(0, 1), plan_signature(1, 1)]).is_err());
+    crate::test_support::assert_err_text(
+        &with(Vec::new()),
+        "input[0] typed specialized covenant requires exactly one verified signature",
+    );
+    crate::test_support::assert_err_text(
+        &with(vec![plan_signature(0, 1), plan_signature(1, 1)]),
+        "input[0] typed specialized covenant requires exactly one verified signature",
+    );
 }
 
 #[test]
@@ -542,7 +566,10 @@ fn specialized_route_detection_recognizes_each_field_and_rejects_untyped_ones() 
     assert!(global(json!({"merkleProof": 1}))
         .unwrap_err()
         .contains("input-scoped"));
-    assert!(global(json!(7)).is_err());
+    crate::test_support::assert_err_text(
+        &global(json!(7)),
+        "global.proprietaries must be an object or null",
+    );
     assert_eq!(reject_all_specialized(None, "global.proprietaries"), Ok(()));
 }
 
@@ -564,7 +591,10 @@ fn private_swap_template_recognition_is_exact() {
     assert!(recognize_private_swap(&trailing)
         .unwrap_err()
         .contains("not a canonical Private Swap"));
-    assert!(recognize_private_swap(&[0x51]).is_err());
+    crate::test_support::assert_err_text(
+        &recognize_private_swap(&[0x51]),
+        "not a canonical Private Swap script",
+    );
 }
 
 #[test]

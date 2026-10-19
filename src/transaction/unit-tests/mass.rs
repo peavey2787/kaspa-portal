@@ -176,7 +176,10 @@ fn thread_withdraw_fee_prices_kip9_storage_mass_and_floors() {
     // Storage mass of 600 grams stays under the compute-mass estimate.
     assert_eq!(fee(10_000_000_000, 5_000_000_000, 1_000), Ok(2_500_000));
     // A 0.01 KAS payout carries 1,000,000 grams of storage mass.
-    assert!(fee(1_000_000_000, 1_000_000, 1).is_err());
+    crate::test_support::assert_err_text(
+        &fee(1_000_000_000, 1_000_000, 1),
+        "withdrawal leaves too small a remainder (storage mass)",
+    );
     // Exactly at the consensus storage limit: 495,194 + 100,000 - 95,194 grams.
     let at_limit = ThreadWithdrawFee {
         thread_amount: 42_019_407,

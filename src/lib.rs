@@ -78,4 +78,22 @@ pub(crate) mod test_support {
     pub(crate) fn fail_network_client() -> NetworkClient {
         NetworkClient::new(FailTransport)
     }
+
+    /// Assert that `result` failed with exactly `expected` (the error's `Debug` form).
+    #[track_caller]
+    pub(crate) fn assert_err<T, E: core::fmt::Debug>(result: &Result<T, E>, expected: &str) {
+        match result {
+            Ok(_) => panic!("expected the error {expected}, got Ok"),
+            Err(error) => assert_eq!(alloc::format!("{error:?}"), expected),
+        }
+    }
+
+    /// Assert that `result` failed with exactly the message `expected`.
+    #[track_caller]
+    pub(crate) fn assert_err_text<T, E: core::fmt::Display>(result: &Result<T, E>, expected: &str) {
+        match result {
+            Ok(_) => panic!("expected the error {expected:?}, got Ok"),
+            Err(error) => assert_eq!(alloc::format!("{error}"), expected),
+        }
+    }
 }

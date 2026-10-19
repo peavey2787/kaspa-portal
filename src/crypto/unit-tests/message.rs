@@ -36,5 +36,8 @@ fn message_signature_verifies_only_against_domain_digest() {
     let digest = message_digest(b"reviewed text");
     assert!(crate::crypto::schnorr::schnorr_verify(&public, &digest, &signature).is_ok());
     let raw = raw_sha256(b"reviewed text");
-    assert!(crate::crypto::schnorr::schnorr_verify(&public, &raw, &signature).is_err());
+    crate::test_support::assert_err(
+        &crate::crypto::schnorr::schnorr_verify(&public, &raw, &signature),
+        "InvalidSignature",
+    );
 }

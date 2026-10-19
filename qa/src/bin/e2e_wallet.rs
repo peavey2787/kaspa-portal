@@ -394,16 +394,28 @@ mod tests {
 
     #[test]
     fn rejects_missing_or_invalid_rest_balance() {
-        assert!(parse_rest_balance(&serde_json::json!({})).is_err());
-        assert!(parse_rest_balance(&serde_json::json!({"balance": -1})).is_err());
+        assert_eq!(
+            parse_rest_balance(&serde_json::json!({})),
+            Err("REST balance response is missing balance".to_owned())
+        );
+        assert_eq!(
+            parse_rest_balance(&serde_json::json!({"balance": -1})),
+            Err("REST balance must be a u64 number or decimal string".to_owned())
+        );
     }
 
     #[test]
     fn sums_rest_balances_across_wallet_addresses() {
         let value = serde_json::json!([{"balance": 7}, {"balance": "5"}]);
         assert_eq!(sum_rest_balances(&value).unwrap(), 12);
-        assert!(sum_rest_balances(&serde_json::json!({"balance": 1})).is_err());
+        assert_eq!(
+            sum_rest_balances(&serde_json::json!({"balance": 1})),
+            Err("REST balances response is not an array".to_owned())
+        );
         let overflow = serde_json::json!([{"balance": u64::MAX}, {"balance": 1}]);
-        assert!(sum_rest_balances(&overflow).is_err());
+        assert_eq!(
+            sum_rest_balances(&overflow),
+            Err("REST balances overflow u64".to_owned())
+        );
     }
 }

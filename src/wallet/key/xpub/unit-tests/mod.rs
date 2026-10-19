@@ -39,10 +39,13 @@ fn canonical_kpub_wrappers_and_binary_qr_import_are_covered() {
     assert_eq!(imported.chain_code, *account.chain_code_bytes());
     assert_eq!(imported.pubkey, account.public_key_compressed().unwrap());
 
-    assert!(decode_kpub_text(b"not-a-kpub", &mut decoded).is_err());
-    assert!(kpub_text_to_raw(b"not-a-kpub", &mut decoded).is_err());
-    assert!(import_kpub_qr(&[]).is_err());
-    assert!(import_kpub_qr(&[crate::primitives::qr_payload::PAYLOAD_V1_RAW]).is_err());
+    crate::test_support::assert_err(&decode_kpub_text(b"not-a-kpub", &mut decoded), "InvalidKey");
+    crate::test_support::assert_err(&kpub_text_to_raw(b"not-a-kpub", &mut decoded), "InvalidKey");
+    crate::test_support::assert_err(&import_kpub_qr(&[]), "InvalidKey");
+    crate::test_support::assert_err(
+        &import_kpub_qr(&[crate::primitives::qr_payload::PAYLOAD_V1_RAW]),
+        "InvalidKey",
+    );
 }
 
 #[test]
@@ -58,10 +61,13 @@ fn account_xprv_public_wrappers_and_invalid_import_are_covered() {
     assert_eq!(imported.chain_code_bytes(), account.chain_code_bytes());
     assert_eq!(imported.depth, account.depth);
 
-    assert!(import_xprv(b"not-an-xprv").is_err());
+    crate::test_support::assert_err(&import_xprv(b"not-an-xprv"), "InvalidKey");
     let mut shallow =
         crate::wallet::derivation::bip32::ExtendedPrivKey::from_parts([1u8; 32], [2u8; 32], 2);
-    assert!(serialize_account_key_xprv(&shallow, [0; 4], &mut text).is_err());
+    crate::test_support::assert_err(
+        &serialize_account_key_xprv(&shallow, [0; 4], &mut text),
+        "InvalidKey",
+    );
     shallow.depth = 3;
     assert!(serialize_account_key_xprv(&shallow, [0; 4], &mut text).is_ok());
 }
@@ -137,9 +143,9 @@ fn account_xprv_import_rejects_each_metadata_boundary_with_valid_checksum() {
         let mut invalid = [0u8; XPRV_MAX_LEN];
         let invalid_len = base58check_encode(&payload, &mut invalid);
         assert!(invalid_len > 0, "offset {offset}");
-        assert!(
-            import_xprv_with_metadata(&invalid[..invalid_len]).is_err(),
-            "offset {offset}"
+        crate::test_support::assert_err(
+            &import_xprv_with_metadata(&invalid[..invalid_len]),
+            "InvalidKey",
         );
     }
 }
@@ -153,13 +159,15 @@ fn kpub_and_xpub_import_boundaries_are_explicit() {
         .public_key_compressed()
         .expect("parent pubkey");
     let mut text = [0u8; KPUB_MAX_LEN];
-    assert!(serialize_kpub(
-        &account,
-        &parent,
-        ACCOUNT_KEY_CHILD_INDEX.wrapping_add(1),
-        &mut text,
-    )
-    .is_err());
+    crate::test_support::assert_err(
+        &serialize_kpub(
+            &account,
+            &parent,
+            ACCOUNT_KEY_CHILD_INDEX.wrapping_add(1),
+            &mut text,
+        ),
+        "InvalidKey",
+    );
 
     let length = serialize_kpub(&account, &parent, ACCOUNT_KEY_CHILD_INDEX, &mut text)
         .expect("canonical kpub");
@@ -168,8 +176,11 @@ fn kpub_and_xpub_import_boundaries_are_explicit() {
         decode_kpub_or_xpub(&text[..length], &mut decoded),
         Ok(XPUB_PAYLOAD_LEN)
     );
-    assert!(decode_kpub_or_xpub(b"not-a-kpub", &mut decoded).is_err());
-    assert!(import_kpub_raw(&[0u8; XPUB_PAYLOAD_LEN]).is_err());
+    crate::test_support::assert_err(
+        &decode_kpub_or_xpub(b"not-a-kpub", &mut decoded),
+        "InvalidKey",
+    );
+    crate::test_support::assert_err(&import_kpub_raw(&[0u8; XPUB_PAYLOAD_LEN]), "InvalidKey");
 }
 
 #[test]

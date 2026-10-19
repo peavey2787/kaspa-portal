@@ -9,5 +9,11 @@ fn generated_vrf_key_proves_and_verifies_without_wallet_key_reuse() {
     let result = vrf.prove(&secret, message).unwrap();
     let verified = vrf.verify(&public, message, &result.proof).unwrap();
     assert_eq!(verified, result.output);
-    assert!(vrf.verify(&public, b"different", &result.proof).is_err());
+    assert_eq!(
+        vrf.verify(&public, b"different", &result.proof)
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("VRF error: VRF verification failed: The verification of the Proof has failed")
+    );
 }

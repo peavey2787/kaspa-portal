@@ -41,14 +41,17 @@ fn wire_reader_covers_bool_length_and_truncation_boundaries() {
     let mut bools = WireReader::new(&[0, 1, 2]);
     assert!(!bools.read_bool().unwrap());
     assert!(bools.read_bool().unwrap());
-    assert!(bools.read_bool().is_err());
+    crate::test_support::assert_err(
+        &bools.read_bool(),
+        r#"InvalidEncoding("invalid bool tag 2")"#,
+    );
 
     let mut bounded = WireReader::new(&[3, 0, 0, 0, 0xaa, 0xbb, 0xcc]);
     assert_eq!(bounded.read_bytes(3).unwrap(), &[0xaa, 0xbb, 0xcc]);
 
     let mut too_large = WireReader::new(&[4, 0, 0, 0, 1, 2, 3, 4]);
-    assert!(too_large.read_bytes(3).is_err());
+    crate::test_support::assert_err(&too_large.read_bytes(3), "InvalidLength");
 
     let mut truncated = WireReader::new(&[4, 0, 0, 0, 1, 2]);
-    assert!(truncated.read_bytes(4).is_err());
+    crate::test_support::assert_err(&truncated.read_bytes(4), "TruncatedPayload");
 }

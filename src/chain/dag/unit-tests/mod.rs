@@ -1,7 +1,10 @@
 use super::*;
 #[test]
 fn rejects_reverse_range() {
-    assert!(DagRange::new(DaaScore::new(2), DaaScore::new(1), 10).is_err());
+    crate::test_support::assert_err_text(
+        &DagRange::new(DaaScore::new(2), DaaScore::new(1), 10),
+        "DAG range start exceeds end",
+    );
 }
 #[test]
 fn walker_is_bounded() {

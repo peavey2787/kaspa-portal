@@ -35,5 +35,5 @@ fn dedupe_window_is_bounded() {
         dedupe_window: 0,
         ..IndexerConfig::default()
     };
-    assert!(config.validate().is_err());
+    crate::test_support::assert_err_text(&config.validate(), "dedupe_window must be 1..=1000000");
 }

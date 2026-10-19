@@ -34,5 +34,14 @@ fn nonfinal_kaspa_evidence_is_rejected() {
     let portal = KaspaPortal::builder().build().unwrap();
     let mut request = request();
     request.kaspa[0].finalized = false;
-    assert!(portal.randomness().beacon().generate(request).is_err());
+    assert_eq!(
+        portal
+            .randomness()
+            .beacon()
+            .generate(request)
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("randomness beacon error: Kaspa randomness evidence must be finalized")
+    );
 }

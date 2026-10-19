@@ -33,10 +33,7 @@ fn transaction_bound_adaptor_presign_completes_and_extracts() {
         extract_adaptor_secret(&pre.bytes, &pre),
         Err(AdaptorError::InvalidCompletedSignature)
     );
-    assert!(
-        schnorr_verify(&px, &[8u8; 32], &sig).is_err(),
-        "claim signature must be transaction-sighash bound"
-    );
+    crate::test_support::assert_err(&schnorr_verify(&px, &[8u8; 32], &sig), "InvalidSignature");
 }
 
 #[test]
@@ -88,7 +85,10 @@ fn host_secret_changes_final_adaptor_nonce_relation() {
     let pre =
         create_adaptor_presignature(&sk, &msg, &t_x, &sid, &aux, &[16u8; 32]).expect("presig");
     let (_, px) = normalized_secret_and_public_x(&sk).expect("pk");
-    assert!(verify_host_nonce_relation(&px, &msg, &t_x, &sid, &[17u8; 32], &base, &pre).is_err());
+    crate::test_support::assert_err(
+        &verify_host_nonce_relation(&px, &msg, &t_x, &sid, &[17u8; 32], &base, &pre),
+        "InvalidHostContribution",
+    );
 }
 
 fn scalar_bytes(value: u8) -> [u8; 32] {

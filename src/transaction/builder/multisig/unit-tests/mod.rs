@@ -102,11 +102,13 @@ fn hd45_preparation_selection_and_derivation_maps_are_covered() {
     assert_eq!(prepared.source_path.cosigner, 0);
     assert_eq!(prepared.source_path.chain, 0);
     assert!(verify_source_address(&source, &prepared.redeem_script).is_ok());
-    assert!(verify_source_address(
-        "kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
-        &prepared.redeem_script
-    )
-    .is_err());
+    crate::test_support::assert_err_text(
+        &verify_source_address(
+            "kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkx9awp4e",
+            &prepared.redeem_script,
+        ),
+        "Multisig descriptor does not control the source address",
+    );
 
     assert!(encode_from_utxos(&automatic, &prepared, Vec::new())
         .unwrap_err()
@@ -131,9 +133,15 @@ fn hd45_preparation_selection_and_derivation_maps_are_covered() {
 
     let mut invalid = request(&text, &source, MultisigSelection::Automatic);
     invalid.amount = 0;
-    assert!(validate_amounts(&invalid).is_err());
+    crate::test_support::assert_err_text(
+        &validate_amounts(&invalid),
+        "Invalid multisig recipient amount: 0 sompi",
+    );
     invalid.amount = 1;
-    assert!(validate_amounts(&invalid).is_err());
+    crate::test_support::assert_err_text(
+        &validate_amounts(&invalid),
+        "Invalid multisig recipient amount: 1 sompi",
+    );
 }
 
 #[test]
@@ -271,9 +279,15 @@ fn consolidation_helpers_cover_limits_resolution_inputs_and_change() {
     };
     let sources = vec![first.clone(), second.clone()];
 
-    assert!(parse_consolidation_sources("not-json").is_err());
-    assert!(parse_consolidation_sources("[]").is_err());
-    assert!(parse_consolidation_sources("[{\"address\":\"a\",\"tx_id\":\"b\",\"index\":0},{\"address\":\"a\",\"tx_id\":\"b\",\"index\":1},{\"address\":\"a\",\"tx_id\":\"b\",\"index\":2},{\"address\":\"a\",\"tx_id\":\"b\",\"index\":3}]").is_err());
+    crate::test_support::assert_err_text(
+        &parse_consolidation_sources("not-json"),
+        "sources_json: expected ident at line 1 column 2",
+    );
+    crate::test_support::assert_err_text(
+        &parse_consolidation_sources("[]"),
+        "Select between 1 and 3 multisig UTXOs",
+    );
+    crate::test_support::assert_err_text(&parse_consolidation_sources("[{\"address\":\"a\",\"tx_id\":\"b\",\"index\":0},{\"address\":\"a\",\"tx_id\":\"b\",\"index\":1},{\"address\":\"a\",\"tx_id\":\"b\",\"index\":2},{\"address\":\"a\",\"tx_id\":\"b\",\"index\":3}]"), "Select between 1 and 3 multisig UTXOs");
     assert_eq!(
         unique_source_addresses(&[first.clone(), first.clone(), second.clone()]).len(),
         2
@@ -286,7 +300,10 @@ fn consolidation_helpers_cover_limits_resolution_inputs_and_change() {
         resolve_consolidation_sources(&descriptor, &[first.clone(), first.clone()], 0)
             .expect("deduplicated resolved source");
     assert_eq!(duplicate_resolved.len(), 1);
-    assert!(resolve_consolidation_sources(&descriptor, &sources, 1).is_err());
+    crate::test_support::assert_err_text(
+        &resolve_consolidation_sources(&descriptor, &sources, 1),
+        "Selected source belongs to a different cosigner branch",
+    );
 
     let available = vec![
         utxo(&source0, 0x11, 0, 20_000_000),
@@ -296,11 +313,20 @@ fn consolidation_helpers_cover_limits_resolution_inputs_and_change() {
         build_consolidation_inputs(&sources, &available, &resolved).expect("inputs");
     assert_eq!(inputs.len(), 2);
     assert_eq!(total, 50_000_000);
-    assert!(build_consolidation_inputs(&sources, &available[..1], &resolved).is_err());
+    crate::test_support::assert_err_text(
+        &build_consolidation_inputs(&sources, &available[..1], &resolved),
+        "UTXO 2222222222222222222222222222222222222222222222222222222222222222:1 not found",
+    );
     assert_eq!(required_total(4_000_000, 1_000), Ok(4_001_000));
-    assert!(required_total(u64::MAX, 1).is_err());
+    crate::test_support::assert_err_text(
+        &required_total(u64::MAX, 1),
+        "multisig required amount overflow",
+    );
     assert!(require_selected_total(4_001_000, 4_001_000).is_ok());
-    assert!(require_selected_total(4_000_999, 4_001_000).is_err());
+    crate::test_support::assert_err_text(
+        &require_selected_total(4_000_999, 4_001_000),
+        "Selected 4000999 sompi but need 4001000",
+    );
 
     let mut outputs = vec![PlannedOutput::new(1_000_000, vec![0x51])];
     assert!(ready(append_consolidation_change(
@@ -327,7 +353,10 @@ fn consolidation_helpers_cover_limits_resolution_inputs_and_change() {
         source0, "11".repeat(32), source1, "22".repeat(32),
     );
     let static_descriptor = format!("multi(1,{},{})", "11".repeat(32), "22".repeat(32));
-    assert!(prepare_consolidation(&static_descriptor, &sources_json, 0).is_err());
+    crate::test_support::assert_err_text(
+        &prepare_consolidation(&static_descriptor, &sources_json, 0),
+        "Multi-address consolidation requires a multi_hd45 descriptor",
+    );
     let prepared = prepare_consolidation(&descriptor_text(), &sources_json, 0)
         .expect("prepared consolidation");
     let encoded = ready(finish_consolidation(
@@ -436,8 +465,9 @@ fn new_hd45_branch_error_paths_cover_overflow_invalid_address_and_zero_depth() {
     let sources = vec![first.clone(), second.clone()];
     let resolved = resolve_consolidation_sources(&descriptor, &sources, 0).expect("resolved");
 
-    assert!(
-        build_consolidation_inputs(&sources, &[], &ResolvedConsolidationSources::new()).is_err()
+    crate::test_support::assert_err_text(
+        &build_consolidation_inputs(&sources, &[], &ResolvedConsolidationSources::new()),
+        "UTXO 1111111111111111111111111111111111111111111111111111111111111111:0 not found",
     );
     let overflow_available = vec![
         utxo(&source0, 0x11, 0, u64::MAX),
@@ -447,8 +477,14 @@ fn new_hd45_branch_error_paths_cover_overflow_invalid_address_and_zero_depth() {
         .expect_err("selected total overflow");
     assert!(overflow_error.contains("overflow"));
 
-    assert!(branch_address_map(&[(0, 0, "not-an-address".to_string())]).is_err());
-    assert!(first_unused_change_index(&[(1, 0, "not-an-address".to_string())], &[], 1).is_err());
+    crate::test_support::assert_err_text(
+        &branch_address_map(&[(0, 0, "not-an-address".to_string())]),
+        "Unknown address prefix",
+    );
+    crate::test_support::assert_err_text(
+        &first_unused_change_index(&[(1, 0, "not-an-address".to_string())], &[], 1),
+        "Unknown address prefix",
+    );
     assert!(branch_addresses(&descriptor, 0, 0, "kaspa")
         .expect("zero depth")
         .is_empty());
@@ -495,24 +531,29 @@ fn consolidation_finish_rejects_bad_destination_and_unresolved_material() {
     );
     let prepared = prepare_consolidation(&descriptor_text(), &sources_json, 0).expect("prepared");
     let available = vec![utxo(&source, 0x44, 0, 30_000_000)];
-    assert!(ready(finish_consolidation(
-        prepared,
-        &available,
-        &consolidation_request(
-            &descriptor_text(),
-            "[]",
-            "not-an-address",
-            20_000_000,
-            1_000,
-            0,
-            2
-        ),
-        &client,
-    ))
-    .is_err());
+    crate::test_support::assert_err_text(
+        &ready(finish_consolidation(
+            prepared,
+            &available,
+            &consolidation_request(
+                &descriptor_text(),
+                "[]",
+                "not-an-address",
+                20_000_000,
+                1_000,
+                0,
+                2,
+            ),
+            &client,
+        )),
+        "Unknown address prefix",
+    );
 
     let resolved = ResolvedConsolidationSources::new();
-    assert!(build_consolidation_inputs(&[item], &available, &resolved).is_err());
+    crate::test_support::assert_err_text(
+        &build_consolidation_inputs(&[item], &available, &resolved),
+        "unresolved multisig source",
+    );
 }
 
 #[test]
@@ -523,8 +564,14 @@ fn branch_and_consolidation_helpers_cover_short_circuit_and_change_marking_edges
     assert!(branch_query(&[]).is_empty());
     assert!(require_source_count(1).is_ok());
     assert!(require_source_count(3).is_ok());
-    assert!(require_source_count(0).is_err());
-    assert!(require_source_count(4).is_err());
+    crate::test_support::assert_err_text(
+        &require_source_count(0),
+        "Select between 1 and 3 multisig UTXOs",
+    );
+    crate::test_support::assert_err_text(
+        &require_source_count(4),
+        "Select between 1 and 3 multisig UTXOs",
+    );
 
     let descriptor = descriptor();
     let receive = branch_address(&descriptor, 0, 0, 0, "kaspa").expect("receive branch");
@@ -576,7 +623,10 @@ fn branch_and_consolidation_helpers_cover_short_circuit_and_change_marking_edges
 #[test]
 fn hd45_branch_scan_covers_descriptor_parse_depth_cap_and_derivation_failures() {
     let client = fail_network_client();
-    assert!(ready(scan_branch_json("not-a-descriptor", 0, 1, &client, "kaspa")).is_err());
+    crate::test_support::assert_err_text(
+        &ready(scan_branch_json("not-a-descriptor", 0, 1, &client, "kaspa")),
+        "Descriptor must be multi(M,...), multi_hd(M,...), or multi_hd45(M,...)",
+    );
 
     let text = descriptor_text();
     #[cfg(not(target_arch = "wasm32"))]
@@ -588,8 +638,14 @@ fn hd45_branch_scan_covers_descriptor_parse_depth_cap_and_derivation_failures() 
     }
 
     let descriptor = descriptor();
-    assert!(branch_address(&descriptor, 0, 2, 0, "kaspa").is_err());
-    assert!(branch_address(&descriptor, u32::MAX, 0, 0, "kaspa").is_err());
+    crate::test_support::assert_err_text(
+        &branch_address(&descriptor, 0, 2, 0, "kaspa"),
+        "45' multisig chain must be 0 or 1",
+    );
+    crate::test_support::assert_err_text(
+        &branch_address(&descriptor, u32::MAX, 0, 0, "kaspa"),
+        "Cannot derive hardened child from public key",
+    );
 }
 
 #[test]
@@ -602,13 +658,19 @@ fn consolidation_covers_parse_source_and_change_derivation_failures() {
         source,
         "91".repeat(32),
     );
-    assert!(prepare_consolidation("not-a-descriptor", &sources_json, 0).is_err());
+    crate::test_support::assert_err_text(
+        &prepare_consolidation("not-a-descriptor", &sources_json, 0),
+        "Descriptor must be multi(M,...), multi_hd(M,...), or multi_hd45(M,...)",
+    );
 
     let bad_source_json = format!(
         "[{{\"address\":\"not-an-address\",\"tx_id\":\"{}\",\"index\":0}}]",
         "92".repeat(32),
     );
-    assert!(prepare_consolidation(&descriptor_text(), &bad_source_json, 0).is_err());
+    crate::test_support::assert_err_text(
+        &prepare_consolidation(&descriptor_text(), &bad_source_json, 0),
+        "Unknown address prefix",
+    );
 
     let mut outputs = Vec::new();
     let error = ready(append_consolidation_change(
@@ -678,7 +740,10 @@ fn mutation_boundaries_cover_change_index_material_maps_and_change_output() {
     assert!(multisig_change_output(&mut plan.outputs).is_some());
 
     assert_eq!(consolidation_change(50_000_000, 20_001_000), Ok(29_999_000));
-    assert!(consolidation_change(1, 2).is_err());
+    crate::test_support::assert_err_text(
+        &consolidation_change(1, 2),
+        "selected multisig total is below required total",
+    );
 }
 
 #[test]

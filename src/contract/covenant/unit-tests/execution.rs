@@ -343,9 +343,16 @@ fn witness_data_beyond_selectors_and_signatures_needs_a_typed_plan() {
         Err(ExecutionError::WitnessDataRequired)
     );
     // Opcodes whose stack effect depends on data are not modelled.
-    for opcode in [0x74, 0x79, 0x7a, 0xd7, 0xa6] {
-        assert!(
-            trace_witness(&[0x51, 0x51, opcode], 0, 0).is_err(),
+    for (opcode, expected) in [
+        (0x74, ExecutionError::UnsupportedOpcode),
+        (0x79, ExecutionError::UnsupportedOpcode),
+        (0x7a, ExecutionError::UnsupportedOpcode),
+        (0xd7, ExecutionError::UnsupportedSignatureCheck),
+        (0xa6, ExecutionError::UnsupportedOpcode),
+    ] {
+        assert_eq!(
+            trace_witness(&[0x51, 0x51, opcode], 0, 0),
+            Err(expected),
             "{opcode:#x}"
         );
     }

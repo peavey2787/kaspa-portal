@@ -19,12 +19,17 @@ fn rust_offline_portal_network() {
         indexer: custom_indexer.clone(),
     };
     config.validate().expect("valid portal config");
-    assert!(PortalConfig {
-        timeout_ms: 999,
-        ..config.clone()
-    }
-    .validate()
-    .is_err());
+    assert_eq!(
+        PortalConfig {
+            timeout_ms: 999,
+            ..config.clone()
+        }
+        .validate()
+        .err()
+        .map(|error| error.to_string())
+        .as_deref(),
+        Some("network timeout must be 1000..=120000 ms")
+    );
 
     let portal = KaspaPortal::builder()
         .network(standard_network())
@@ -70,6 +75,20 @@ fn rust_offline_portal_network() {
         .network(standard_network())
         .build()
         .expect("endpoint-free portal");
-    assert!(no_endpoint.network().is_err());
-    assert!(no_endpoint.chain().is_err());
+    assert_eq!(
+        no_endpoint
+            .network()
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("invalid configuration: network API requires an endpoint; build with .endpoint(...)")
+    );
+    assert_eq!(
+        no_endpoint
+            .chain()
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("invalid configuration: chain API requires an endpoint")
+    );
 }

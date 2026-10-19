@@ -80,7 +80,10 @@ fn qr_frames_round_trip_across_boundaries_and_reject_corruption() {
         assert!(verify_session(&assembled[..length], &first.session_id));
 
         first_encoded[2] ^= 1;
-        assert!(parse_frame(&first_encoded[..first_written]).is_err());
+        crate::test_support::assert_err(
+            &parse_frame(&first_encoded[..first_written]),
+            "InvalidHeader",
+        );
     }
 }
 

@@ -63,16 +63,18 @@ fn wrong_host_secret_breaks_nonce_relation() {
     let signing_key = SigningKey::from_bytes(&private_key).unwrap();
     let public_x: [u8; 32] = signing_key.verifying_key().to_bytes().into();
     let public_key = canonical_public_key(&public_x);
-    assert!(verify_nonce_relation(
-        &provisional_nonce_point(&provisional),
-        &final_signature,
-        &session,
-        &[6u8; 32],
-        1,
-        2,
-        &public_key,
-    )
-    .is_err());
+    crate::test_support::assert_err(
+        &verify_nonce_relation(
+            &provisional_nonce_point(&provisional),
+            &final_signature,
+            &session,
+            &[6u8; 32],
+            1,
+            2,
+            &public_key,
+        ),
+        "InvalidFinalSignature",
+    );
 }
 #[test]
 fn host_contribution_is_unique_per_signature_context() {

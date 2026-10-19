@@ -18,11 +18,26 @@ fn private_swap_rejects_invalid_configuration_boundaries() {
     let valid_destination = [3u8; 35];
     let salt = [4u8; 16];
 
-    assert!(build_private_swap_script(&owner, &claimer, &valid_destination, 0, &salt).is_err());
-    assert!(build_private_swap_script(&owner, &claimer, &valid_destination, 1, &[0; 16]).is_err());
-    assert!(build_private_swap_script(&owner, &claimer, &[0; 2], 1, &salt).is_err());
-    assert!(build_private_swap_script(&owner, &claimer, &[0; 74], 1, &salt).is_err());
+    crate::test_support::assert_err_text(
+        &build_private_swap_script(&owner, &claimer, &valid_destination, 0, &salt),
+        "Private Swap refund timeout must be nonzero",
+    );
+    crate::test_support::assert_err_text(
+        &build_private_swap_script(&owner, &claimer, &valid_destination, 1, &[0; 16]),
+        "Private Swap salt must be nonzero",
+    );
+    crate::test_support::assert_err_text(
+        &build_private_swap_script(&owner, &claimer, &[0; 2], 1, &salt),
+        "Private Swap destination script length is unsupported",
+    );
+    crate::test_support::assert_err_text(
+        &build_private_swap_script(&owner, &claimer, &[0; 74], 1, &salt),
+        "Private Swap destination script length is unsupported",
+    );
     assert!(build_private_swap_script(&owner, &claimer, &[0; 3], 1, &salt).is_ok());
     assert!(build_private_swap_script(&owner, &claimer, &[0; 73], 1, &salt).is_ok());
-    assert!(build_private_swap_script(&owner, &owner, &valid_destination, 1, &salt).is_err());
+    crate::test_support::assert_err_text(
+        &build_private_swap_script(&owner, &owner, &valid_destination, 1, &salt),
+        "Private Swap owner and claimer keys must differ",
+    );
 }

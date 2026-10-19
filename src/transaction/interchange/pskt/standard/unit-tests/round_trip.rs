@@ -184,7 +184,10 @@ fn pskb_bundle_uses_the_array_parser() {
     let mut bad_scratch = vec![0u8; object.len()];
     let mut bad_tx = Transaction::try_new().expect("transaction test allocation");
     let mut bad_parsed = PsktParsed::empty();
-    assert!(parse_pskt(&unwrapped, &mut bad_scratch, &mut bad_tx, &mut bad_parsed,).is_err());
+    crate::test_support::assert_err(
+        &parse_pskt(&unwrapped, &mut bad_scratch, &mut bad_tx, &mut bad_parsed),
+        "UnexpectedToken",
+    );
 }
 
 #[test]
@@ -568,15 +571,22 @@ fn canonical_pskt_wire_is_byte_idempotent_and_every_truncated_prefix_is_rejected
         let mut prefix_scratch = vec![0u8; decoded_capacity];
         let mut prefix_tx = Transaction::try_new().expect("transaction test allocation");
         let mut prefix_parsed = PsktParsed::empty();
-        assert!(
+        // Below the magic, at a bare envelope, on odd hex and inside the JSON.
+        let expected = match end {
+            0..=3 => PskError::TooShort,
+            4 => PskError::TruncatedEnvelope,
+            _ if end % 2 == 1 => PskError::OddHexLength,
+            _ => PskError::UnexpectedToken,
+        };
+        assert_eq!(
             parse_pskt(
                 prefix,
                 &mut prefix_scratch,
                 &mut prefix_tx,
                 &mut prefix_parsed
-            )
-            .is_err(),
-            "truncated PSKT prefix of {end} bytes unexpectedly parsed",
+            ),
+            Err(expected),
+            "prefix of {end} bytes"
         );
     }
 

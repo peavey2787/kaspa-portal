@@ -41,7 +41,10 @@ fn locktime_parser_rejects_oversized_script_integers() {
     let mut script = vec![9u8];
     script.extend_from_slice(&[1u8; 9]);
     script.push(0xb0);
-    assert!(extract_cltv_locktime(&script).is_err());
+    crate::test_support::assert_err_text(
+        &extract_cltv_locktime(&script),
+        "Script integer exceeds 8 bytes",
+    );
 }
 
 #[test]

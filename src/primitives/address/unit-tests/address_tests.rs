@@ -161,11 +161,12 @@ fn decode_address_accepts_only_p2pk_and_p2sh_versions() {
     for version in 0u8..=255 {
         let address = encode_address_bytes(&[0x42; 32], version, "kaspa");
         let decoded = decode_address(&address);
-        if matches!(version, 0x00 | 0x08) {
-            assert_eq!(decoded, Ok((version, [0x42; 32])));
-        } else {
-            assert!(decoded.is_err(), "version {version:#x} must be rejected");
-        }
+        let expected = match version {
+            0x00 | 0x08 => Ok((version, [0x42; 32])),
+            0x01 => Err("Invalid payload length 32 for address version 0x1".to_string()),
+            _ => Err(format!("Unknown version: {version:#x}")),
+        };
+        assert_eq!(decoded, expected);
     }
 }
 
@@ -226,17 +227,29 @@ fn convert_bits_pads_only_a_partial_final_group() {
 #[test]
 fn convert_bits_rejects_out_of_range_values_and_bad_padding() {
     assert_eq!(convert_bits(&[31, 28], 5, 8, false).unwrap(), vec![0xff]);
-    assert!(convert_bits(&[32], 5, 8, false).is_err());
+    crate::test_support::assert_err_text(
+        &convert_bits(&[32], 5, 8, false),
+        "Invalid address data value",
+    );
     // Non-zero padding bits.
-    assert!(convert_bits(&[31, 29], 5, 8, false).is_err());
+    crate::test_support::assert_err_text(
+        &convert_bits(&[31, 29], 5, 8, false),
+        "Invalid address padding",
+    );
     // A whole spare input group (5 leftover bits) is not padding.
-    assert!(convert_bits(&[31, 28, 0], 5, 8, false).is_err());
+    crate::test_support::assert_err_text(
+        &convert_bits(&[31, 28, 0], 5, 8, false),
+        "Invalid address padding",
+    );
     // 4 leftover zero bits are valid padding.
     assert_eq!(
         convert_bits(&[31, 31, 31, 16], 5, 8, false).unwrap(),
         vec![0xff, 0xff]
     );
-    assert!(convert_bits(&[31, 31, 31, 24], 5, 8, false).is_err());
+    crate::test_support::assert_err_text(
+        &convert_bits(&[31, 31, 31, 24], 5, 8, false),
+        "Invalid address padding",
+    );
 }
 
 #[test]

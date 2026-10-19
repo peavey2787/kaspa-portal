@@ -166,7 +166,7 @@ fn placeholder_signatures_and_unsupported_versions_never_reach_consensus_bytes()
     placeholder["inputs"][0]["partialSigs"] = json!({
         format!("02{}", "11".repeat(32)): {"schnorr": "22".repeat(64)}
     });
-    assert!(super::super::verify_for_broadcast(&pskb(&placeholder), SIGNER_TEST_LIMITS).is_err());
+    crate::test_support::assert_err_text(&super::super::verify_for_broadcast(&pskb(&placeholder), SIGNER_TEST_LIMITS), "input[0]: P2PK partial-signature public key does not match a canonical P2PK scriptPublicKey");
 }
 
 #[test]
@@ -186,5 +186,8 @@ fn signed_kspt_network_is_the_trailer_network() {
             Ok(network)
         );
     }
-    assert!(super::super::signed_kspt_network(b"KSPT", SIGNER_TEST_LIMITS).is_err());
+    crate::test_support::assert_err_text(
+        &super::super::signed_kspt_network(b"KSPT", SIGNER_TEST_LIMITS),
+        "KSPT is truncated",
+    );
 }

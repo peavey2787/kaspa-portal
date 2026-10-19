@@ -61,11 +61,15 @@ fn rust_offline_randomness() {
         .expect("generated-key VRF verify"),
         generated_result.output
     );
-    assert!(vrf
-        .verify(
+    assert_eq!(
+        vrf.verify(
             &generated_public,
             b"tampered-input",
             &generated_result.proof,
         )
-        .is_err());
+        .err()
+        .map(|error| error.to_string())
+        .as_deref(),
+        Some("VRF error: VRF verification failed: The verification of the Proof has failed")
+    );
 }

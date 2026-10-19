@@ -7,7 +7,10 @@ fn offline_portal_builds_without_endpoint() {
         .network(NetworkId::Mainnet)
         .build()
         .unwrap();
-    assert!(p.network().is_err());
+    crate::test_support::assert_err(
+        &p.network(),
+        r#"Config("network API requires an endpoint; build with .endpoint(...)")"#,
+    );
     assert_eq!(p.wallet().prefix(), "kaspa");
     assert_eq!(p.config().network, NetworkId::Mainnet);
 }

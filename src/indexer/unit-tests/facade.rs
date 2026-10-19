@@ -40,7 +40,7 @@ fn block_batch_is_atomic_when_a_transaction_is_invalid() {
         block: block("new"),
         transactions: vec![tx("ok", Some("new")), invalid],
     });
-    assert!(result.is_err());
+    crate::test_support::assert_err(&result, r#"Indexer("transaction id cannot be empty")"#);
     assert_eq!(indexer.health().unwrap().block_count, 0);
     assert!(indexer.transaction("ok").unwrap().is_none());
 }
@@ -70,7 +70,10 @@ fn virtual_chain_reconciliation_rolls_back_on_invalid_accepted_batch() {
             block_hash: Some("new".into()),
         },
     };
-    assert!(indexer.reconcile_virtual_chain(delta).is_err());
+    crate::test_support::assert_err(
+        &indexer.reconcile_virtual_chain(delta),
+        r#"Indexer("transaction id cannot be empty")"#,
+    );
     assert!(indexer.transaction("old-tx").unwrap().is_some());
     assert_eq!(
         indexer.checkpoint().unwrap().block_hash.as_deref(),

@@ -31,5 +31,8 @@ fn address_is_exact() {
 
 #[test]
 fn payload_matchers_reject_empty_values() {
-    assert!(MatchRule::PayloadSuffix(Vec::new()).validate().is_err());
+    crate::test_support::assert_err_text(
+        &MatchRule::PayloadSuffix(Vec::new()).validate(),
+        "payload matcher cannot be empty",
+    );
 }

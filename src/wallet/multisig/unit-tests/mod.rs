@@ -29,13 +29,25 @@ fn hd_descriptor_parsing_covers_valid_derivation_and_validation_failures() {
     assert_eq!(keys.len(), 2);
     assert!(keys[0] <= keys[1]);
 
-    for invalid in [
-        "multi_hd(1,only-one)",
-        "multi_hd(0,a,b)",
-        "multi_hd(3,a,b)",
-        "multi_hd(not-a-number,a,b)",
+    for (invalid, expected) in [
+        (
+            "multi_hd(1,only-one)",
+            "Cosigner xpub must be 130 hex chars, got 8",
+        ),
+        (
+            "multi_hd(0,a,b)",
+            "Cosigner xpub must be 130 hex chars, got 1",
+        ),
+        (
+            "multi_hd(3,a,b)",
+            "Cosigner xpub must be 130 hex chars, got 1",
+        ),
+        (
+            "multi_hd(not-a-number,a,b)",
+            "Invalid M value in descriptor",
+        ),
     ] {
-        assert!(MultisigDescriptor::parse(invalid).is_err());
+        crate::test_support::assert_err_text(&MultisigDescriptor::parse(invalid), expected);
     }
 
     let short = format!("multi_hd(1,{}, {})", "00".repeat(64), second);

@@ -98,7 +98,8 @@ fn vrf_rejects_tampered_proof() {
     let public = VrfPublicKey(bytes32(vector.public));
     let mut proof = hex::decode(vector.proof).unwrap();
     proof[0] ^= 1;
-    assert!(VrfApi::new()
-        .verify(&public, b"", &VrfProof(proof))
-        .is_err());
+    crate::test_support::assert_err(
+        &VrfApi::new().verify(&public, b"", &VrfProof(proof)),
+        r#"Vrf("invalid VRF proof: Invalid Elliptic Curve point")"#,
+    );
 }

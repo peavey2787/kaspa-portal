@@ -14,6 +14,15 @@ fn consensus_integers_reject_json_numbers_at_browser_boundaries() {
             "raw":null
         }}"#
         );
-        assert!(serde_json::from_str::<IndexedTransaction>(&json).is_err());
+        // The number ends the fourth line, so serde reports its last column.
+        assert_eq!(
+            serde_json::from_str::<IndexedTransaction>(&json)
+                .err()
+                .map(|error| error.to_string()),
+            Some(format!(
+                "invalid type: integer `{number}`, expected a string at line 4 column {}",
+                24 + number.len()
+            ))
+        );
     }
 }

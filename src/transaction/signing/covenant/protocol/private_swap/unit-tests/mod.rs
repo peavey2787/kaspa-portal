@@ -675,7 +675,7 @@ fn claim_sighash_is_the_single_input_sighash_all_digest() {
     let kspt =
         encode_pskt(&pskb(&two), KaspaNetwork::Mainnet, Limits::grammar()).expect("compact KSPT");
     assert_eq!(claim_sighash(&kspt), Err(PsktError::InvalidModel));
-    assert!(claim_sighash(b"KSPT").is_err());
+    crate::test_support::assert_err(&claim_sighash(b"KSPT"), "BufferTooShort");
 }
 
 #[test]

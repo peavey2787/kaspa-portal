@@ -15,7 +15,10 @@ fn account_level_xpub_normalizes_to_canonical_payload_version() {
 #[test]
 fn arbitrary_base58check_payload_is_not_an_xpub() {
     let mut payload = [0u8; ACCOUNT_KEY_PAYLOAD_LEN];
-    assert!(decode_bip32_xpub(b"not-an-xpub", &mut payload).is_err());
+    crate::test_support::assert_err(
+        &decode_bip32_xpub(b"not-an-xpub", &mut payload),
+        "InvalidCharacter",
+    );
 }
 
 /// Account key exported by the original hardware-signer release (seed bytes

@@ -73,7 +73,10 @@ fn outer_envelope_is_lowercase_hex_within_the_signer_ceiling() {
         decode_root(&lower.to_ascii_uppercase()).unwrap_err(),
         "outer hex: outer PSKT/PSKB must be even-length lowercase hexadecimal"
     );
-    assert!(decode_root(&lower[..lower.len() - 1]).is_err());
+    crate::test_support::assert_err_text(
+        &decode_root(&lower[..lower.len() - 1]),
+        "outer hex: outer PSKT/PSKB must be even-length lowercase hexadecimal",
+    );
     let oversized =
         "0".repeat(crate::transaction::interchange::pskt::pipeline::MAX_PSKT_WIRE_HEX_CHARS + 2);
     assert_eq!(

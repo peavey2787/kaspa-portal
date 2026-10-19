@@ -4,29 +4,53 @@ use serde_json::{json, Value};
 #[test]
 fn derivation_hint_covers_absent_shape_branch_and_index_boundaries() {
     assert_eq!(parse_derivation(&json!({})), Ok(None));
-    assert!(parse_derivation(&json!([])).is_err());
-    assert!(parse_derivation(&json!({"kassignerDerivation": null})).is_err());
-    assert!(parse_derivation(&json!({"kassignerDerivation": []})).is_err());
-
-    assert!(parse_derivation(&json!({"kassignerDerivation": {"index": 0}})).is_err());
-    assert!(parse_derivation(&json!({"kassignerDerivation": {"branch": 0}})).is_err());
-    assert!(parse_derivation(&json!({"kassignerDerivation": {"branch": 2, "index": 0}})).is_err());
-    assert!(
-        parse_derivation(&json!({"kassignerDerivation": {"branch": 256, "index": 0}})).is_err()
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!([])),
+        "proprietaries must be an object",
     );
-    assert!(
-        parse_derivation(&json!({"kassignerDerivation": {"branch": "01", "index": 0}})).is_err()
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": null})),
+        "kassignerDerivation must be an object",
+    );
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": []})),
+        "kassignerDerivation must be an object",
+    );
+
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"index": 0}})),
+        "kassignerDerivation.branch is missing",
+    );
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": 0}})),
+        "kassignerDerivation.index is missing",
+    );
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": 2, "index": 0}})),
+        "kassignerDerivation.branch must be 0 or 1",
+    );
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": 256, "index": 0}})),
+        "kassignerDerivation.branch must be 0 or 1",
+    );
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": "01", "index": 0}})),
+        "kassignerDerivation.branch must be a canonical unsigned decimal string",
     );
 
     let soft_limit = crate::wallet::derivation::bip32::HARDENED_BIT;
-    assert!(parse_derivation(&json!({
-        "kassignerDerivation": {"branch": 1, "index": soft_limit}
-    }))
-    .is_err());
-    assert!(parse_derivation(&json!({
-        "kassignerDerivation": {"branch": 1, "index": u64::from(u32::MAX) + 1}
-    }))
-    .is_err());
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({
+            "kassignerDerivation": {"branch": 1, "index": soft_limit}
+        })),
+        "kassignerDerivation.index must be a non-hardened u32",
+    );
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({
+            "kassignerDerivation": {"branch": 1, "index": u64::from(u32::MAX) + 1}
+        })),
+        "kassignerDerivation.index must be a non-hardened u32",
+    );
 
     assert_eq!(
         parse_derivation(&json!({
@@ -89,7 +113,10 @@ fn sole_signature_fills_the_only_unsigned_input_once() {
             ))
         );
     }
-    assert!(attach_sole_signature("00", &public_key, &[0x33; 64]).is_err());
+    crate::test_support::assert_err_text(
+        &attach_sole_signature("00", &public_key, &[0x33; 64]),
+        "payload too short",
+    );
     let without_signatures = raw_pskb(&json!([{"global": {}, "inputs": [{}], "outputs": []}]));
     assert_eq!(
         attach_sole_signature(&without_signatures, &public_key, &[0x33; 64]),
@@ -118,14 +145,17 @@ fn raw_pskb(root: &Value) -> String {
     hex::encode(wire)
 }
 
-fn assert_strict_rejects(mut root: Value, mutate: impl FnOnce(&mut Value)) {
+fn assert_strict_rejects(mut root: Value, expected: &str, mutate: impl FnOnce(&mut Value)) {
     mutate(&mut root);
-    assert!(strict_decode(&raw_pskb(&root)).is_err());
+    assert_eq!(strict_decode(&raw_pskb(&root)), Err(expected.to_string()));
 }
 
 #[test]
 fn exact_four_byte_magic_is_not_misclassified_as_a_short_outer_envelope() {
-    assert!(strict_decode("50534b54").is_err());
+    crate::test_support::assert_err_text(
+        &strict_decode("50534b54"),
+        "invalid canonical JSON structure",
+    );
 }
 
 #[test]
@@ -157,10 +187,19 @@ fn pskt_shape_and_output_optional_boundaries_are_exercised_through_strict_strict
     with_null_redeem[0]["outputs"][0]["redeemScript"] = serde_json::Value::Null;
     strict_decode(&canonical_pskb_wire(with_null_redeem)).expect("null redeem script");
 
-    for (field, value) in [
-        ("redeemScript", json!(1)),
-        ("bip32Derivations", json!([])),
-        ("proprietaries", json!([])),
+    for ((field, value), expected) in [
+        (
+            ("redeemScript", json!(1)),
+            "output[0].redeemScript must be a lowercase hexadecimal string",
+        ),
+        (
+            ("bip32Derivations", json!([])),
+            "output[0].bip32Derivations has the wrong JSON type",
+        ),
+        (
+            ("proprietaries", json!([])),
+            "output[0].proprietaries has the wrong JSON type",
+        ),
     ] {
         let mut invalid =
             crate::transaction::interchange::pskt::unit_tests::canonical_test_pskt(base());
@@ -168,12 +207,15 @@ fn pskt_shape_and_output_optional_boundaries_are_exercised_through_strict_strict
         let json = serde_json::to_vec(&invalid).unwrap();
         let mut wire = b"PSKB".to_vec();
         wire.extend_from_slice(hex::encode(json).as_bytes());
-        assert!(strict_decode(&hex::encode(wire)).is_err());
+        crate::test_support::assert_err_text(&strict_decode(&hex::encode(wire)), expected);
     }
 
     let mut bad_script = base();
     bad_script[0]["outputs"][0]["scriptPublicKey"] = json!("zz");
-    assert!(strict_decode(&canonical_pskb_wire(bad_script)).is_err());
+    crate::test_support::assert_err_text(
+        &strict_decode(&canonical_pskb_wire(bad_script)),
+        "output[0].scriptPublicKey must contain a four-hex-digit script version",
+    );
 }
 
 #[test]
@@ -212,109 +254,284 @@ fn strict_decode_covers_global_input_output_and_nested_schema_rejection_matrix()
         "canonical strict-decode fixture"
     );
 
-    for key in ["global", "inputs", "outputs"] {
-        assert_strict_rejects(base.clone(), |root| {
+    for (key, expected) in [
+        ("global", "missing PSKT.global"),
+        ("inputs", "missing PSKT.inputs"),
+        ("outputs", "missing PSKT.outputs"),
+    ] {
+        assert_strict_rejects(base.clone(), expected, |root| {
             root[0].as_object_mut().unwrap().remove(key);
         });
     }
 
-    for (field, value) in [
-        ("version", Value::Null),
-        ("version", json!(1)),
-        ("txVersion", json!(65_535)),
-        ("inputCount", json!(2)),
-        ("outputCount", json!(2)),
-        ("fallbackLockTime", json!(true)),
-        ("gas", json!([])),
-        ("inputsModifiable", json!(1)),
-        ("outputsModifiable", json!("false")),
-        ("xpubs", json!([])),
-        ("proprietaries", Value::Null),
-        ("id", json!(1)),
-        ("txPayload", json!("0")),
-        ("subnetworkId", json!("00")),
-        ("covenantBranch", json!("unsupported")),
+    for (field, value, expected) in [
+        ("version", Value::Null, "global.version must not be null"),
+        ("version", json!(1), "unsupported PSKT version: 1"),
+        (
+            "txVersion",
+            json!(65_535),
+            "unsupported transaction version: 65535",
+        ),
+        (
+            "inputCount",
+            json!(2),
+            "declared PSKT input/output counts do not match arrays",
+        ),
+        (
+            "outputCount",
+            json!(2),
+            "declared PSKT input/output counts do not match arrays",
+        ),
+        (
+            "fallbackLockTime",
+            json!(true),
+            "global.fallbackLockTime must be a decimal string or exact legacy integer",
+        ),
+        (
+            "gas",
+            json!([]),
+            "global.gas must be a decimal string or exact legacy integer",
+        ),
+        (
+            "inputsModifiable",
+            json!(1),
+            "global.inputsModifiable has the wrong JSON type",
+        ),
+        (
+            "outputsModifiable",
+            json!("false"),
+            "global.outputsModifiable has the wrong JSON type",
+        ),
+        ("xpubs", json!([]), "global.xpubs has the wrong JSON type"),
+        (
+            "proprietaries",
+            Value::Null,
+            "global.proprietaries must not be null",
+        ),
+        ("id", json!(1), "global.id has the wrong JSON type"),
+        (
+            "txPayload",
+            json!("0"),
+            "global.txPayload must be even-length lowercase hexadecimal",
+        ),
+        ("subnetworkId", json!("00"), "subnetworkId must be 20 bytes"),
+        (
+            "covenantBranch",
+            json!("unsupported"),
+            "unsupported global.covenantBranch: unsupported",
+        ),
     ] {
-        assert_strict_rejects(base.clone(), |root| {
+        assert_strict_rejects(base.clone(), expected, |root| {
             root[0]["global"][field] = value;
         });
     }
 
-    for (field, value) in [
-        ("utxoEntry", json!([])),
-        ("previousOutpoint", json!([])),
-        ("sighashType", Value::Null),
-        ("sighashType", json!(2)),
-        ("sigOpCount", Value::Null),
-        ("sigOpCount", json!(6)),
-        ("minimumSignatures", Value::Null),
-        ("minimumSignatures", json!(0)),
-        ("minimumSignatures", json!(6)),
-        ("redeemScript", json!(1)),
-        ("partialSigs", Value::Null),
-        ("partialSigs", json!([])),
-        ("bip32Derivations", Value::Null),
-        ("bip32Derivations", json!([])),
-        ("proprietaries", Value::Null),
-        ("proprietaries", json!([])),
-        ("covenantExecution", json!(1)),
+    for (field, value, expected) in [
+        (
+            "utxoEntry",
+            json!([]),
+            "input[0].utxoEntry has the wrong JSON type",
+        ),
+        (
+            "previousOutpoint",
+            json!([]),
+            "input[0].previousOutpoint has the wrong JSON type",
+        ),
+        (
+            "sighashType",
+            Value::Null,
+            "input[0].sighashType must not be null",
+        ),
+        (
+            "sighashType",
+            json!(2),
+            "input[0].sighashType is unsupported: 2",
+        ),
+        (
+            "sigOpCount",
+            Value::Null,
+            "input[0].sigOpCount must not be null",
+        ),
+        (
+            "sigOpCount",
+            json!(6),
+            "input[0]: sigOpCount exceeds signer capabilities",
+        ),
+        (
+            "minimumSignatures",
+            Value::Null,
+            "input[0].minimumSignatures must not be null",
+        ),
+        (
+            "minimumSignatures",
+            json!(0),
+            "input[0].minimumSignatures must be within 1..=5",
+        ),
+        (
+            "minimumSignatures",
+            json!(6),
+            "input[0].minimumSignatures must be within 1..=5",
+        ),
+        (
+            "redeemScript",
+            json!(1),
+            "input[0].redeemScript must be a lowercase hexadecimal string",
+        ),
+        (
+            "partialSigs",
+            Value::Null,
+            "input[0].partialSigs must not be null",
+        ),
+        (
+            "partialSigs",
+            json!([]),
+            "input[0].partialSigs has the wrong JSON type",
+        ),
+        (
+            "bip32Derivations",
+            Value::Null,
+            "input[0].bip32Derivations must not be null",
+        ),
+        (
+            "bip32Derivations",
+            json!([]),
+            "input[0].bip32Derivations has the wrong JSON type",
+        ),
+        (
+            "proprietaries",
+            Value::Null,
+            "input[0].proprietaries must not be null",
+        ),
+        (
+            "proprietaries",
+            json!([]),
+            "input[0].proprietaries has the wrong JSON type",
+        ),
+        (
+            "covenantExecution",
+            json!(1),
+            "input[0].covenantExecution has the wrong JSON type",
+        ),
     ] {
-        assert_strict_rejects(base.clone(), |root| {
+        assert_strict_rejects(base.clone(), expected, |root| {
             root[0]["inputs"][0][field] = value;
         });
     }
 
-    for (field, value) in [
-        ("amount", Value::Null),
-        ("scriptPublicKey", Value::Null),
-        ("scriptPublicKey", json!("0")),
-        ("redeemScript", json!(1)),
-        ("bip32Derivations", json!([])),
-        ("proprietaries", json!([])),
-        ("covenantBinding", json!(1)),
+    for (field, value, expected) in [
+        ("amount", Value::Null, "output[0].amount must not be null"),
+        (
+            "scriptPublicKey",
+            Value::Null,
+            "output[0].scriptPublicKey must not be null",
+        ),
+        (
+            "scriptPublicKey",
+            json!("0"),
+            "output[0].scriptPublicKey must contain a four-hex-digit script version",
+        ),
+        (
+            "redeemScript",
+            json!(1),
+            "output[0].redeemScript must be a lowercase hexadecimal string",
+        ),
+        (
+            "bip32Derivations",
+            json!([]),
+            "output[0].bip32Derivations has the wrong JSON type",
+        ),
+        (
+            "proprietaries",
+            json!([]),
+            "output[0].proprietaries has the wrong JSON type",
+        ),
+        (
+            "covenantBinding",
+            json!(1),
+            "output[0].covenantBinding has the wrong JSON type",
+        ),
     ] {
-        assert_strict_rejects(base.clone(), |root| {
+        assert_strict_rejects(base.clone(), expected, |root| {
             root[0]["outputs"][0][field] = value;
         });
     }
 
-    for value in [
-        json!({}),
-        json!({"suppliedMask": 1}),
-        json!({"suppliedMask": 1, "suppliedTrueMask": 2}),
-        json!({"suppliedMask": 65_536, "suppliedTrueMask": 0}),
-        json!({"suppliedMask": 1, "suppliedTrueMask": 0, "extra": 0}),
+    for (value, expected) in [
+        (json!({}), "missing input[0].covenantExecution.suppliedMask"),
+        (
+            json!({"suppliedMask": 1}),
+            "missing input[0].covenantExecution.suppliedTrueMask",
+        ),
+        (
+            json!({"suppliedMask": 1, "suppliedTrueMask": 2}),
+            "input[0]: covenantExecution true-mask contains unsupplied decisions",
+        ),
+        (
+            json!({"suppliedMask": 65_536, "suppliedTrueMask": 0}),
+            "input[0]: covenantExecution.suppliedMask exceeds u16",
+        ),
+        (
+            json!({"suppliedMask": 1, "suppliedTrueMask": 0, "extra": 0}),
+            "input[0]: covenantExecution must contain only suppliedMask and suppliedTrueMask",
+        ),
     ] {
-        assert_strict_rejects(base.clone(), |root| {
+        assert_strict_rejects(base.clone(), expected, |root| {
             root[0]["inputs"][0]["covenantExecution"] = value;
         });
     }
 
-    for value in [
-        json!({}),
-        json!({"authorizingInput": 0}),
-        json!({"authorizingInput": 1, "covenantId": "00".repeat(32)}),
-        json!({"authorizingInput": 0, "covenantId": "00"}),
-        json!({"authorizingInput": 0, "covenantId": "00".repeat(32), "extra": 0}),
+    for (value, expected) in [
+        (
+            json!({}),
+            "missing output[0].covenantBinding.authorizingInput",
+        ),
+        (
+            json!({"authorizingInput": 0}),
+            "missing output[0].covenantBinding.covenantId",
+        ),
+        (
+            json!({"authorizingInput": 1, "covenantId": "00".repeat(32)}),
+            "output[0] covenant authorizing input is out of range",
+        ),
+        (
+            json!({"authorizingInput": 0, "covenantId": "00"}),
+            "output[0] covenant id must be 32 bytes",
+        ),
+        (
+            json!({"authorizingInput": 0, "covenantId": "00".repeat(32), "extra": 0}),
+            "output[0] covenantBinding must contain only authorizingInput and covenantId",
+        ),
     ] {
-        assert_strict_rejects(base.clone(), |root| {
+        assert_strict_rejects(base.clone(), expected, |root| {
             root[0]["outputs"][0]["covenantBinding"] = value;
         });
     }
 
-    assert_strict_rejects(base.clone(), |root| {
-        root[0]["inputs"][0]["utxoEntry"]["amount"] = Value::Null;
-    });
-    assert_strict_rejects(base.clone(), |root| {
-        root[0]["inputs"][0]["utxoEntry"]["scriptPublicKey"] = json!("0");
-    });
-    assert_strict_rejects(base.clone(), |root| {
-        root[0]["inputs"][0]["utxoEntry"]["covenantId"] = json!("00");
-    });
-    assert_strict_rejects(base.clone(), |root| {
+    assert_strict_rejects(
+        base.clone(),
+        "input[0].utxoEntry.amount must not be null",
+        |root| {
+            root[0]["inputs"][0]["utxoEntry"]["amount"] = Value::Null;
+        },
+    );
+    assert_strict_rejects(
+        base.clone(),
+        "input[0].utxoEntry.scriptPublicKey must contain a four-hex-digit script version",
+        |root| {
+            root[0]["inputs"][0]["utxoEntry"]["scriptPublicKey"] = json!("0");
+        },
+    );
+    assert_strict_rejects(
+        base.clone(),
+        "input[0]: utxoEntry.covenantId must be 32 bytes",
+        |root| {
+            root[0]["inputs"][0]["utxoEntry"]["covenantId"] = json!("00");
+        },
+    );
+    assert_strict_rejects(base.clone(), "input[0]: tx_id not 32 bytes", |root| {
         root[0]["inputs"][0]["previousOutpoint"]["transactionId"] = json!("00");
     });
-    assert_strict_rejects(base, |root| {
+    assert_strict_rejects(base, "input[0]: index exceeds u32", |root| {
         root[0]["inputs"][0]["previousOutpoint"]["index"] = json!(u64::from(u32::MAX) + 1);
     });
 }

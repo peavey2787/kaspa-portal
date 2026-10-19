@@ -22,7 +22,7 @@ fn utxo(transaction_byte: u8, index: u32, amount: u64) -> UtxoEntry {
 fn explicit_selection_rejects_duplicate_indices() {
     let result =
         super::selection::select_explicit(vec![utxo(0x11, 0, 10), utxo(0x22, 1, 20)], &[0, 0]);
-    assert!(result.is_err());
+    crate::test_support::assert_err_text(&result, "Duplicate UTXO index 0");
 }
 
 #[test]
@@ -576,12 +576,14 @@ fn multisig_planning_covers_automatic_explicit_empty_and_dust_change_paths() {
     .contains("No UTXOs"));
 
     let duplicate = [0usize, 0usize];
-    assert!(encode_from_utxos(
-        &request(MultisigSelection::Explicit(&duplicate)),
-        &prepared,
-        vec![utxo(1, 0, 200_000)],
-    )
-    .is_err());
+    crate::test_support::assert_err_text(
+        &encode_from_utxos(
+            &request(MultisigSelection::Explicit(&duplicate)),
+            &prepared,
+            vec![utxo(1, 0, 200_000)],
+        ),
+        "Duplicate UTXO index 0",
+    );
 }
 
 #[test]
@@ -708,8 +710,14 @@ fn storage_mass_estimation_covers_relaxed_arithmetic_and_zero_amounts() {
     );
     assert_eq!(storage_mass_estimate(&[(0, 1)], &[(0, 1)]).unwrap(), 0);
     assert_eq!(storage_mass_estimate(&[], &[]).unwrap(), 0);
-    assert!(storage_mass_estimate(&[], &[(1, u64::MAX)]).is_err());
-    assert!(storage_mass_estimate(&[(u64::MAX, 3), (1, 3), (1, 3)], &[(1, 3)]).is_err());
+    crate::test_support::assert_err_text(
+        &storage_mass_estimate(&[], &[(1, u64::MAX)]),
+        "Output storage-mass term exceeds supported range",
+    );
+    crate::test_support::assert_err_text(
+        &storage_mass_estimate(&[(u64::MAX, 3), (1, 3), (1, 3)], &[(1, 3)]),
+        "Input amount total exceeds supported monetary range",
+    );
 }
 
 #[test]
@@ -797,7 +805,10 @@ fn standard_send_preparation_and_utxo_paths_are_host_testable() {
     assert!(validate_recipient_amount(1)
         .unwrap_err()
         .contains("too small"));
-    assert!(prepare_send(&wallet, "not-an-address", 20_000_000, 1_000_000).is_err());
+    crate::test_support::assert_err_text(
+        &prepare_send(&wallet, "not-an-address", 20_000_000, 1_000_000),
+        "Unknown address prefix",
+    );
     let testnet_destination =
         crate::primitives::address::encode_p2pk_address(&[0x83; 32], "kaspatest");
     assert_eq!(
@@ -841,13 +852,15 @@ fn standard_send_preparation_and_utxo_paths_are_host_testable() {
             .len(),
         2,
     );
-    assert!(create_send_selected_from_utxos(
-        &wallet,
-        &prepared,
-        &[0, 0],
-        vec![utxo(0xb5, 0, 25_000_000)],
-    )
-    .is_err());
+    crate::test_support::assert_err_text(
+        &create_send_selected_from_utxos(
+            &wallet,
+            &prepared,
+            &[0, 0],
+            vec![utxo(0xb5, 0, 25_000_000)],
+        ),
+        "Duplicate UTXO index 0",
+    );
 
     let consolidation = create_consolidation_from_utxos(
         &wallet,
@@ -862,9 +875,9 @@ fn standard_send_preparation_and_utxo_paths_are_host_testable() {
             .len(),
         2,
     );
-    assert!(
-        create_consolidation_from_utxos(&wallet, 1_000_000, vec![utxo(0xb8, 0, 30_000_000)],)
-            .is_err()
+    crate::test_support::assert_err_text(
+        &create_consolidation_from_utxos(&wallet, 1_000_000, vec![utxo(0xb8, 0, 30_000_000)]),
+        "Only 1 UTXO — nothing to consolidate",
     );
 
     let fee = storage_mass_fee(
@@ -909,7 +922,10 @@ fn limited_send_preflight_is_transport_independent() {
     use super::standard::{create_limited_send_from_utxos, prepare_send};
 
     let wallet = watch_wallet();
-    assert!(prepare_send(&wallet, "not-an-address", 20_000_000, 300_000).is_err());
+    crate::test_support::assert_err_text(
+        &prepare_send(&wallet, "not-an-address", 20_000_000, 300_000),
+        "Unknown address prefix",
+    );
     let destination = crate::primitives::address::encode_p2pk_address(&[0x84; 32], "kaspa");
     let prepared =
         prepare_send(&wallet, &destination, 20_000_000, 300_000).expect("prepared limited send");
@@ -921,13 +937,12 @@ fn limited_send_preflight_is_transport_independent() {
     )
     .expect("limited send from supplied utxos");
     assert!(!wire.is_empty());
-    assert!(create_limited_send_from_utxos(
+    crate::test_support::assert_err_text(&create_limited_send_from_utxos(
         &wallet,
         &prepared,
         vec![utxo(0xbf, 0, 10_000_000), utxo(0xc0, 1, 11_000_000)],
         1,
-    )
-    .is_err());
+    ), "Insufficient funds within the current 1-UTXO selection limit: have 11000000 sompi, need 20300000 sompi. Raise the Advanced UTXO limit or choose UTXOs manually.");
 
     assert!(super::selection::select_automatic_with_limit(
         vec![utxo(0xbc, 0, 50_000_000)],

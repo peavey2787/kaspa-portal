@@ -8,19 +8,28 @@ fn exact_u64_accepts_only_decimal_string() {
         parse_exact_u64(&json!("18446744073709551615"), "amount").unwrap(),
         u64::MAX
     );
-    assert!(parse_exact_u64(&json!(1u64), "amount").is_err());
+    crate::test_support::assert_err_text(
+        &parse_exact_u64(&json!(1u64), "amount"),
+        "amount must be a canonical decimal string",
+    );
 }
 
 #[test]
 fn exact_u64_rejects_noncanonical_and_numeric_forms() {
     for invalid in ["", "01", "1x", "+1", "-1"] {
-        assert!(
-            parse_exact_u64(&json!(invalid), "amount").is_err(),
-            "accepted noncanonical decimal form {invalid:?}"
+        crate::test_support::assert_err_text(
+            &parse_exact_u64(&json!(invalid), "amount"),
+            "amount must be a canonical unsigned decimal string",
         );
     }
-    assert!(parse_exact_u64(&json!(9_007_199_254_740_992u64), "amount").is_err());
-    assert!(parse_exact_u64(&json!(1.5), "amount").is_err());
+    crate::test_support::assert_err_text(
+        &parse_exact_u64(&json!(9_007_199_254_740_992u64), "amount"),
+        "amount must be a canonical decimal string",
+    );
+    crate::test_support::assert_err_text(
+        &parse_exact_u64(&json!(1.5), "amount"),
+        "amount must be a canonical decimal string",
+    );
 }
 
 #[test]
@@ -73,29 +82,61 @@ fn validator_rejects_a_noncanonical_value_in_every_exact_field() {
         "outputs": [{"amount": "9"}]
     });
     assert_eq!(validate_pskt_exact_fields(&valid), Ok(()));
-    for pointer in [
-        "/global/fallbackLockTime",
-        "/global/gas",
-        "/inputs/0/sequence",
-        "/inputs/0/minTime",
-        "/inputs/0/utxoEntry/amount",
-        "/inputs/0/utxoEntry/blockDaaScore",
-        "/outputs/0/amount",
+    for (pointer, expected) in [
+        (
+            "/global/fallbackLockTime",
+            "fallbackLockTime must be a canonical unsigned decimal string",
+        ),
+        (
+            "/global/gas",
+            "gas must be a canonical unsigned decimal string",
+        ),
+        (
+            "/inputs/0/sequence",
+            "sequence must be a canonical unsigned decimal string",
+        ),
+        (
+            "/inputs/0/minTime",
+            "minTime must be a canonical unsigned decimal string",
+        ),
+        (
+            "/inputs/0/utxoEntry/amount",
+            "amount must be a canonical unsigned decimal string",
+        ),
+        (
+            "/inputs/0/utxoEntry/blockDaaScore",
+            "blockDaaScore must be a canonical unsigned decimal string",
+        ),
+        (
+            "/outputs/0/amount",
+            "amount must be a canonical unsigned decimal string",
+        ),
     ] {
         let mut invalid = valid.clone();
         *invalid.pointer_mut(pointer).expect("field") = json!("01");
-        assert!(
-            validate_pskt_exact_fields(&invalid).is_err(),
-            "{pointer} accepted a noncanonical decimal"
-        );
+        crate::test_support::assert_err_text(&validate_pskt_exact_fields(&invalid), expected);
         *invalid.pointer_mut(pointer).expect("field") = json!(null);
-        assert_eq!(
-            validate_pskt_exact_fields(&invalid).is_err(),
-            pointer == "/outputs/0/amount",
-            "{pointer} null handling"
-        );
+        // Only the output amount is mandatory; the other fields may be null.
+        let nulled = validate_pskt_exact_fields(&invalid);
+        if pointer == "/outputs/0/amount" {
+            crate::test_support::assert_err_text(
+                &nulled,
+                "amount must be a canonical decimal string",
+            );
+        } else {
+            assert!(nulled.is_ok(), "{pointer} null handling");
+        }
     }
-    assert!(validate_pskt_exact_fields(&json!([])).is_err());
-    assert!(validate_pskt_exact_fields(&json!({"inputs": [7]})).is_err());
-    assert!(validate_pskt_exact_fields(&json!({"outputs": [7]})).is_err());
+    crate::test_support::assert_err_text(
+        &validate_pskt_exact_fields(&json!([])),
+        "PSKT must be an object",
+    );
+    crate::test_support::assert_err_text(
+        &validate_pskt_exact_fields(&json!({"inputs": [7]})),
+        "input[0] must be an object",
+    );
+    crate::test_support::assert_err_text(
+        &validate_pskt_exact_fields(&json!({"outputs": [7]})),
+        "output[0] must be an object",
+    );
 }

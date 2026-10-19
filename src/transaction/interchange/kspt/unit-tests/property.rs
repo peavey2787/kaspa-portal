@@ -111,9 +111,16 @@ fn compact_kspt_rejects_every_truncated_prefix_of_a_valid_message() {
     let written = serialize_compact_kspt(&transaction, &mut encoded).expect("fixture serializes");
     for length in 0..written {
         let mut parsed = Transaction::try_new().expect("transaction test allocation");
-        assert!(
-            parse_compact_kspt(&encoded[..length], &mut parsed).is_err(),
-            "truncated prefix {length}/{written} was accepted"
+        // Cutting exactly the two-byte trailer leaves a frame whose trailer is absent.
+        let expected = if length == written - 2 {
+            PsktError::InvalidTrailer
+        } else {
+            PsktError::BufferTooShort
+        };
+        assert_eq!(
+            parse_compact_kspt(&encoded[..length], &mut parsed),
+            Err(expected),
+            "truncated prefix {length}/{written}"
         );
     }
     let mut invalid_magic = encoded;

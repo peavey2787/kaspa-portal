@@ -168,15 +168,27 @@ fn base58_kpub_imports_to_the_same_wallet_as_canonical_text() {
 fn kpub_import_rejects_malformed_text_payloads_and_hardened_children() {
     use crate::wallet::account::derivation::{import_kpub, import_kpub_raw, ExtPubKey};
 
-    assert!(import_kpub("kpub1:00", "kaspa").is_err());
-    assert!(import_kpub_raw(&[0u8; 77], "kaspa").is_err());
+    crate::test_support::assert_err_text(
+        &import_kpub("kpub1:00", "kaspa"),
+        "Account key must be canonical kpub1 text or an account-level BIP32 xpub",
+    );
+    crate::test_support::assert_err_text(
+        &import_kpub_raw(&[0u8; 77], "kaspa"),
+        "Raw account-key payload must be 78 bytes, got 77",
+    );
 
     let mut invalid = canonical_account_payload();
     invalid[45] = 0x04;
-    assert!(import_kpub_raw(&invalid, "kaspa").is_err());
+    crate::test_support::assert_err_text(
+        &import_kpub_raw(&invalid, "kaspa"),
+        "Raw account-key payload is not canonical (78 bytes)",
+    );
 
     let xpub = ExtPubKey::from_kpub(&canonical_account_text()).expect("extended public key");
-    assert!(xpub.derive_child(0x8000_0000).is_err());
+    crate::test_support::assert_err_text(
+        &xpub.derive_child(0x8000_0000),
+        "Cannot derive hardened child from public key",
+    );
 }
 
 #[test]

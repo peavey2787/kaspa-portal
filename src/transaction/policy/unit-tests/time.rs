@@ -73,7 +73,10 @@ fn unix_seconds_outside_the_supported_years_are_rejected() {
         UtcDateTime::from_unix_seconds(MAX_UNIX + 1),
         Err(PolicyError::DateOutOfRange)
     );
-    assert!(date(1999, 12, 31, 0, 0, 0).weekday_monday0().is_err());
+    crate::test_support::assert_err(
+        &date(1999, 12, 31, 0, 0, 0).weekday_monday0(),
+        "DateOutOfRange",
+    );
 }
 
 #[test]
@@ -108,7 +111,7 @@ fn date_validation_checks_every_field_boundary() {
             Err(PolicyError::InvalidDate),
             "{invalid:?}"
         );
-        assert!(invalid.to_unix_seconds().is_err());
+        crate::test_support::assert_err(&invalid.to_unix_seconds(), "InvalidDate");
     }
 }
 

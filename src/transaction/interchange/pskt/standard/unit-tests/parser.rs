@@ -398,12 +398,24 @@ fn partial_signatures_cover_empty_valid_and_invalid_entries() {
         PskError::DuplicateField
     );
 
-    for invalid in [
-        format!(",\"partialSigs\":{{\"00\":{{\"schnorr\":\"{signature}\"}}}}"),
-        format!(",\"partialSigs\":{{\"{pubkey}\":{{\"ecdsa\":\"{signature}\"}}}}"),
-        format!(",\"partialSigs\":{{\"{pubkey}\":{{\"schnorr\":\"22\"}}}}"),
+    for (invalid, expected) in [
+        (
+            format!(",\"partialSigs\":{{\"00\":{{\"schnorr\":\"{signature}\"}}}}"),
+            "InvalidPubkeyLen",
+        ),
+        (
+            format!(",\"partialSigs\":{{\"{pubkey}\":{{\"ecdsa\":\"{signature}\"}}}}"),
+            "InvalidSignatureType",
+        ),
+        (
+            format!(",\"partialSigs\":{{\"{pubkey}\":{{\"schnorr\":\"22\"}}}}"),
+            "UnexpectedToken",
+        ),
     ] {
-        assert!(parse_json(PSKT_MAGIC, &transaction_json("", &invalid, "")).is_err());
+        crate::test_support::assert_err(
+            &parse_json(PSKT_MAGIC, &transaction_json("", &invalid, "")),
+            expected,
+        );
     }
 }
 
@@ -443,11 +455,20 @@ fn bip32_derivations_cover_null_objects_duplicates_and_limits() {
         PskError::DuplicateField
     );
 
-    for invalid in [
-        ",\"bip32Derivations\":{\"00\":null}".to_string(),
-        format!(",\"bip32Derivations\":{{\"{first}\":[]}}"),
+    for (invalid, expected) in [
+        (
+            ",\"bip32Derivations\":{\"00\":null}".to_string(),
+            "InvalidPubkeyLen",
+        ),
+        (
+            format!(",\"bip32Derivations\":{{\"{first}\":[]}}"),
+            "UnexpectedToken",
+        ),
     ] {
-        assert!(parse_json(PSKT_MAGIC, &transaction_json("", &invalid, "")).is_err());
+        crate::test_support::assert_err(
+            &parse_json(PSKT_MAGIC, &transaction_json("", &invalid, "")),
+            expected,
+        );
     }
 }
 
@@ -459,19 +480,31 @@ fn outpoint_parser_covers_unknown_duplicate_missing_and_bounds() {
     let (_, parsed, _) = parse_json(PSKT_MAGIC, unknown.as_bytes()).unwrap();
     assert!(parsed.unknowns_count > 0);
 
-    for outpoint in [
-        format!("{{\"transactionId\":\"{TXID_ZERO}\"}}"),
-        "{\"index\":0}".to_string(),
-        format!(
+    for (outpoint, expected) in [
+        (
+            format!("{{\"transactionId\":\"{TXID_ZERO}\"}}"),
+            "MissingField",
+        ),
+        ("{\"index\":0}".to_string(), "MissingField"),
+        (
+            format!(
             "{{\"transactionId\":\"{TXID_ZERO}\",\"transactionId\":\"{TXID_ZERO}\",\"index\":0}}"
         ),
-        format!("{{\"transactionId\":\"{TXID_ZERO}\",\"index\":4294967296}}"),
-        "{\"transactionId\":\"00\",\"index\":0}".to_string(),
+            "DuplicateField",
+        ),
+        (
+            format!("{{\"transactionId\":\"{TXID_ZERO}\",\"index\":4294967296}}"),
+            "UnexpectedToken",
+        ),
+        (
+            "{\"transactionId\":\"00\",\"index\":0}".to_string(),
+            "UnexpectedToken",
+        ),
     ] {
         let json = format!(
             "{{\"global\":{{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1}},\"inputs\":[{{\"utxoEntry\":{{\"amount\":1,\"scriptPublicKey\":\"0000\"}},\"previousOutpoint\":{outpoint},\"sighashType\":1}}],\"outputs\":[{{\"amount\":1,\"scriptPublicKey\":\"0000\"}}]}}"
         );
-        assert!(parse_json(PSKT_MAGIC, json.as_bytes()).is_err());
+        crate::test_support::assert_err(&parse_json(PSKT_MAGIC, json.as_bytes()), expected);
     }
 }
 
@@ -521,7 +554,10 @@ fn parser_capture_redeem_and_unknown_paths_are_covered_end_to_end() {
     let mut encoded = [0u8; 4];
     assert_eq!(hex_encode_lower(&[0xde, 0xad], &mut encoded).unwrap(), 4);
     assert_eq!(&encoded, b"dead");
-    assert!(hex_encode_lower(&[0xde, 0xad], &mut encoded[..3]).is_err());
+    crate::test_support::assert_err(
+        &hex_encode_lower(&[0xde, 0xad], &mut encoded[..3]),
+        "OutputBufferTooSmall",
+    );
 }
 
 #[test]
@@ -606,15 +642,27 @@ fn covenant_branch_and_minimum_signature_fields_cover_canonical_boundaries() {
         parse_json(PSKT_MAGIC, &transaction_json("", execution, ""))
             .expect("canonical covenant execution");
     }
-    for invalid in [
-        r#","covenantExecution":1"#,
-        r#","covenantExecution":{}"#,
-        r#","covenantExecution":{"suppliedMask":1}"#,
-        r#","covenantExecution":{"suppliedMask":1,"suppliedTrueMask":2}"#,
-        r#","covenantExecution":{"suppliedMask":65536,"suppliedTrueMask":0}"#,
-        r#","covenantExecution":{"suppliedMask":1,"suppliedTrueMask":0,"extra":0}"#,
+    for (invalid, expected) in [
+        (r#","covenantExecution":1"#, "UnexpectedToken"),
+        (r#","covenantExecution":{}"#, "MissingField"),
+        (r#","covenantExecution":{"suppliedMask":1}"#, "MissingField"),
+        (
+            r#","covenantExecution":{"suppliedMask":1,"suppliedTrueMask":2}"#,
+            "UnexpectedToken",
+        ),
+        (
+            r#","covenantExecution":{"suppliedMask":65536,"suppliedTrueMask":0}"#,
+            "UnexpectedToken",
+        ),
+        (
+            r#","covenantExecution":{"suppliedMask":1,"suppliedTrueMask":0,"extra":0}"#,
+            "UnexpectedToken",
+        ),
     ] {
-        assert!(parse_json(PSKT_MAGIC, &transaction_json("", invalid, "")).is_err());
+        crate::test_support::assert_err(
+            &parse_json(PSKT_MAGIC, &transaction_json("", invalid, "")),
+            expected,
+        );
     }
 
     for minimum in [1u8, 5] {
@@ -627,15 +675,18 @@ fn covenant_branch_and_minimum_signature_fields_cover_canonical_boundaries() {
         parse_json(PSKT_MAGIC, &transaction_json("", &extra, ""))
             .expect("supported canonical decimal-string minimum signature count");
     }
-    for invalid in [
-        r#","minimumSignatures":0"#,
-        r#","minimumSignatures":6"#,
-        r#","minimumSignatures":"0""#,
-        r#","minimumSignatures":"6""#,
-        r#","minimumSignatures":"01""#,
-        r#","minimumSignatures":"1.0""#,
+    for (invalid, expected) in [
+        (r#","minimumSignatures":0"#, "TooManyPartialSigs"),
+        (r#","minimumSignatures":6"#, "TooManyPartialSigs"),
+        (r#","minimumSignatures":"0""#, "TooManyPartialSigs"),
+        (r#","minimumSignatures":"6""#, "TooManyPartialSigs"),
+        (r#","minimumSignatures":"01""#, "UnexpectedToken"),
+        (r#","minimumSignatures":"1.0""#, "UnexpectedToken"),
     ] {
-        assert!(parse_json(PSKT_MAGIC, &transaction_json("", invalid, "")).is_err());
+        crate::test_support::assert_err(
+            &parse_json(PSKT_MAGIC, &transaction_json("", invalid, "")),
+            expected,
+        );
     }
 }
 
@@ -1017,17 +1068,20 @@ fn consensus_committed_global_fields_are_first_class_transaction_state() {
 
 #[test]
 fn consensus_committed_global_fields_fail_closed_on_malformed_values() {
-    for extra in [
-        ",\"subnetworkId\":\"00\"".to_string(),
-        format!(",\"subnetworkId\":\"{}\"", "GG".repeat(20)),
-        ",\"gas\":true".to_string(),
-        ",\"gas\":\"01\"".to_string(),
-        ",\"txPayload\":\"0\"".to_string(),
-        ",\"txPayload\":true".to_string(),
+    for (extra, expected) in [
+        (",\"subnetworkId\":\"00\"".to_string(), "InvalidScriptLen"),
+        (
+            format!(",\"subnetworkId\":\"{}\"", "GG".repeat(20)),
+            "BadHexChar",
+        ),
+        (",\"gas\":true".to_string(), "UnexpectedToken"),
+        (",\"gas\":\"01\"".to_string(), "UnexpectedToken"),
+        (",\"txPayload\":\"0\"".to_string(), "OddHexLength"),
+        (",\"txPayload\":true".to_string(), "UnexpectedToken"),
     ] {
-        assert!(
-            parse_json(PSKT_MAGIC, &transaction_json(&extra, "", "")).is_err(),
-            "malformed consensus global unexpectedly accepted: {extra}"
+        crate::test_support::assert_err(
+            &parse_json(PSKT_MAGIC, &transaction_json(&extra, "", "")),
+            expected,
         );
     }
 }
@@ -1062,7 +1116,10 @@ fn top_level_dispatch_covers_preserved_extension_and_known_field_fail_closed_pat
     );
 
     let malformed_known = "{\"global\":{\"version\":0,\"txVersion\":1,\"inputCount\":1,\"outputCount\":1},\"inputs\":null,\"outputs\":[{\"amount\":1,\"scriptPublicKey\":\"0000\"}]}".to_string();
-    assert!(parse_json(PSKT_MAGIC, malformed_known.as_bytes()).is_err());
+    crate::test_support::assert_err(
+        &parse_json(PSKT_MAGIC, malformed_known.as_bytes()),
+        "UnexpectedToken",
+    );
 }
 
 fn parse_global(global_extra: &str) -> Result<Transaction, PskError> {
@@ -1153,9 +1210,9 @@ fn global_flags_and_payload_parse_exactly() {
         let valid = format!(",\"{flag}\":false");
         assert!(parse_json(PSKT_MAGIC, &transaction_json(&valid, "", "")).is_ok());
         let invalid = format!(",\"{flag}\":7");
-        assert!(
-            parse_json(PSKT_MAGIC, &transaction_json(&invalid, "", "")).is_err(),
-            "{flag}"
+        crate::test_support::assert_err(
+            &parse_json(PSKT_MAGIC, &transaction_json(&invalid, "", "")),
+            "UnexpectedToken",
         );
     }
     let (tx, _, _) = parse_json(
@@ -1183,7 +1240,10 @@ fn input_min_time_accepts_decimal_strings_and_numbers() {
             "{value}"
         );
     }
-    assert!(parse_json(PSKT_MAGIC, &transaction_json("", ",\"minTime\":\"05\"", "")).is_err());
+    crate::test_support::assert_err(
+        &parse_json(PSKT_MAGIC, &transaction_json("", ",\"minTime\":\"05\"", "")),
+        "UnexpectedToken",
+    );
 }
 
 #[test]

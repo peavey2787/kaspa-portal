@@ -86,13 +86,22 @@ fn stealth_key_and_tweak_helpers_cover_roundtrip_and_validation() {
     );
     let restored = super::keys::pubkey_from_xonly(&xonly).expect("x-only public key");
     assert_eq!(super::keys::x_only_bytes(&restored), xonly);
-    assert!(super::keys::pubkey_from_xonly(&xonly[..31]).is_err());
-    assert!(super::keys::pubkey_from_xonly(&[0xff; 32]).is_err());
+    crate::test_support::assert_err_text(
+        &super::keys::pubkey_from_xonly(&xonly[..31]),
+        "xonly pubkey must be 32 bytes, got 31",
+    );
+    crate::test_support::assert_err_text(
+        &super::keys::pubkey_from_xonly(&[0xff; 32]),
+        "Invalid pubkey: crypto error",
+    );
 
     let scalar = super::keys::scalar_from_bytes(&[1u8; 32]).expect("valid scalar");
     let affine = (k256::ProjectivePoint::GENERATOR * scalar).to_affine();
     assert_eq!(super::keys::x_only_from_affine(&affine), xonly);
-    assert!(super::keys::scalar_from_bytes(&[0xffu8; 32]).is_err());
+    crate::test_support::assert_err_text(
+        &super::keys::scalar_from_bytes(&[0xffu8; 32]),
+        "Invalid scalar: crypto error",
+    );
 
     let shared = [0x77u8; 32];
     // Independent SHA-256 KAT: SHA256("KasStealthViewTag" || 0x77 * 32)[0] == 0x63.

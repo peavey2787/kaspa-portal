@@ -33,7 +33,7 @@ fn exact_envelope_roundtrip_and_trailing_bytes_rejected() {
     assert_eq!(parsed.binding_token, request.binding_token);
     assert_eq!(parsed.session_id, request.session_id);
     assert_eq!(parsed.context, b"context");
-    assert!(parse_request(&wire[..len + 1]).is_err());
+    crate::test_support::assert_err(&parse_request(&wire[..len + 1]), "InvalidLength");
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn key_info_requires_device_allocation_not_host_selected_id() {
     );
     let mut hostile = request;
     hostile.key_id = [8; 32];
-    assert!(encode_request(&hostile, &mut wire).is_err());
+    crate::test_support::assert_err(&encode_request(&hostile, &mut wire), "InvalidFields");
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn opaque_requires_portable_binding_record() {
     assert_eq!(parsed.binding_token, [4; 32]);
     let mut unbound = request;
     unbound.binding_token = [0; 32];
-    assert!(encode_request(&unbound, &mut wire).is_err());
+    crate::test_support::assert_err(&encode_request(&unbound, &mut wire), "InvalidFields");
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn opaque_rejects_unreviewed_context_bytes() {
         context: b"ignored by opaque UI",
     };
     let mut wire = [0u8; 320];
-    assert!(encode_request(&request, &mut wire).is_err());
+    crate::test_support::assert_err(&encode_request(&request, &mut wire), "InvalidFields");
 }
 
 #[test]

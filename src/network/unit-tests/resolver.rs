@@ -21,15 +21,31 @@ fn only_tls_endpoints_are_accepted() {
         .unwrap(),
         "wss://node.example/kaspa/testnet-10/wrpc/borsh"
     );
-    for body in [
-        r#"{"url":"ws://plain.example"}"#,
-        r#"{"url":"https://node.example"}"#,
-        r#"{"url":"wss://"}"#,
-        r#"{"url":"wss://a b"}"#,
-        r#"{"endpoint":"wss://node.example"}"#,
-        "not json",
+    let malformed = "resolver returned a non-TLS or malformed endpoint: ";
+    for (body, expected) in [
+        (
+            r#"{"url":"ws://plain.example"}"#,
+            format!("{malformed}ws://plain.example"),
+        ),
+        (
+            r#"{"url":"https://node.example"}"#,
+            format!("{malformed}https://node.example"),
+        ),
+        (r#"{"url":"wss://"}"#, format!("{malformed}wss://")),
+        (r#"{"url":"wss://a b"}"#, format!("{malformed}wss://a b")),
+        (
+            r#"{"endpoint":"wss://node.example"}"#,
+            "resolver response has no url".into(),
+        ),
+        (
+            "not json",
+            "resolver response: expected ident at line 1 column 2".into(),
+        ),
     ] {
-        assert!(resolver::parse_endpoint(body).is_err(), "{body}");
+        crate::test_support::assert_err(
+            &resolver::parse_endpoint(body),
+            &format!("InvalidEncoding({expected:?})"),
+        );
     }
 }
 

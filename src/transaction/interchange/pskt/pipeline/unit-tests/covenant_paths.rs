@@ -117,7 +117,7 @@ fn a_keyless_branch_finalizes_from_its_selectors_alone() {
 
     // A signature that the keyless path does not consume is refused.
     let (signed_refund, _) = signed(refund, 0x42);
-    assert!(signature_script(&signed_refund).is_err());
+    crate::test_support::assert_err_text(&signature_script(&signed_refund), "input[0]: covenant partial-signature pubkey is not branch-bound: 0224653eac434488002cc06bbfb7f10fe18991e35f9fe4302dbea6d2353dc0ab1c");
 }
 
 #[test]
@@ -152,13 +152,19 @@ fn signatures_outside_the_selected_path_or_incomplete_selectors_never_finalize()
     let redeem = nested_escrow();
     // The owner signs but covenantExecution selects the beneficiary branch.
     let (wrong_branch, _) = signed(document(&redeem, 0b11, 0b10), 0x41);
-    assert!(signature_script(&wrong_branch).is_err());
+    crate::test_support::assert_err_text(&signature_script(&wrong_branch), "input[0]: covenant partial-signature pubkey is not branch-bound: 02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619");
     // An assignment missing the inner selector is not a complete plan.
     let (incomplete, _) = signed(document(&redeem, 0b01, 0b01), 0x41);
-    assert!(signature_script(&incomplete).is_err());
+    crate::test_support::assert_err_text(
+        &signature_script(&incomplete),
+        "PSKT is not cryptographically complete",
+    );
     // A path reaching a multisig check has no generic plan.
     let multisig_path = [OP_IF, 0xae, OP_ELSE, 0x51, OP_ENDIF];
-    assert!(signature_script(&document(&multisig_path, 1, 1)).is_err());
+    crate::test_support::assert_err_text(
+        &signature_script(&document(&multisig_path, 1, 1)),
+        "PSKT is not cryptographically complete",
+    );
 }
 
 fn p2sh(redeem: &[u8]) -> Vec<u8> {
@@ -256,7 +262,10 @@ fn a_path_needing_two_signatures_is_incomplete_with_one() {
         )
     };
     assert_eq!(complete(&one), Ok(false));
-    assert!(signature_script(&one).is_err());
+    crate::test_support::assert_err_text(
+        &signature_script(&one),
+        "PSKT is not cryptographically complete",
+    );
 
     let both = crate::transaction::interchange::pskt::pipeline::test_support::sign_first_input(
         unsigned,

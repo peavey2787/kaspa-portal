@@ -60,7 +60,14 @@ async fn actual_websocket_transport_handles_simulated_faults_fail_closed() {
             2 => FaultMode::MismatchedOperation,
             _ => FaultMode::CloseBeforeResponse,
         };
-        assert!(call(&endpoint, mode).await.is_err());
+        let result = call(&endpoint, mode).await;
+        let failed_as_injected = match index % 4 {
+            0 => matches!(result, Err(NetworkError::TruncatedPayload)),
+            1 => matches!(result, Err(NetworkError::MismatchedRequestId { .. })),
+            2 => matches!(result, Err(NetworkError::MismatchedOperation { .. })),
+            _ => matches!(result, Err(NetworkError::ConnectionFailed(_))),
+        };
+        assert!(failed_as_injected, "fault {index}: {result:?}");
         assert_eq!(
             call(&endpoint, FaultMode::Valid)
                 .await

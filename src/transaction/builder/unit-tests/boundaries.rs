@@ -144,9 +144,15 @@ fn automatic_selection_and_amount_helpers_cover_error_and_tie_boundaries() {
     assert!(is_dust(1));
     assert!(!is_dust(20_000_000));
     assert_eq!(checked_required(10, 5), Ok(15));
-    assert!(checked_required(u64::MAX, 1).is_err());
+    crate::test_support::assert_err_text(
+        &checked_required(u64::MAX, 1),
+        "Amount plus fee exceeds supported monetary range",
+    );
     assert_eq!(checked_sum([1, 2, 3]), Ok(6));
-    assert!(checked_sum([u64::MAX, 1]).is_err());
+    crate::test_support::assert_err_text(
+        &checked_sum([u64::MAX, 1]),
+        "Amount total exceeds supported monetary range",
+    );
 
     assert!(super::super::selection::select_automatic_with_limit(
         vec![super::utxo(0x10, 0, 1)],
@@ -189,16 +195,21 @@ fn selection_display_and_checked_total_cover_ordering_and_overflow() {
         super::super::selection::checked_total(&values).expect("checked total"),
         40
     );
-    assert!(super::super::selection::checked_total(&[
-        super::utxo(0x44, 0, u64::MAX),
-        super::utxo(0x55, 1, 1),
-    ])
-    .is_err());
+    crate::test_support::assert_err_text(
+        &super::super::selection::checked_total(&[
+            super::utxo(0x44, 0, u64::MAX),
+            super::utxo(0x55, 1, 1),
+        ]),
+        "UTXO total exceeds supported monetary range",
+    );
 
     let selected = super::super::selection::select_explicit(values.clone(), &[])
         .expect("empty explicit selection is representable");
     assert!(selected.is_empty());
-    assert!(super::super::selection::select_explicit(values, &[99]).is_err());
+    crate::test_support::assert_err_text(
+        &super::super::selection::select_explicit(values, &[99]),
+        "UTXO index 99 out of range (have 3)",
+    );
 }
 
 #[test]
@@ -216,9 +227,18 @@ fn storage_mass_boundaries_cover_relaxed_arithmetic_zero_and_overflow_paths() {
     .expect("arithmetic branch");
     assert_eq!(arithmetic, 213_336);
 
-    assert!(storage_mass_estimate(&[(1, u64::MAX), (1, 1)], &[]).is_err());
-    assert!(storage_mass_estimate(&[], &[(1, u64::MAX), (1, 1)]).is_err());
-    assert!(storage_mass_estimate(&[(1, u64::MAX)], &[(1, 1)]).is_err());
+    crate::test_support::assert_err_text(
+        &storage_mass_estimate(&[(1, u64::MAX), (1, 1)], &[]),
+        "Input plurality exceeds supported range",
+    );
+    crate::test_support::assert_err_text(
+        &storage_mass_estimate(&[], &[(1, u64::MAX), (1, 1)]),
+        "Output plurality exceeds supported range",
+    );
+    crate::test_support::assert_err_text(
+        &storage_mass_estimate(&[(1, u64::MAX)], &[(1, 1)]),
+        "Input storage-mass term exceeds supported range",
+    );
 }
 
 #[test]
@@ -255,5 +275,8 @@ fn multisig_standard_fee_shape_covers_push_prefix_and_requested_fee_boundaries()
 
     let requested = fee_256.saturating_add(1_000_000);
     assert_eq!(fee(2, 256, 2, 2, requested), Ok(requested));
-    assert!(fee(u8::MAX, usize::MAX, u8::MAX, usize::MAX, 0).is_err());
+    crate::test_support::assert_err_text(
+        &fee(u8::MAX, usize::MAX, u8::MAX, usize::MAX, 0),
+        "Multisig signature script exceeds supported range",
+    );
 }

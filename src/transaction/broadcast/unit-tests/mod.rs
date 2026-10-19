@@ -164,7 +164,10 @@ fn submission_decoder_covers_empty_text_errors_and_all_unwrap_shapes() {
     let mut wrapped_error = vec![1];
     wrapped_error.extend_from_slice(&5u32.to_le_bytes());
     wrapped_error.extend_from_slice(b"error");
-    assert!(submission::decode(&wrapped_error).is_err());
+    crate::test_support::assert_err(
+        &submission::decode(&wrapped_error),
+        r#"RemoteError("error")"#,
+    );
 
     let mut two_bytes = vec![1];
     two_bytes.extend_from_slice(&2u32.to_le_bytes());

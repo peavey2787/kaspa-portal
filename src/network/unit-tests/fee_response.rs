@@ -79,7 +79,7 @@ fn fee_response_covers_multiple_bucket_selection_and_count_limit() {
     outer.extend_from_slice(&bytes_field(&bad_estimate));
     let mut response = vec![1];
     response.extend_from_slice(&bytes_field(&outer));
-    assert!(fee::decode(&response).is_err());
+    crate::test_support::assert_err(&fee::decode(&response), "InvalidLength");
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn suggested_fee_prices_a_2300_gram_transaction_above_the_floor() {
 
 #[test]
 fn six_byte_response_is_decoded_not_treated_as_missing() {
-    assert!(fee::decode(&[1, 0, 0, 0, 0, 0]).is_err());
+    crate::test_support::assert_err(&fee::decode(&[1, 0, 0, 0, 0, 0]), "TruncatedPayload");
     assert!(fee::decode(&[1, 0, 0, 0, 0]).is_ok());
 }
 

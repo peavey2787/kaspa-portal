@@ -53,11 +53,16 @@ fn official_proofs_reject_modified_input() {
     let vector = &VECTORS[1];
     let public = VrfPublicKey(bytes32(vector.public));
     let proof = VrfProof(hex::decode(vector.proof).unwrap());
-    assert!(portal
-        .randomness()
-        .vrf()
-        .verify(&public, b"s", &proof)
-        .is_err());
+    assert_eq!(
+        portal
+            .randomness()
+            .vrf()
+            .verify(&public, b"s", &proof)
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("VRF error: VRF verification failed: The verification of the Proof has failed")
+    );
 }
 
 fn verify_vector(vrf: &kaspa_portal::randomness::vrf::VrfApi, vector: &Vector) {

@@ -47,8 +47,14 @@ fn proofs_are_bounded_to_fifteen_levels() {
         parse(levels(16)),
         Err("input[3] merkle proof exceeds 15 levels".to_string())
     );
-    assert!(parse_merkle_proof(None, 3).is_err());
-    assert!(parse(json!({})).is_err());
+    crate::test_support::assert_err_text(
+        &parse_merkle_proof(None, 3),
+        "input[3].proprietaries.merkleProof must be an array",
+    );
+    crate::test_support::assert_err_text(
+        &parse(json!({})),
+        "input[3].proprietaries.merkleProof must be an array",
+    );
 }
 
 #[test]
@@ -68,23 +74,68 @@ fn proof_items_reject_every_malformed_field() {
         .remove("sibling");
     direction_without_sibling["other"] = json!(0);
     let sibling = |text: Value| json!({ "sibling": text, "direction": 0 });
-    for malformed in [
-        json!("not an object"),
-        extra,
-        sibling_without_direction,
-        direction_without_sibling,
-        sibling(json!(SIBLING.to_uppercase())),
-        sibling(json!(&SIBLING[..62])),
-        sibling(json!(format!("{SIBLING}00"))),
-        sibling(json!(format!("{}g", &SIBLING[..63]))),
-        sibling(json!(7)),
-        item(json!(2)),
-        item(json!(256)),
-        item(json!(-1)),
-        item(json!(1.0)),
-        item(json!("01")),
-        item(json!(null)),
+    for (malformed, expected) in [
+        (
+            json!("not an object"),
+            "input[3] merkle proof[0] must be an object",
+        ),
+        (
+            extra,
+            "input[3] merkle proof[0] must contain only sibling and direction",
+        ),
+        (
+            sibling_without_direction,
+            "input[3] merkle proof[0].direction must be 0 or 1",
+        ),
+        (
+            direction_without_sibling,
+            "input[3] merkle proof[0].sibling must be 32-byte lowercase hex",
+        ),
+        (
+            sibling(json!(SIBLING.to_uppercase())),
+            "input[3] merkle proof[0].sibling must be 32-byte lowercase hex",
+        ),
+        (
+            sibling(json!(&SIBLING[..62])),
+            "input[3] merkle proof[0].sibling must be 32-byte lowercase hex",
+        ),
+        (
+            sibling(json!(format!("{SIBLING}00"))),
+            "input[3] merkle proof[0].sibling must be 32-byte lowercase hex",
+        ),
+        (
+            sibling(json!(format!("{}g", &SIBLING[..63]))),
+            "input[3] merkle proof[0].sibling must be 32-byte lowercase hex",
+        ),
+        (
+            sibling(json!(7)),
+            "input[3] merkle proof[0].sibling must be 32-byte lowercase hex",
+        ),
+        (
+            item(json!(2)),
+            "input[3] merkle proof[0].direction must be 0 or 1",
+        ),
+        (
+            item(json!(256)),
+            "input[3] merkle proof[0].direction must be 0 or 1",
+        ),
+        (
+            item(json!(-1)),
+            "input[3] merkle proof[0].direction must be 0 or 1",
+        ),
+        (
+            item(json!(1.0)),
+            "input[3] merkle proof[0].direction must be 0 or 1",
+        ),
+        (
+            item(json!("01")),
+            "input[3] merkle proof[0].direction must be 0 or 1",
+        ),
+        (
+            item(json!(null)),
+            "input[3] merkle proof[0].direction must be 0 or 1",
+        ),
     ] {
-        assert!(parse(json!([malformed])).is_err(), "{malformed}");
+        crate::test_support::assert_err_text(&parse(json!([malformed])), expected);
     }
 }

@@ -84,9 +84,15 @@ fn unsupported_or_mislabelled_notifications_fail_closed() {
         4,
         &body.into_vec(),
     );
-    assert!(notification::decode(&wrong_variant).is_err());
+    crate::test_support::assert_err(
+        &notification::decode(&wrong_variant),
+        r#"InvalidEncoding("notification operation carried Notification variant 4")"#,
+    );
     // A response (with a request id) is never a notification.
-    assert!(notification::decode(&[1, 7, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3]).is_err());
+    crate::test_support::assert_err(
+        &notification::decode(&[1, 7, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3]),
+        r#"UnexpectedResponse("Kaspa RPC response reached the notification decoder")"#,
+    );
 }
 
 #[test]
@@ -114,10 +120,16 @@ fn notification_decoder_needs_both_no_request_id_and_notification_kind() {
     // Same frame tagged as a success response.
     let mut success = valid.clone();
     success[1] = 0;
-    assert!(notification::decode(&success).is_err());
+    crate::test_support::assert_err(
+        &notification::decode(&success),
+        r#"UnexpectedResponse("Kaspa RPC response reached the notification decoder")"#,
+    );
     // Same frame carrying a request id.
     let mut with_id = vec![1];
     with_id.extend_from_slice(&9u64.to_le_bytes());
     with_id.extend_from_slice(&valid[1..]);
-    assert!(notification::decode(&with_id).is_err());
+    crate::test_support::assert_err(
+        &notification::decode(&with_id),
+        r#"UnexpectedResponse("Kaspa RPC response reached the notification decoder")"#,
+    );
 }

@@ -54,7 +54,7 @@ fn wrong_key_fails() {
 
     // Try decrypting with a different key
     let wrong_key: [u8; 32] = [0x99; 32];
-    assert!(decrypt(&wrong_key, &ct).is_err());
+    crate::test_support::assert_err_text(&decrypt(&wrong_key, &ct), "decryption failed");
 }
 
 #[test]

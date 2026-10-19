@@ -27,7 +27,10 @@ fn covenant_signing_preserves_exact_commitment() {
     assert!(schnorr::schnorr_verify(&pubkey, &commitment, &signature).is_ok());
     let mut changed = commitment;
     changed[0] ^= 1;
-    assert!(schnorr::schnorr_verify(&pubkey, &changed, &signature).is_err());
+    crate::test_support::assert_err(
+        &schnorr::schnorr_verify(&pubkey, &changed, &signature),
+        "InvalidSignature",
+    );
 }
 
 #[test]

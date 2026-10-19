@@ -207,11 +207,13 @@ fn covenant_planning_rejects_insufficient_small_and_invalid_genesis_funding() {
     .unwrap_err()
     .contains("txid not 32 bytes"));
 
-    assert!(encode_from_utxos(
-        base(CovenantEncoding::BoundGenesis, 10_000_000, ""),
-        Vec::new(),
-    )
-    .is_err());
+    crate::test_support::assert_err_text(
+        &encode_from_utxos(
+            base(CovenantEncoding::BoundGenesis, 10_000_000, ""),
+            Vec::new(),
+        ),
+        "Insufficient funds: 0 < 10000001",
+    );
 }
 
 #[test]
@@ -325,7 +327,10 @@ fn covenant_builder_boundary_rejects_invalid_addresses_before_network_io() {
         encoding: CovenantEncoding::BoundGenesis,
     };
     let client = fail_network_client();
-    assert!(ready(build(&client, request)).is_err());
+    crate::test_support::assert_err_text(
+        &ready(build(&client, request)),
+        "Wallet has no receive address",
+    );
 }
 
 #[test]

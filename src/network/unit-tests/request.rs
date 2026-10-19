@@ -59,7 +59,10 @@ fn all_request_codec_boundaries_are_covered() {
 
     let encoded = utxo::encode(&[mainnet.clone(), testnet.clone()]).expect("UTXO query");
     assert!(encoded.len() > 4);
-    assert!(utxo::encode(&["not-an-address".to_string()]).is_err());
+    crate::test_support::assert_err(
+        &utxo::encode(&["not-an-address".to_string()]),
+        r#"InvalidEncoding("Unknown address prefix")"#,
+    );
 
     let changed = subscription::utxos_changed(&mainnet, 9).expect("UTXO subscription");
     // rusty-kaspa `Scope` framing: u16 version, u8 variant, Borsh fields.

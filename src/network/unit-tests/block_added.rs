@@ -146,7 +146,10 @@ fn block_added_decoder_rejects_rpc_response_frames() {
     frame.write_u8(0);
     frame.write_u8(1);
     frame.write_u8(BLOCK_ADDED_NOTIFICATION_OPERATION);
-    assert!(block_added::decode(&frame.into_vec()).is_err());
+    crate::test_support::assert_err(
+        &block_added::decode(&frame.into_vec()),
+        r#"UnexpectedResponse("Kaspa RPC response reached BlockAdded notification decoder")"#,
+    );
 }
 
 /// An `RpcHeader(v1)` whose `parents_by_level` section is `parents`.

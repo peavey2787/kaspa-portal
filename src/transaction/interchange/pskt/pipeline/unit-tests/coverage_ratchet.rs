@@ -14,19 +14,23 @@ fn host_pskt_parser_rejects_duplicate_keys_escapes_unicode_and_excess_nesting() 
         hex::encode(bytes)
     }
 
-    for json in [
-        br#"{"a":1,"a":2}"#.as_slice(),
-        br#"{"a":"\u0061"}"#.as_slice(),
-        r#"{"a":"é"}"#.as_bytes(),
+    let not_ascii = "PSKT JSON strings must be printable ASCII without escapes";
+    for (json, expected) in [
+        (br#"{"a":1,"a":2}"#.as_slice(), "duplicate JSON object key"),
+        (br#"{"a":"\u0061"}"#.as_slice(), not_ascii),
+        (r#"{"a":"é"}"#.as_bytes(), not_ascii),
     ] {
-        assert!(decode(&wire(json)).is_err());
+        crate::test_support::assert_err_text(&decode(&wire(json)), expected);
     }
 
     let mut nested = Vec::new();
     nested.extend(core::iter::repeat_n(b'[', 33));
     nested.push(b'0');
     nested.extend(core::iter::repeat_n(b']', 33));
-    assert!(decode(&wire(&nested)).is_err());
+    crate::test_support::assert_err_text(
+        &decode(&wire(&nested)),
+        "PSKT JSON exceeds maximum nesting depth",
+    );
 }
 
 #[test]
@@ -138,8 +142,14 @@ fn relay_field_parsers_cover_multisig_positions_ms45_and_derivation_boundaries()
         parse_ms45(&json!({"key": {"derivationPath": "m/45'/111111'/0'/2/1/9"}})),
         Ok(Some((2, 1, 9)))
     );
-    assert!(parse_ms45(&json!({"key": {"derivationPath": "m/45'/111111'/0'/2/2/9"}})).is_err());
-    assert!(parse_ms45(&json!({"key": {"derivationPath": "m/45'/111111'/0'/2'/1/9"}})).is_err());
+    crate::test_support::assert_err_text(
+        &parse_ms45(&json!({"key": {"derivationPath": "m/45'/111111'/0'/2/2/9"}})),
+        "MS45 chain must be 0 or 1",
+    );
+    crate::test_support::assert_err_text(
+        &parse_ms45(&json!({"key": {"derivationPath": "m/45'/111111'/0'/2'/1/9"}})),
+        "MS45 cosigner must be non-hardened",
+    );
     // A signer key without a key source carries no path; a present source
     // still needs one.
     assert_eq!(parse_ms45(&json!({"key": null})), Ok(None));
@@ -163,26 +173,31 @@ fn relay_field_parsers_cover_multisig_positions_ms45_and_derivation_boundaries()
         parse_derivation(&json!({"kassignerDerivation": {"branch": 1, "index": 8}})),
         Ok(Some((1, 8)))
     );
-    assert!(parse_derivation(&json!({"kassignerDerivation": {"branch": 2, "index": 8}})).is_err());
-    assert!(
-        parse_derivation(&json!({"kassignerDerivation": {"branch": 256, "index": 8}})).is_err()
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": 2, "index": 8}})),
+        "kassignerDerivation.branch must be 0 or 1",
     );
-    assert!(parse_derivation(
-        &json!({"kassignerDerivation": {"branch": 0, "index": 0x8000_0000u64}})
-    )
-    .is_err());
-    assert!(
-        parse_derivation(&json!({"kassignerDerivation": {"branch": 0, "index": u64::MAX}}))
-            .is_err()
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": 256, "index": 8}})),
+        "kassignerDerivation.branch must be 0 or 1",
     );
-    assert!(parse_derivation(
-        &json!({"kassignerDerivation": {"branch": 0, "index": "not-a-number"}})
-    )
-    .is_err());
-    assert!(
-        parse_derivation(&json!({"kassignerDerivation": {"branch": 0, "index": true}})).is_err()
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": 0, "index": 0x8000_0000u64}})),
+        "kassignerDerivation.index must be a non-hardened u32",
     );
-    assert!(parse_derivation(&json!({"kassignerDerivation": {"index": "7"}})).is_err());
+    crate::test_support::assert_err_text(&parse_derivation(&json!({"kassignerDerivation": {"branch": 0, "index": u64::MAX}})), "legacy numeric kassignerDerivation.index exceeds JavaScript's exact integer range; encode it as a decimal string");
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": 0, "index": "not-a-number"}})),
+        "kassignerDerivation.index must be a canonical unsigned decimal string",
+    );
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"branch": 0, "index": true}})),
+        "kassignerDerivation.index must be a decimal string",
+    );
+    crate::test_support::assert_err_text(
+        &parse_derivation(&json!({"kassignerDerivation": {"index": "7"}})),
+        "kassignerDerivation.branch is missing",
+    );
     assert_eq!(parse_derivation(&json!({})), Ok(None));
 }
 
@@ -221,7 +236,10 @@ fn canonical_relay_and_merge_cover_multisig_metadata_and_signature_ordering() {
     assert_eq!(relayed.outputs[0].ms45, Some((2, 1, 18)));
     let merged =
         merge_signed_kspt(&original, &signed_kspt, Network::Mainnet).expect("merge multisig");
-    assert!(merge_signed_kspt(&original, b"BAD", Network::Mainnet).is_err());
+    crate::test_support::assert_err_text(
+        &merge_signed_kspt(&original, b"BAD", Network::Mainnet),
+        "KSPT is truncated",
+    );
 
     // A forged signature in the returned KSPT is refused at merge time.
     let signature = signed_doc["inputs"][0]["partialSigs"]
@@ -236,7 +254,10 @@ fn canonical_relay_and_merge_cover_multisig_metadata_and_signature_ordering() {
         .expect("signature inside KSPT");
     let mut forged = signed_kspt.clone();
     forged[at] ^= 0x01;
-    assert!(merge_signed_kspt(&original, &forged, Network::Mainnet).is_err());
+    crate::test_support::assert_err_text(
+        &merge_signed_kspt(&original, &forged, Network::Mainnet),
+        "input[0] signature position 2: Schnorr signature verification failed",
+    );
     // So is one already present in the original PSKT.
     let mut forged_original = signed_doc;
     let partials = forged_original["inputs"][0]["partialSigs"]
@@ -246,12 +267,14 @@ fn canonical_relay_and_merge_cover_multisig_metadata_and_signature_ordering() {
     let mut bad = signature;
     bad[0] ^= 0x01;
     partials[&key]["schnorr"] = json!(hex::encode(bad));
-    assert!(merge_signed_kspt(
-        &encode_pskb(forged_original),
-        &signed_kspt,
-        Network::Mainnet
-    )
-    .is_err());
+    crate::test_support::assert_err_text(
+        &merge_signed_kspt(
+            &encode_pskb(forged_original),
+            &signed_kspt,
+            Network::Mainnet,
+        ),
+        "input[0] signature position 2: Schnorr signature verification failed",
+    );
     let (format, root) = super::super::test_support::decode(&merged).expect("decode merged");
     let doc = document(&root, format).expect("merged document");
     assert_eq!(
@@ -334,10 +357,19 @@ fn relay_input_parser_covers_covenant_id_execution_and_optional_boundaries() {
             .has_covenant_id
     );
 
-    for bad_id in [json!(true), json!("a"), json!("ab"), json!("AB".repeat(32))] {
+    let not_lowercase_hex = "utxoEntry.covenantId must be even-length lowercase hexadecimal";
+    for (bad_id, expected) in [
+        (
+            json!(true),
+            "utxoEntry.covenantId must be a hex string or null",
+        ),
+        (json!("a"), not_lowercase_hex),
+        (json!("ab"), "utxoEntry.covenantId must be 32 bytes"),
+        (json!("AB".repeat(32)), not_lowercase_hex),
+    ] {
         let mut input = base_input();
         input["utxoEntry"]["covenantId"] = bad_id;
-        assert!(InputFields::parse(&input).is_err());
+        crate::test_support::assert_err_text(&InputFields::parse(&input), expected);
     }
 
     let mut defaults = base_input();
@@ -365,17 +397,27 @@ fn relay_input_parser_covers_covenant_id_execution_and_optional_boundaries() {
         Some((3, 1))
     );
 
-    for bad_execution in [
-        json!(1),
-        json!({}),
-        json!({"suppliedMask": 1}),
-        json!({"suppliedMask": 1, "suppliedTrueMask": 2}),
-        json!({"suppliedMask": 65_536, "suppliedTrueMask": 0}),
-        json!({"suppliedMask": 1, "suppliedTrueMask": 0, "extra": 0}),
+    let wrong_members = "covenantExecution must contain only suppliedMask and suppliedTrueMask";
+    for (bad_execution, expected) in [
+        (json!(1), "covenantExecution must be an object or null"),
+        (json!({}), wrong_members),
+        (json!({"suppliedMask": 1}), wrong_members),
+        (
+            json!({"suppliedMask": 1, "suppliedTrueMask": 2}),
+            "covenantExecution true-mask contains unsupplied decisions",
+        ),
+        (
+            json!({"suppliedMask": 65_536, "suppliedTrueMask": 0}),
+            "covenantExecution.suppliedMask exceeds u16",
+        ),
+        (
+            json!({"suppliedMask": 1, "suppliedTrueMask": 0, "extra": 0}),
+            wrong_members,
+        ),
     ] {
         let mut input = base_input();
         input["covenantExecution"] = bad_execution;
-        assert!(InputFields::parse(&input).is_err());
+        crate::test_support::assert_err_text(&InputFields::parse(&input), expected);
     }
 
     let mut null_redeem = base_input();
@@ -385,15 +427,23 @@ fn relay_input_parser_covers_covenant_id_execution_and_optional_boundaries() {
         .redeem_script
         .is_none());
 
-    for (field, value) in [
-        ("redeemScript", json!(1)),
-        ("partialSigs", json!([])),
-        ("sighashType", json!(2)),
-        ("sigOpCount", json!(6)),
+    for (field, value, expected) in [
+        (
+            "redeemScript",
+            json!(1),
+            "redeemScript must be a hex string or null",
+        ),
+        ("partialSigs", json!([]), "partialSigs must be an object"),
+        ("sighashType", json!(2), "unsupported sighashType: 2"),
+        (
+            "sigOpCount",
+            json!(6),
+            "sigOpCount exceeds signer capabilities",
+        ),
     ] {
         let mut input = base_input();
         input[field] = value;
-        assert!(InputFields::parse(&input).is_err(), "{field}");
+        crate::test_support::assert_err_text(&InputFields::parse(&input), expected);
     }
 }
 
@@ -530,12 +580,14 @@ fn merging_requires_the_signed_kspt_to_describe_the_same_transaction() {
     )
     .unwrap_err()
     .contains("transaction body"));
-    assert!(merge_signed_kspt(
-        &original,
-        &signed(p2pk_document(0x11), Network::Testnet),
-        Network::Mainnet
-    )
-    .is_err());
+    crate::test_support::assert_err_text(
+        &merge_signed_kspt(
+            &original,
+            &signed(p2pk_document(0x11), Network::Testnet),
+            Network::Mainnet,
+        ),
+        "signed KSPT transaction body does not match the wallet PSKT",
+    );
     // A KSPT without any signature is not a signer response.
     let unsigned = encode_pskt(&original, Network::Mainnet).expect("unsigned KSPT");
     assert!(merge_signed_kspt(&original, &unsigned, Network::Mainnet)
@@ -559,19 +611,33 @@ fn p2pk_merge_accepts_only_one_sighash_all_signature_at_position_zero() {
     merge_p2pk(&mut partials, input, 0).expect("valid P2PK merge");
     assert_eq!(partials.len(), 1);
 
-    let rejected = |change: &dyn Fn(&mut super::super::compact::Input)| {
+    let rejects = |change: &dyn Fn(&mut super::super::compact::Input), expected: &str| {
         let mut changed = input.clone();
         change(&mut changed);
-        merge_p2pk(&mut serde_json::Map::new(), &changed, 0).is_err()
+        crate::test_support::assert_err_text(
+            &merge_p2pk(&mut serde_json::Map::new(), &changed, 0),
+            expected,
+        );
     };
-    assert!(rejected(&|input| input.script.truncate(33)));
-    assert!(rejected(&|input| input.script[0] = 0x21));
-    assert!(rejected(&|input| input.script[33] = 0xad));
-    assert!(rejected(&|input| input.signatures.clear()));
-    assert!(rejected(&|input| {
-        let extra = input.signatures[0].clone();
-        input.signatures.push(extra);
-    }));
-    assert!(rejected(&|input| input.signatures[0].position = 1));
-    assert!(rejected(&|input| input.signatures[0].sighash = 0x02));
+    let not_p2pk = "input[0] is not a standard P2PK input";
+    let one_signature = "input[0] standard P2PK input must contain exactly one signature";
+    rejects(&|input| input.script.truncate(33), not_p2pk);
+    rejects(&|input| input.script[0] = 0x21, not_p2pk);
+    rejects(&|input| input.script[33] = 0xad, not_p2pk);
+    rejects(&|input| input.signatures.clear(), one_signature);
+    rejects(
+        &|input| {
+            let extra = input.signatures[0].clone();
+            input.signatures.push(extra);
+        },
+        one_signature,
+    );
+    rejects(
+        &|input| input.signatures[0].position = 1,
+        "input[0] P2PK signature position must be zero",
+    );
+    rejects(
+        &|input| input.signatures[0].sighash = 0x02,
+        "input[0] signed KSPT changed sighash type to 0x02",
+    );
 }

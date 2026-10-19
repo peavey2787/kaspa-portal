@@ -7,8 +7,22 @@ fn offline_portal_exposes_offline_domains_but_not_network_domains() {
         .build()
         .unwrap();
 
-    assert!(portal.network().is_err());
-    assert!(portal.chain().is_err());
+    assert_eq!(
+        portal
+            .network()
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("invalid configuration: network API requires an endpoint; build with .endpoint(...)")
+    );
+    assert_eq!(
+        portal
+            .chain()
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("invalid configuration: chain API requires an endpoint")
+    );
     assert_eq!(portal.wallet().prefix(), "kaspa");
     let _ = portal.transaction();
     let _ = portal.contract();

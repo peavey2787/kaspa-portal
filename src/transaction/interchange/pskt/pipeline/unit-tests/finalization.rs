@@ -98,7 +98,7 @@ fn generic_finalizer_multisig_covers_reachable_push_encodings_with_five_key_cap(
             format!("02{}", hex::encode(xonly(0x44))),
             json!({"schnorr": "77".repeat(64)}),
         );
-    assert!(finalize_json(&pskb(extra_unknown)).is_err());
+    crate::test_support::assert_err_text(&finalize_json(&pskb(extra_unknown)), "input[0]: partial-signature pubkey is not in redeem script: 022c0b7cf95324a07d05398b240174dc0c2be444d96b159aa6c7f7b1e668680991");
 }
 
 #[test]
@@ -199,7 +199,10 @@ fn verified_generic_covenant_signature_count_covers_execution_binding() {
     let mut incomplete = signed;
     incomplete["inputs"][0]["covenantExecution"] =
         json!({"suppliedMask": "1", "suppliedTrueMask": "2"});
-    assert!(pskt_verified_signature_counts(&pskb(incomplete), Network::Mainnet).is_err());
+    crate::test_support::assert_err_text(
+        &pskt_verified_signature_counts(&pskb(incomplete), Network::Mainnet),
+        "input[0]: covenantExecution true-mask contains unsupplied decisions",
+    );
 }
 
 fn single_selector_covenant(owner: u8, beneficiary: u8) -> Vec<u8> {
@@ -223,16 +226,29 @@ fn supported_specialized_covenants_are_template_bound_and_mutation_hardened_end_
     assert_specialized_failure(
         &sign_first_input(refund, &[0x42]),
         "private swap refund path",
+        "input[0] private-swap claim requires covenantExecution 1/1",
     );
-    assert_selector_mutation_fails(&private, "private swap");
+    assert_selector_mutation_fails(
+        &private,
+        "private swap",
+        "input[0]: covenant partial-signature pubkey is not branch-bound: 02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619",
+    );
     let mut private_route = private.clone();
     private_route["inputs"][0]["proprietaries"]["privateSwapClaim"] = json!(false);
-    assert_specialized_failure(&private_route, "private swap route metadata mutation");
+    assert_specialized_failure(
+        &private_route,
+        "private swap route metadata mutation",
+        "input[0].proprietaries.privateSwapClaim must be true",
+    );
     let mut private_template = private.clone();
     mutate_redeem_byte(&mut private_template, 0);
-    assert_specialized_failure(&private_template, "private swap redeem-template mutation");
-    assert_signature_mutation_fails(&private, "private swap");
-    assert_signed_transaction_mutation_fails(&private, "private swap");
+    assert_specialized_failure(
+        &private_template,
+        "private swap redeem-template mutation",
+        "input[0] private-swap template mismatch: not a canonical Private Swap script",
+    );
+    assert_signature_mutation_fails(&private, "private swap", 0);
+    assert_signed_transaction_mutation_fails(&private, "private swap", 0);
 
     // Oracle-v1 claim: the external oracle attestation is cryptographically
     // checked against the key and commitment frozen into the recognized script.
@@ -249,23 +265,44 @@ fn supported_specialized_covenants_are_template_bound_and_mutation_hardened_end_
     assert_specialized_failure(
         &sign_first_input(oracle_refund, &[0x51]),
         "oracle-v1 refund path",
+        "input[0] oracle-v1 claim requires covenantExecution 1/0",
     );
     let mut oracle_short = oracle.clone();
     oracle_short["inputs"][0]["proprietaries"]["oracleV1Signature"] = json!("00");
-    assert_specialized_failure(&oracle_short, "oracle-v1 short attestation");
-    assert_selector_mutation_fails(&oracle, "oracle-v1");
+    assert_specialized_failure(
+        &oracle_short,
+        "oracle-v1 short attestation",
+        "input[0].proprietaries.oracleV1Signature must be 64 bytes",
+    );
+    assert_selector_mutation_fails(
+        &oracle,
+        "oracle-v1",
+        "input[0]: covenant partial-signature pubkey is not branch-bound: 029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+    );
     let mut oracle_route = oracle.clone();
     oracle_route["inputs"][0]["proprietaries"]["oracleV1Claim"] = json!(false);
-    assert_specialized_failure(&oracle_route, "oracle-v1 route metadata mutation");
+    assert_specialized_failure(
+        &oracle_route,
+        "oracle-v1 route metadata mutation",
+        "input[0].proprietaries.oracleV1Claim must be true",
+    );
     let mut oracle_proof = oracle.clone();
     mutate_hex_field(
         &mut oracle_proof["inputs"][0]["proprietaries"]["oracleV1Signature"],
         0,
     );
-    assert_specialized_failure(&oracle_proof, "oracle-v1 attestation mutation");
-    assert_redeem_template_mutation_fails(&oracle, "oracle-v1");
-    assert_signature_mutation_fails(&oracle, "oracle-v1");
-    assert_signed_transaction_mutation_fails(&oracle, "oracle-v1");
+    assert_specialized_failure(
+        &oracle_proof,
+        "oracle-v1 attestation mutation",
+        "input[0] oracle-v1 attestation signature is invalid",
+    );
+    assert_redeem_template_mutation_fails(
+        &oracle,
+        "oracle-v1",
+        "input[0] oracle-v1 template mismatch: not a canonical Oracle-v1 script",
+    );
+    assert_signature_mutation_fails(&oracle, "oracle-v1", 1);
+    assert_signed_transaction_mutation_fails(&oracle, "oracle-v1", 1);
 
     // Commit/reveal claim: the supplied preimage is checked against the exact
     // commitment embedded in the recognized redeem script.
@@ -279,17 +316,37 @@ fn supported_specialized_covenants_are_template_bound_and_mutation_hardened_end_
     let mut commit_uppercase = commit.clone();
     commit_uppercase["inputs"][0]["proprietaries"]["commitPartA"] =
         json!(hex::encode(b"commit-").to_uppercase());
-    assert_specialized_failure(&commit_uppercase, "commit/reveal uppercase hex");
-    assert_selector_mutation_fails(&commit, "commit/reveal");
+    assert_specialized_failure(
+        &commit_uppercase,
+        "commit/reveal uppercase hex",
+        "input[0].proprietaries.commitPartA must be even-length lowercase hexadecimal",
+    );
+    assert_selector_mutation_fails(
+        &commit,
+        "commit/reveal",
+        "input[0] commit-reveal claim requires covenantExecution 1/0",
+    );
     let mut commit_route = commit.clone();
     commit_route["inputs"][0]["proprietaries"]["commitPartB"] = json!("ff");
-    assert_specialized_failure(&commit_route, "commit/reveal preimage mutation");
+    assert_specialized_failure(
+        &commit_route,
+        "commit/reveal preimage mutation",
+        "input[0] commit-reveal preimage does not match redeem commitment",
+    );
     let mut commit_conflict = commit.clone();
     commit_conflict["inputs"][0]["proprietaries"]["privateSwapClaim"] = json!(true);
-    assert_specialized_failure(&commit_conflict, "commit/reveal routing conflict");
-    assert_redeem_template_mutation_fails(&commit, "commit/reveal");
-    assert_signature_mutation_fails(&commit, "commit/reveal");
-    assert_signed_transaction_mutation_fails(&commit, "commit/reveal");
+    assert_specialized_failure(
+        &commit_conflict,
+        "commit/reveal routing conflict",
+        "input[0] mixes multiple specialized covenant routes",
+    );
+    assert_redeem_template_mutation_fails(
+        &commit,
+        "commit/reveal",
+        "input[0]: invalid covenant branch structure: MalformedScript",
+    );
+    assert_signature_mutation_fails(&commit, "commit/reveal", 1);
+    assert_signed_transaction_mutation_fails(&commit, "commit/reveal", 1);
 
     // Merkle claim: proof sibling, direction and covenantExecution selector bits
     // all describe one branch and must agree with the root frozen in the script.
@@ -304,27 +361,56 @@ fn supported_specialized_covenants_are_template_bound_and_mutation_hardened_end_
     assert_specialized_success(&merkle, "merkle", &merkle_before(0), &[0x00]);
     let right = merkle_claim_document_with_direction(1);
     assert_specialized_success(&right, "merkle right sibling", &merkle_before(1), &[0x00]);
-    for (mask, truth) in [("1", "0"), ("3", "1"), ("7", "0")] {
+    let unselected = "input[0] merkle covenantExecution does not select the claim branch";
+    for (mask, truth, expected) in [
+        ("1", "0", unselected),
+        (
+            "3",
+            "1",
+            "input[0] merkle proof directions do not match covenantExecution",
+        ),
+        ("7", "0", unselected),
+    ] {
         let mut selector = merkle.clone();
         selector["inputs"][0]["covenantExecution"] =
             json!({"suppliedMask": mask, "suppliedTrueMask": truth});
-        assert_specialized_failure(&selector, &format!("merkle selector {mask}/{truth}"));
+        assert_specialized_failure(
+            &selector,
+            &format!("merkle selector {mask}/{truth}"),
+            expected,
+        );
     }
     let mut merkle_selector = merkle.clone();
     merkle_selector["inputs"][0]["covenantExecution"]["suppliedTrueMask"] = json!("2");
-    assert_specialized_failure(&merkle_selector, "merkle selector mutation");
+    assert_specialized_failure(
+        &merkle_selector,
+        "merkle selector mutation",
+        "input[0] merkle proof directions do not match covenantExecution",
+    );
     let mut merkle_proof = merkle.clone();
     merkle_proof["inputs"][0]["proprietaries"]["merkleProof"][0]["direction"] = json!(1);
-    assert_specialized_failure(&merkle_proof, "merkle direction mutation");
+    assert_specialized_failure(
+        &merkle_proof,
+        "merkle direction mutation",
+        "input[0] merkle proof directions do not match covenantExecution",
+    );
     let mut merkle_sibling = merkle.clone();
     mutate_hex_field(
         &mut merkle_sibling["inputs"][0]["proprietaries"]["merkleProof"][0]["sibling"],
         0,
     );
-    assert_specialized_failure(&merkle_sibling, "merkle proof mutation");
-    assert_redeem_template_mutation_fails(&merkle, "merkle");
-    assert_signature_mutation_fails(&merkle, "merkle");
-    assert_signed_transaction_mutation_fails(&merkle, "merkle");
+    assert_specialized_failure(
+        &merkle_sibling,
+        "merkle proof mutation",
+        "input[0] merkle proof does not match redeem root",
+    );
+    assert_redeem_template_mutation_fails(
+        &merkle,
+        "merkle",
+        "input[0]: invalid covenant branch structure: MalformedScript",
+    );
+    assert_signature_mutation_fails(&merkle, "merkle", 1);
+    assert_signed_transaction_mutation_fails(&merkle, "merkle", 1);
 }
 
 #[test]
@@ -389,14 +475,14 @@ fn pushed(items: &[&[u8]]) -> Vec<u8> {
     script
 }
 
-fn assert_specialized_failure(document: &Value, label: &str) {
-    assert!(
-        finalize_json(&pskb(document.clone())).is_err(),
-        "{label} unexpectedly crossed the verified public boundary"
-    );
+fn assert_specialized_failure(document: &Value, label: &str, expected: &str) {
+    match finalize_json(&pskb(document.clone())) {
+        Ok(_) => panic!("{label} finalized"),
+        Err(error) => assert_eq!(error.to_string(), expected, "{label}"),
+    }
 }
 
-fn assert_selector_mutation_fails(document: &Value, label: &str) {
+fn assert_selector_mutation_fails(document: &Value, label: &str, expected: &str) {
     let mut changed = document.clone();
     let current = changed["inputs"][0]["covenantExecution"]["suppliedTrueMask"]
         .as_str()
@@ -405,16 +491,20 @@ fn assert_selector_mutation_fails(document: &Value, label: &str) {
         .expect("selector integer");
     changed["inputs"][0]["covenantExecution"]["suppliedTrueMask"] =
         json!((current ^ 1).to_string());
-    assert_specialized_failure(&changed, &format!("{label} selector mutation"));
+    assert_specialized_failure(&changed, &format!("{label} selector mutation"), expected);
 }
 
-fn assert_redeem_template_mutation_fails(document: &Value, label: &str) {
+fn assert_redeem_template_mutation_fails(document: &Value, label: &str, expected: &str) {
     let mut changed = document.clone();
     mutate_redeem_byte(&mut changed, 0);
-    assert_specialized_failure(&changed, &format!("{label} redeem-template mutation"));
+    assert_specialized_failure(
+        &changed,
+        &format!("{label} redeem-template mutation"),
+        expected,
+    );
 }
 
-fn assert_signature_mutation_fails(document: &Value, label: &str) {
+fn assert_signature_mutation_fails(document: &Value, label: &str, position: u8) {
     let mut changed = document.clone();
     let partials = changed["inputs"][0]["partialSigs"]
         .as_object_mut()
@@ -425,13 +515,25 @@ fn assert_signature_mutation_fails(document: &Value, label: &str) {
         .and_then(|entry| entry.get_mut("schnorr"))
         .expect("real signature fixture");
     mutate_hex_field(signature, 0);
-    assert_specialized_failure(&changed, &format!("{label} signature mutation"));
+    assert_specialized_failure(
+        &changed,
+        &format!("{label} signature mutation"),
+        &bad_signature(position),
+    );
 }
 
-fn assert_signed_transaction_mutation_fails(document: &Value, label: &str) {
+fn assert_signed_transaction_mutation_fails(document: &Value, label: &str, position: u8) {
     let mut changed = document.clone();
     changed["outputs"][0]["amount"] = json!("89999");
-    assert_specialized_failure(&changed, &format!("{label} signed transaction mutation"));
+    assert_specialized_failure(
+        &changed,
+        &format!("{label} signed transaction mutation"),
+        &bad_signature(position),
+    );
+}
+
+fn bad_signature(position: u8) -> String {
+    format!("input[0] signature position {position}: Schnorr signature verification failed")
 }
 
 fn mutate_hex_field(value: &mut Value, byte_index: usize) {

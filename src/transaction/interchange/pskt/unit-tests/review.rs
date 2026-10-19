@@ -87,10 +87,22 @@ fn maximum_value_input() -> Value {
 #[test]
 fn script_classification_parses_standard_multisig_and_covenant_shapes() {
     assert!(parse_spk("00").unwrap_err().contains("2-byte version"));
-    assert!(parse_spk("ABCD").is_err());
-    assert!(parse_spk("zz00").is_err());
-    assert!(parse_spk("00zz").is_err());
-    assert!(parse_spk("0000zz").is_err());
+    crate::test_support::assert_err_text(
+        &parse_spk("ABCD"),
+        "scriptPublicKey must be even-length lowercase hexadecimal",
+    );
+    crate::test_support::assert_err_text(
+        &parse_spk("zz00"),
+        "scriptPublicKey must be even-length lowercase hexadecimal",
+    );
+    crate::test_support::assert_err_text(
+        &parse_spk("00zz"),
+        "scriptPublicKey must be even-length lowercase hexadecimal",
+    );
+    crate::test_support::assert_err_text(
+        &parse_spk("0000zz"),
+        "scriptPublicKey must be even-length lowercase hexadecimal",
+    );
     assert_eq!(parse_spk(&spk(&p2pk(1))).unwrap(), (0, p2pk(1)));
 
     let redeem = multisig(&[1, 2], 2);
@@ -151,19 +163,37 @@ fn input_and_output_review_validate_fields_and_partial_signatures() {
     assert_eq!(summary.sigs_present, 1);
     assert_eq!(summary.partial_sigs[0].position, Some(0));
 
-    for invalid in [
-        json!([]),
-        partial_sig_map("00", "schnorr", &"aa".repeat(64)),
-        partial_sig_value(&pubkey, Value::Null),
-        partial_sig_map(&pubkey, "ecdsa", &"aa".repeat(64)),
-        partial_sig_map(&pubkey, "schnorr", "aa"),
+    for (invalid, expected) in [
+        (json!([]), "partialSigs not object"),
+        (
+            partial_sig_map("00", "schnorr", &"aa".repeat(64)),
+            "bad pubkey length: 2",
+        ),
+        (
+            partial_sig_value(&pubkey, Value::Null),
+            "sig value not object",
+        ),
+        (
+            partial_sig_map(&pubkey, "ecdsa", &"aa".repeat(64)),
+            "schnorr sig missing (ECDSA not supported)",
+        ),
+        (
+            partial_sig_map(&pubkey, "schnorr", "aa"),
+            "bad schnorr sig length: 2",
+        ),
     ] {
-        assert!(parse_input_summary(&input(&p2pk(1), None, invalid, None)).is_err());
+        crate::test_support::assert_err_text(
+            &parse_input_summary(&input(&p2pk(1), None, invalid, None)),
+            expected,
+        );
     }
 
-    assert!(parse_input_summary(&json!(null)).is_err());
-    assert!(parse_input_summary(&json!({})).is_err());
-    assert!(parse_input_summary(&json!({"utxoEntry": {}})).is_err());
+    crate::test_support::assert_err_text(&parse_input_summary(&json!(null)), "input not object");
+    crate::test_support::assert_err_text(&parse_input_summary(&json!({})), "missing utxoEntry");
+    crate::test_support::assert_err_text(
+        &parse_input_summary(&json!({"utxoEntry": {}})),
+        "missing amount",
+    );
 
     let output = parse_output_summary(
         &json!({
@@ -179,20 +209,31 @@ fn input_and_output_review_validate_fields_and_partial_signatures() {
     assert_eq!(output.derivation_branch, Some(1));
     assert_eq!(output.derivation_index, Some(7));
     // A malformed hint is refused, not silently dropped from the review.
-    for hint in [
-        json!({"branch": 2, "index": "7"}),
-        json!({"branch": 1, "index": "-1"}),
-        json!("not an object"),
+    for (hint, expected) in [
+        (
+            json!({"branch": 2, "index": "7"}),
+            "kassignerDerivation.branch must be 0 or 1",
+        ),
+        (
+            json!({"branch": 1, "index": "-1"}),
+            "kassignerDerivation.index must be a canonical unsigned decimal string",
+        ),
+        (
+            json!("not an object"),
+            "kassignerDerivation must be an object",
+        ),
     ] {
-        assert!(parse_output_summary(
-            &json!({
-                "amount": "500",
-                "scriptPublicKey": spk(&p2pk(9)),
-                "proprietaries": {"kassignerDerivation": hint},
-            }),
-            "kaspa",
-        )
-        .is_err());
+        crate::test_support::assert_err_text(
+            &parse_output_summary(
+                &json!({
+                    "amount": "500",
+                    "scriptPublicKey": spk(&p2pk(9)),
+                    "proprietaries": {"kassignerDerivation": hint},
+                }),
+                "kaspa",
+            ),
+            expected,
+        );
     }
     let plain = parse_output_summary(
         &json!({"amount": "500", "scriptPublicKey": spk(&p2pk(9)), "proprietaries": null}),
@@ -211,8 +252,14 @@ fn input_and_output_review_validate_fields_and_partial_signatures() {
     .unwrap();
     assert_eq!(unknown.script_kind, "unknown");
     assert!(unknown.address.is_none());
-    assert!(parse_output_summary(&json!(null), "kaspa").is_err());
-    assert!(parse_output_summary(&json!({}), "kaspa").is_err());
+    crate::test_support::assert_err_text(
+        &parse_output_summary(&json!(null), "kaspa"),
+        "output not object",
+    );
+    crate::test_support::assert_err_text(
+        &parse_output_summary(&json!({}), "kaspa"),
+        "missing amount",
+    );
 }
 
 #[test]
@@ -312,18 +359,30 @@ fn summary_review_handles_pskb_pskt_readiness_and_checked_fee() {
 
 #[test]
 fn summary_review_rejects_invalid_envelopes_and_required_sections() {
-    assert!(parse_summary("00", "kaspa").is_err());
-    assert!(parse_summary(&wire(b"PSKB", json!([])), "kaspa").is_err());
-    assert!(parse_summary(&wire(b"PSKB", json!([{}, {}])), "kaspa").is_err());
+    crate::test_support::assert_err_text(&parse_summary("00", "kaspa"), "Not a PSKT/PSKB payload");
+    crate::test_support::assert_err_text(
+        &parse_summary(&wire(b"PSKB", json!([])), "kaspa"),
+        "PSKB must wrap exactly 1 PSKT, got 0",
+    );
+    crate::test_support::assert_err_text(
+        &parse_summary(&wire(b"PSKB", json!([{}, {}])), "kaspa"),
+        "PSKB must wrap exactly 1 PSKT, got 2",
+    );
 
-    for invalid in [
-        json!(null),
-        json!({}),
-        json!({"global": {}}),
-        json!({"global": {"txVersion": 1}}),
-        json!({"global": {"txVersion": 1}, "inputs": []}),
+    for (invalid, expected) in [
+        (json!(null), "PSKT is not an object"),
+        (json!({}), "missing txVersion"),
+        (json!({"global": {}}), "missing inputs"),
+        (json!({"global": {"txVersion": 1}}), "missing inputs"),
+        (
+            json!({"global": {"txVersion": 1}, "inputs": []}),
+            "missing outputs",
+        ),
     ] {
-        assert!(parse_summary(&wire(b"PSKT", invalid), "kaspa").is_err());
+        crate::test_support::assert_err_text(
+            &parse_summary(&wire(b"PSKT", invalid), "kaspa"),
+            expected,
+        );
     }
 }
 

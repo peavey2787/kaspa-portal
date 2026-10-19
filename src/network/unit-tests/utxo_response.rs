@@ -9,7 +9,7 @@ fn short_utxo_response_is_an_empty_set() {
 
 #[test]
 fn malformed_utxo_wrapper_is_rejected() {
-    assert!(utxo::decode(&[1, 1, 0, 0, 0, 0]).is_err());
+    crate::test_support::assert_err(&utxo::decode(&[1, 1, 0, 0, 0, 0]), "TruncatedPayload");
 }
 
 #[test]
@@ -112,7 +112,7 @@ fn utxo_response_covers_empty_count_limit_optional_and_outpoint_boundaries() {
     assert!(utxo::decode(&wrap_entries(&[])).unwrap().is_empty());
 
     let too_many = (1_000_001u32).to_le_bytes();
-    assert!(utxo::decode(&wrap_entries(&too_many)).is_err());
+    crate::test_support::assert_err(&utxo::decode(&wrap_entries(&too_many)), "InvalidLength");
 
     let no_optional = one_entry_response(&encoded_entry(0, 37, 1, None));
     let entries = utxo::decode(&no_optional).expect("entry without optional envelope");
@@ -120,7 +120,10 @@ fn utxo_response_covers_empty_count_limit_optional_and_outpoint_boundaries() {
     assert!(entries[0].covenant_id.is_none());
 
     let short_outpoint = one_entry_response(&encoded_entry(0, 36, 1, None));
-    assert!(utxo::decode(&short_outpoint).is_err());
+    crate::test_support::assert_err(
+        &utxo::decode(&short_outpoint),
+        r#"InvalidEncoding("entry 0: outpoint 36 bytes")"#,
+    );
 }
 
 #[test]
@@ -136,7 +139,7 @@ fn utxo_response_skips_present_optional_metadata_and_rejects_truncation() {
     );
 
     let truncated_metadata = one_entry_response(&[0, 1, 0, 0, 4, 0, 0, 0, 0xaa]);
-    assert!(utxo::decode(&truncated_metadata).is_err());
+    crate::test_support::assert_err(&utxo::decode(&truncated_metadata), "TruncatedPayload");
 }
 
 #[test]

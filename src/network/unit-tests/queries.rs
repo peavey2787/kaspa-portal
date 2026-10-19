@@ -6,12 +6,17 @@ use crate::{
 #[test]
 fn utxo_query_boundaries_reject_invalid_addresses_before_transport() {
     let client = fail_network_client();
-    assert!(ready(fetch_for_address(&client, "not-an-address")).is_err());
-    assert!(ready(fetch_for_addresses(
-        &client,
-        &["not-an-address".to_string()],
-    ))
-    .is_err());
+    crate::test_support::assert_err_text(
+        &ready(fetch_for_address(&client, "not-an-address")),
+        "invalid RPC encoding: Unknown address prefix",
+    );
+    crate::test_support::assert_err_text(
+        &ready(fetch_for_addresses(
+            &client,
+            &["not-an-address".to_string()],
+        )),
+        "invalid RPC encoding: Unknown address prefix",
+    );
 }
 
 #[test]

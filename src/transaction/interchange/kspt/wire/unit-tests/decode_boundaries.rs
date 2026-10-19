@@ -463,7 +463,7 @@ fn declared_inputs_may_exactly_fill_the_remaining_bytes() {
     let count = ((wire.len() - inputs_start) / 59) as u32;
     wire[8..12].copy_from_slice(&count.to_le_bytes());
     let result = decode(&wire, &mut CaptureSink::default());
-    assert!(result.is_err());
+    crate::test_support::assert_err(&result, "Wire(BufferTooShort)");
     assert_ne!(result, Err(DecodeError::Wire(WireError::CountOverflow)));
     wire[8..12].copy_from_slice(&(count + 1).to_le_bytes());
     assert_wire_error(&wire, WireError::CountOverflow);

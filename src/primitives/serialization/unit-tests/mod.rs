@@ -16,14 +16,26 @@ fn accepts_canonical_decimal_string() {
 
 #[test]
 fn rejects_json_numbers_even_when_javascript_safe() {
-    for encoded in [r#"{"value":1}"#, r#"{"value":9007199254740991}"#] {
-        assert!(serde_json::from_str::<Wrapper>(encoded).is_err());
+    for (encoded, expected) in [
+        (
+            r#"{"value":1}"#,
+            "invalid type: integer `1`, expected a string at line 1 column 10",
+        ),
+        (
+            r#"{"value":9007199254740991}"#,
+            "invalid type: integer `9007199254740991`, expected a string at line 1 column 25",
+        ),
+    ] {
+        crate::test_support::assert_err_text(&serde_json::from_str::<Wrapper>(encoded), expected);
     }
 }
 
 #[test]
 fn rejects_noncanonical_decimal_string() {
-    assert!(serde_json::from_str::<Wrapper>(r#"{"value":"01"}"#).is_err());
+    crate::test_support::assert_err(
+        &serde_json::from_str::<Wrapper>(r#"{"value":"01"}"#),
+        r#"Error("decimal string must be canonical (no leading zeroes)", line: 1, column: 14)"#,
+    );
 }
 
 #[derive(Debug, Serialize)]
@@ -40,12 +52,21 @@ fn serializes_consensus_u64_as_decimal_string() {
 
 #[test]
 fn rejects_empty_nondigit_and_overflow_decimal_strings_independently() {
-    for encoded in [
-        r#"{"value":""}"#,
-        r#"{"value":"12x"}"#,
-        r#"{"value":"18446744073709551616"}"#,
+    for (encoded, expected) in [
+        (
+            r#"{"value":""}"#,
+            "expected an unsigned decimal string at line 1 column 12",
+        ),
+        (
+            r#"{"value":"12x"}"#,
+            "expected an unsigned decimal string at line 1 column 15",
+        ),
+        (
+            r#"{"value":"18446744073709551616"}"#,
+            "decimal string exceeds u64 at line 1 column 32",
+        ),
     ] {
-        assert!(serde_json::from_str::<Wrapper>(encoded).is_err());
+        crate::test_support::assert_err_text(&serde_json::from_str::<Wrapper>(encoded), expected);
     }
 }
 
@@ -77,5 +98,8 @@ fn optional_u64_round_trips_none_as_null() {
 
 #[test]
 fn optional_u64_rejects_json_numbers() {
-    assert!(serde_json::from_str::<OptionalWrapper>(r#"{"value":1}"#).is_err());
+    crate::test_support::assert_err(
+        &serde_json::from_str::<OptionalWrapper>(r#"{"value":1}"#),
+        r#"Error("invalid type: integer `1`, expected a string", line: 1, column: 10)"#,
+    );
 }

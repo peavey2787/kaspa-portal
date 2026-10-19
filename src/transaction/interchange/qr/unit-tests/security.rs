@@ -11,6 +11,9 @@ fn accepts_first_frame_and_matching_session() {
 fn rejects_session_splice_or_frame_count_change() {
     let a = [1u8; 8];
     let b = [2u8; 8];
-    assert!(authorize_frame_session(true, &a, 3, &b, 3).is_err());
-    assert!(authorize_frame_session(true, &a, 3, &a, 4).is_err());
+    crate::test_support::assert_err(&authorize_frame_session(true, &a, 3, &b, 3), "MixedSession");
+    crate::test_support::assert_err(
+        &authorize_frame_session(true, &a, 3, &a, 4),
+        "FrameCountChanged",
+    );
 }

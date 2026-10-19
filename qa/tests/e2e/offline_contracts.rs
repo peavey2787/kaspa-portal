@@ -176,13 +176,25 @@ fn rust_offline_contracts() {
     covenant
         .verify_genesis(&covenant_id, genesis, &outputs)
         .expect("genesis proof");
-    assert!(covenant
-        .verify_genesis(&covenant_id, genesis, &outputs[..1])
-        .is_err());
+    assert_eq!(
+        covenant
+            .verify_genesis(&covenant_id, genesis, &outputs[..1])
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("contract error: recomputed covenant ID does not match the claimed ID")
+    );
     covenant
         .verify_redeem_script(&outputs[0], &tagged)
         .expect("redeem script proof");
-    assert!(covenant.verify_redeem_script(&outputs[0], &split).is_err());
+    assert_eq!(
+        covenant
+            .verify_redeem_script(&outputs[0], &split)
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("contract error: output does not lock the given redeem script")
+    );
 
     let (proving_key, verifying_key) = zk.trusted_setup().expect("Groth16 trusted setup");
     assert!(!proving_key.is_empty());

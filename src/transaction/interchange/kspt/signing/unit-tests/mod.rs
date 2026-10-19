@@ -166,10 +166,10 @@ fn covenant_key_scanner_handles_push_families_and_truncation() {
     assert_eq!(candidates.len, 1);
     assert_eq!(candidates.keys[0], key);
 
-    assert!(scan_candidate_keys(&[0x20, 0x01]).is_err());
-    assert!(scan_candidate_keys(&[0x4c]).is_err());
-    assert!(scan_candidate_keys(&[0x4d, 1]).is_err());
-    assert!(scan_candidate_keys(&[0x4e, 1, 0, 0]).is_err());
+    crate::test_support::assert_err(&scan_candidate_keys(&[0x20, 0x01]), "InvalidModel");
+    crate::test_support::assert_err(&scan_candidate_keys(&[0x4c]), "InvalidModel");
+    crate::test_support::assert_err(&scan_candidate_keys(&[0x4d, 1]), "InvalidModel");
+    crate::test_support::assert_err(&scan_candidate_keys(&[0x4e, 1, 0, 0]), "InvalidModel");
 }
 
 #[test]

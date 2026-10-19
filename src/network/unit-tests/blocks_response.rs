@@ -65,10 +65,13 @@ fn get_blocks_response_with_no_new_blocks_is_empty() {
 fn get_blocks_response_rejects_trailing_bytes_and_truncation() {
     let mut trailing = response(&[[1; 32]], &[rpc_block([1; 32], 1, [2; 32], b"x")]);
     trailing.push(0);
-    assert!(blocks::decode(&trailing).is_err());
+    crate::test_support::assert_err(
+        &blocks::decode(&trailing),
+        r#"InvalidEncoding("trailing bytes after GetBlocksResponse")"#,
+    );
 
     let full = response(&[[1; 32]], &[rpc_block([1; 32], 1, [2; 32], b"x")]);
-    assert!(blocks::decode(&full[..full.len() - 3]).is_err());
+    crate::test_support::assert_err(&blocks::decode(&full[..full.len() - 3]), "TruncatedPayload");
 }
 
 #[test]
@@ -89,8 +92,11 @@ fn get_blocks_response_rejects_unbounded_counts() {
 fn get_blocks_response_requires_the_payload_marker() {
     let mut unmarked = response(&[], &[]);
     unmarked[0] = 0;
-    assert!(blocks::decode(&unmarked).is_err());
-    assert!(blocks::decode(&[]).is_err());
+    crate::test_support::assert_err(
+        &blocks::decode(&unmarked),
+        r#"InvalidEncoding("GetBlocks response is missing its payload marker")"#,
+    );
+    crate::test_support::assert_err(&blocks::decode(&[]), "TruncatedPayload");
 }
 
 #[test]
