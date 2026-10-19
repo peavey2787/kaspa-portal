@@ -797,9 +797,26 @@ fn standard_send_preparation_and_utxo_paths_are_host_testable() {
     assert!(validate_recipient_amount(1)
         .unwrap_err()
         .contains("too small"));
-    assert!(prepare_send("not-an-address", 20_000_000, 1_000_000).is_err());
+    assert!(prepare_send(&wallet, "not-an-address", 20_000_000, 1_000_000).is_err());
+    let testnet_destination =
+        crate::primitives::address::encode_p2pk_address(&[0x83; 32], "kaspatest");
+    assert_eq!(
+        prepare_send(&wallet, &testnet_destination, 20_000_000, 1_000_000).err(),
+        Some(
+            "Address is on the 'kaspatest' network, but this transaction is on 'kaspa'".to_string()
+        )
+    );
+    let empty = crate::wallet::account::derivation::WalletData {
+        receive_addresses: Vec::new(),
+        ..watch_wallet()
+    };
+    assert_eq!(
+        prepare_send(&empty, &destination, 20_000_000, 1_000_000).err(),
+        Some("Wallet has no receive address".to_string())
+    );
 
-    let prepared = prepare_send(&destination, 20_000_000, 1_000_000).expect("prepared send");
+    let prepared =
+        prepare_send(&wallet, &destination, 20_000_000, 1_000_000).expect("prepared send");
     let automatic = create_send_from_utxos(
         &wallet,
         &prepared,
@@ -891,11 +908,11 @@ fn standard_send_preparation_and_utxo_paths_are_host_testable() {
 fn limited_send_preflight_is_transport_independent() {
     use super::standard::{create_limited_send_from_utxos, prepare_send};
 
-    assert!(prepare_send("not-an-address", 20_000_000, 300_000).is_err());
-
     let wallet = watch_wallet();
+    assert!(prepare_send(&wallet, "not-an-address", 20_000_000, 300_000).is_err());
     let destination = crate::primitives::address::encode_p2pk_address(&[0x84; 32], "kaspa");
-    let prepared = prepare_send(&destination, 20_000_000, 300_000).expect("prepared limited send");
+    let prepared =
+        prepare_send(&wallet, &destination, 20_000_000, 300_000).expect("prepared limited send");
     let wire = create_limited_send_from_utxos(
         &wallet,
         &prepared,
@@ -1184,7 +1201,7 @@ fn payload_send_adds_an_input_instead_of_paying_tiny_change_storage_mass() {
     let wallet = watch_wallet();
     let destination = crate::primitives::address::encode_p2pk_address(&[0x84; 32], "kaspa");
     let amount = 20_000_000;
-    let prepared = prepare_send(&destination, amount, 0).expect("prepared send");
+    let prepared = prepare_send(&wallet, &destination, amount, 0).expect("prepared send");
     // Largest-first, one input covers the amount but leaves ~0.22 KAS of
     // change whose storage mass costs more than a second input does.
     let utxos = vec![

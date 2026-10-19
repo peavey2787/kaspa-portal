@@ -1,5 +1,6 @@
 use crate::{
     network::client::NetworkClient,
+    primitives::address::address_prefix,
     transaction::builder::{
         model::{PlannedOutput, UnsignedTransactionPlan},
         planning::{amounts, plan_multisig},
@@ -144,8 +145,9 @@ fn prepare_request_at_change(
         redeem_script,
         sig_op_count,
         minimum_signatures: descriptor.threshold(),
-        destination_script: crate::primitives::address::address_to_script_pubkey(
+        destination_script: crate::primitives::address::address_to_script_pubkey_on(
             request.destination_address,
+            address_prefix(request.source_address)?,
         )?,
         change_script,
         source_derivations,
@@ -208,7 +210,7 @@ fn prepare_hd45_change(
     let change_redeem = build_redeem_script(descriptor.threshold(), &change_keys)?;
     let change_address = crate::contract::script::p2sh::script_to_address(
         &change_redeem,
-        address_prefix(source_address),
+        address_prefix(source_address)?,
     )?;
     Ok((
         crate::primitives::address::address_to_script_pubkey(&change_address)?,
@@ -232,7 +234,7 @@ pub(super) fn verify_source_address(
 ) -> Result<(), String> {
     let derived = crate::contract::script::p2sh::script_to_address(
         redeem_script,
-        address_prefix(source_address),
+        address_prefix(source_address)?,
     )?;
     if derived == source_address {
         return Ok(());
@@ -384,13 +386,6 @@ fn multisig_change_output(outputs: &mut [PlannedOutput]) -> Option<&mut PlannedO
 }
 
 pub const MULTISIG_BRANCH_SCAN_DEPTH: u32 = 40;
-
-fn address_prefix(address: &str) -> &str {
-    match address.split_once(':') {
-        Some((value, _)) => value,
-        None => "kaspa",
-    }
-}
 
 #[cfg(test)]
 #[path = "multisig/unit-tests/mod.rs"]

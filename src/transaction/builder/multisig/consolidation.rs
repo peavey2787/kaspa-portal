@@ -10,9 +10,11 @@ use crate::{
     wallet::multisig::{build_redeem_script, resolve_address_path, MultisigDescriptor},
 };
 
+use crate::primitives::address::{address_prefix, address_to_script_pubkey_on};
+
 use super::{
-    address_prefix, branch::next_change_index, multisig_standard_fee_for_shape,
-    MultisigConsolidationRequest, MultisigSigningShape, MULTISIG_BRANCH_SCAN_DEPTH,
+    branch::next_change_index, multisig_standard_fee_for_shape, MultisigConsolidationRequest,
+    MultisigSigningShape, MULTISIG_BRANCH_SCAN_DEPTH,
 };
 
 #[derive(Clone, serde::Deserialize)]
@@ -146,14 +148,14 @@ async fn consolidation_outputs(
     change: u64,
     client: &NetworkClient,
 ) -> Result<Vec<PlannedOutput>, String> {
-    let destination_script =
-        crate::primitives::address::address_to_script_pubkey(request.destination_address)?;
+    let prefix = address_prefix(source_address)?;
+    let destination_script = address_to_script_pubkey_on(request.destination_address, prefix)?;
     let mut outputs = vec![PlannedOutput::new(request.amount, destination_script)];
     append_consolidation_change(
         ChangeOutputRequest {
             descriptor,
             source_address,
-            prefix: address_prefix(source_address),
+            prefix,
             cosigner: request.cosigner,
             change_index_hint: request.change_index_hint,
             client,

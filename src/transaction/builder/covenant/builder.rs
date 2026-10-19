@@ -78,8 +78,9 @@ pub async fn build_with_binding(
 pub(super) fn prepare_request(
     request: &CovenantBuildRequest<'_>,
 ) -> Result<PreparedRequest, String> {
-    let covenant_script = address::address_to_script_pubkey(request.covenant_address)?;
-    let change_script = address::address_to_script_pubkey(request.change_address)?;
+    let prefix = request.wallet.address_prefix()?;
+    let covenant_script = address::address_to_script_pubkey_on(request.covenant_address, prefix)?;
+    let change_script = address::address_to_script_pubkey_on(request.change_address, prefix)?;
     let payload = match request.encoding {
         CovenantEncoding::Payload { payload_hex, .. } => {
             Some(hex::decode(payload_hex).map_err(|error| format!("Bad payload hex: {error}"))?)

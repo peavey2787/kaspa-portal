@@ -374,7 +374,7 @@ fn public_async_multisig_boundaries_fail_closed_before_or_at_native_transport() 
 }
 
 #[test]
-fn static_multisig_change_policy_and_prefix_fallback_are_covered() {
+fn static_multisig_change_policy_and_destination_network_are_enforced() {
     let client = fail_network_client();
     let static_text = format!("multi(1,{},{})", "11".repeat(32), "22".repeat(32));
     let descriptor = MultisigDescriptor::parse(&static_text).expect("static descriptor");
@@ -403,8 +403,19 @@ fn static_multisig_change_policy_and_prefix_fallback_are_covered() {
         Err(error) => error,
     };
     assert!(error.contains("Static multisig change"));
-    assert_eq!(address_prefix("without-prefix"), "kaspa");
-    assert_eq!(address_prefix("kaspatest:value"), "kaspatest");
+
+    static_request.change_address = &source;
+    let testnet_destination =
+        crate::primitives::address::encode_p2pk_address(&[7; 32], "kaspatest");
+    static_request.destination_address = &testnet_destination;
+    let error = match prepare_request(&static_request) {
+        Ok(_) => panic!("a testnet recipient must not be paid from a mainnet multisig"),
+        Err(error) => error,
+    };
+    assert_eq!(
+        error,
+        "Address is on the 'kaspatest' network, but this transaction is on 'kaspa'"
+    );
 }
 
 #[test]

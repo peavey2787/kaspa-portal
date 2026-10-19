@@ -61,14 +61,20 @@ impl KaspaNetwork {
             .find(|network| network.hrp() == Some(hrp))
     }
 
+    /// The network a name or prefix denotes. Numbered testnets must use the
+    /// canonical `testnet-N` spelling with `N` in `1..=127`.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "mainnet" => Some(Self::Mainnet),
             "testnet" | "kaspatest" => Some(Self::Testnet),
             "devnet" | "kaspadev" => Some(Self::Devnet),
             "simnet" | "kaspasim" => Some(Self::Simnet),
-            value if value.starts_with("testnet") => Some(Self::Testnet),
-            _ => None,
+            value => crate::primitives::NetworkId::parse(value)
+                .ok()
+                .filter(|network| {
+                    network.testnet_suffix().is_some() && network.canonical_name() == value
+                })
+                .map(|_| Self::Testnet),
         }
     }
 
@@ -172,6 +178,23 @@ pub fn validate_kaspa_address(addr: &[u8]) -> bool {
         .ok()
         .and_then(|text| decode_address_bytes(text).ok())
         .is_some()
+}
+
+/// The network prefix (`kaspa`, `kaspatest`, ...) an address names.
+pub fn address_prefix(addr: &str) -> Result<&str, String> {
+    split_address(addr).map(|(prefix, _)| prefix)
+}
+
+/// The locking script for `addr`, which must belong to the network whose
+/// prefix is `expected`; a cross-network address is rejected, not converted.
+pub fn address_to_script_pubkey_on(addr: &str, expected: &str) -> Result<Vec<u8>, String> {
+    let prefix = address_prefix(addr)?;
+    if prefix != expected {
+        return Err(format!(
+            "Address is on the '{prefix}' network, but this transaction is on '{expected}'"
+        ));
+    }
+    address_to_script_pubkey(addr)
 }
 
 pub fn address_to_script_pubkey(addr: &str) -> Result<Vec<u8>, String> {

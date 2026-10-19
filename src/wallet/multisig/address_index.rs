@@ -30,7 +30,7 @@ fn scan_hierarchical_path(
     descriptor: &MultisigDescriptor,
     source_address: &str,
 ) -> Result<ResolvedMultisigPath, String> {
-    let prefix = address_prefix(source_address);
+    let prefix = crate::primitives::address::address_prefix(source_address)?;
     let (cosigners, chains) = scan_shape(descriptor);
     for chain in 0..chains {
         for cosigner in 0..cosigners {
@@ -80,11 +80,4 @@ fn address_at(
     Ok(crate::primitives::address::script_to_p2sh_address(
         &script, prefix,
     ))
-}
-
-fn address_prefix(address: &str) -> &str {
-    match address.split_once(':') {
-        Some((prefix, _)) => prefix,
-        None => "kaspa",
-    }
 }

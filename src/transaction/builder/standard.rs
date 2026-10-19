@@ -24,7 +24,7 @@ pub async fn create_send(
     fee: u64,
     client: &NetworkClient,
 ) -> Result<String, String> {
-    let prepared = prepare_send(destination, amount, fee)?;
+    let prepared = prepare_send(wallet, destination, amount, fee)?;
     let addresses = wallet
         .receive_addresses
         .iter()
@@ -49,7 +49,7 @@ pub async fn create_send_with_payload(
             crate::transaction::model::MAX_PAYLOAD_SIZE
         ));
     }
-    let prepared = prepare_send(destination, amount, requested_fee)?;
+    let prepared = prepare_send(wallet, destination, amount, requested_fee)?;
     let addresses = wallet
         .receive_addresses
         .iter()
@@ -81,7 +81,7 @@ pub async fn create_send_limited(
     max_inputs: usize,
     client: &NetworkClient,
 ) -> Result<String, String> {
-    let prepared = prepare_send(destination, amount, fee)?;
+    let prepared = prepare_send(wallet, destination, amount, fee)?;
     let addresses = wallet
         .receive_addresses
         .iter()
@@ -112,7 +112,7 @@ pub async fn create_send_selected(
     indices: &[usize],
     client: &NetworkClient,
 ) -> Result<String, String> {
-    let prepared = prepare_send(destination, amount, fee)?;
+    let prepared = prepare_send(wallet, destination, amount, fee)?;
     let addresses = wallet
         .receive_addresses
         .iter()
@@ -145,7 +145,7 @@ pub fn create_pskb_with_utxos(
     requested_fee: u64,
     selected: Vec<UtxoEntry>,
 ) -> Result<String, String> {
-    let prepared = prepare_send(destination, amount, requested_fee)?;
+    let prepared = prepare_send(wallet, destination, amount, requested_fee)?;
     if selected.is_empty() {
         return Err("No UTXOs provided".into());
     }
@@ -161,7 +161,10 @@ pub(super) struct PreparedSend {
     fee: u64,
 }
 
+/// Validate a single-recipient send; the destination must be on the
+/// wallet's own network.
 pub(super) fn prepare_send(
+    wallet: &WalletData,
     destination: &str,
     amount: u64,
     fee: u64,
@@ -170,7 +173,10 @@ pub(super) fn prepare_send(
     let required = amounts::checked_required(amount, fee)?;
     let output = PlannedOutput::new(
         amount,
-        crate::primitives::address::address_to_script_pubkey(destination)?,
+        crate::primitives::address::address_to_script_pubkey_on(
+            destination,
+            wallet.address_prefix()?,
+        )?,
     );
     Ok(PreparedSend {
         output,

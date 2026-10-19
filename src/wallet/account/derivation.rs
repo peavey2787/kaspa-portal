@@ -30,6 +30,17 @@ pub struct WalletData {
     pub next_change_index: usize,
 }
 
+impl WalletData {
+    /// The network prefix shared by every address this wallet derives.
+    pub fn address_prefix(&self) -> Result<&str, String> {
+        let first = self
+            .receive_addresses
+            .first()
+            .ok_or_else(|| "Wallet has no receive address".to_string())?;
+        crate::primitives::address::address_prefix(first)
+    }
+}
+
 // ─── Extended public key ───
 
 use crate::wallet::key::account::{

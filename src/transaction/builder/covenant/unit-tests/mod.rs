@@ -222,15 +222,15 @@ fn covenant_request_preparation_covers_payload_bound_and_invalid_hex_paths() {
     };
     use crate::wallet::account::derivation::WalletData;
 
+    let covenant_address = crate::primitives::address::encode_p2pk_address(&[0x61; 32], "kaspa");
+    let change_address = crate::primitives::address::encode_p2pk_address(&[0x62; 32], "kaspa");
     let wallet = WalletData {
         kpub: String::new(),
-        receive_addresses: Vec::new(),
+        receive_addresses: vec![change_address.clone()],
         change_addresses: Vec::new(),
         next_receive_index: 0,
         next_change_index: 0,
     };
-    let covenant_address = crate::primitives::address::encode_p2pk_address(&[0x61; 32], "kaspa");
-    let change_address = crate::primitives::address::encode_p2pk_address(&[0x62; 32], "kaspa");
     fn request<'a>(
         wallet: &'a WalletData,
         covenant_address: &'a str,
@@ -281,6 +281,19 @@ fn covenant_request_preparation_covers_payload_bound_and_invalid_hex_paths() {
         prepare_request(&invalid),
         Err(error) if error.contains("Bad payload hex")
     ));
+
+    let testnet_address = crate::primitives::address::encode_p2pk_address(&[0x55; 32], "kaspatest");
+    let wrong_network = "Address is on the 'kaspatest' network, but this transaction is on 'kaspa'";
+    for (covenant, change) in [
+        (&testnet_address, &change_address),
+        (&covenant_address, &testnet_address),
+    ] {
+        let cross_network = request(&wallet, covenant, change, CovenantEncoding::BoundGenesis);
+        assert_eq!(
+            prepare_request(&cross_network).err().as_deref(),
+            Some(wrong_network)
+        );
+    }
 }
 
 #[test]

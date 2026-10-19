@@ -5,7 +5,7 @@ use crate::{
     wallet::multisig::{build_redeem_script, MultisigDescriptor},
 };
 
-use super::address_prefix;
+use crate::primitives::address::address_prefix;
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct MultisigBranchUtxo {
@@ -253,7 +253,7 @@ pub(super) async fn next_change_index(
     source_address: &str,
 ) -> Result<u32, String> {
     let change =
-        change_branch_addresses(descriptor, cosigner, depth, address_prefix(source_address))?;
+        change_branch_addresses(descriptor, cosigner, depth, address_prefix(source_address)?)?;
     let query = branch_query(&change);
     let utxos = crate::network::queries::utxos::fetch_for_addresses(client, &query).await?;
     first_unused_change_index(&change, &utxos, depth)

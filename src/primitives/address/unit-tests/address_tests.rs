@@ -93,11 +93,24 @@ fn network_metadata_maps_names_wire_labels_hrps_and_unknowns() {
         assert_eq!(rendered.as_bytes()[hrp.len()], b':');
     }
 
-    for testnet_name in ["testnet-10", "testnet-11", "testnet-custom"] {
+    for testnet_name in ["testnet-1", "testnet-10", "testnet-11", "testnet-127"] {
         assert_eq!(
             KaspaNetwork::from_name(testnet_name),
             Some(KaspaNetwork::Testnet)
         );
+    }
+    for invalid in [
+        "testnet-custom",
+        "testnet-0",
+        "testnet-128",
+        "testnet-010",
+        "testnet10",
+        "testnet-",
+        "testnetx",
+        "kaspa:testnet-10",
+        " testnet-10",
+    ] {
+        assert_eq!(KaspaNetwork::from_name(invalid), None, "{invalid}");
     }
     assert_eq!(KaspaNetwork::from_name("MAINNET"), None);
     assert_eq!(KaspaNetwork::from_name("unknown"), None);
@@ -290,4 +303,36 @@ fn standard_script_builders_round_trip_through_recognizers_and_addresses() {
     );
     assert_eq!(script_address(&p2pk[..33], "kaspa"), None);
     assert_eq!(script_address(&[], "kaspa"), None);
+}
+
+#[test]
+fn network_checked_script_conversion_rejects_other_prefixes() {
+    let mainnet = encode_p2pk_address(&[0x31; 32], "kaspa");
+    let testnet = encode_p2sh_address(&[0x32; 32], "kaspatest");
+    assert_eq!(address_prefix(&mainnet), Ok("kaspa"));
+    assert_eq!(address_prefix(&testnet), Ok("kaspatest"));
+    assert_eq!(
+        address_prefix("without-prefix"),
+        Err("Unknown address prefix".to_string())
+    );
+    assert_eq!(
+        address_to_script_pubkey_on(&mainnet, "kaspa"),
+        address_to_script_pubkey(&mainnet)
+    );
+    assert_eq!(
+        address_to_script_pubkey_on(&testnet, "kaspatest"),
+        address_to_script_pubkey(&testnet)
+    );
+    assert_eq!(
+        address_to_script_pubkey_on(&testnet, "kaspa"),
+        Err(
+            "Address is on the 'kaspatest' network, but this transaction is on 'kaspa'".to_string()
+        )
+    );
+    assert_eq!(
+        address_to_script_pubkey_on(&mainnet, "kaspatest"),
+        Err(
+            "Address is on the 'kaspa' network, but this transaction is on 'kaspatest'".to_string()
+        )
+    );
 }
