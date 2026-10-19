@@ -5,7 +5,8 @@ use super::{
     derive_key_32_with_params, derive_key_32_with_workspace, encode_metadata, parse_metadata,
     validate_benchmark_inputs, workspace_block_count, zeroize_workspace, PasswordKdfBlock,
     PasswordKdfError, PasswordKdfParams, PasswordKdfPurpose, ARGON2_VERSION_13, KDF_ID_ARGON2ID,
-    PROFILE_VERSION_1, V1_MEMORY_KIB, V1_PARALLELISM, V1_TIME_COST,
+    PROFILE_VERSION_1, PROFILE_VERSION_2, V1_MEMORY_KIB, V1_PARALLELISM, V1_TIME_COST,
+    V2_MEMORY_KIB,
 };
 
 const PASSWORD: &[u8] = b"CorrectHorse9";
@@ -17,6 +18,11 @@ const SALT: [u8; 16] = [
 const PORTABLE_EXPECTED: [u8; 32] = [
     0xaa, 0xdc, 0xb0, 0xa6, 0x00, 0x69, 0xdc, 0x21, 0xa1, 0xd4, 0x51, 0x3d, 0xd1, 0xd1, 0xea, 0xe6,
     0xfa, 0xef, 0x16, 0x86, 0x0d, 0x84, 0x38, 0x55, 0x4b, 0xcd, 0x8e, 0xbc, 0x04, 0xf2, 0xf9, 0x8b,
+];
+// Same derivation with the v2 host profile (m=65536 KiB), argon2-cffi.
+const PORTABLE_HOST_EXPECTED: [u8; 32] = [
+    0x71, 0x16, 0x99, 0x0e, 0x2a, 0xd3, 0x81, 0x11, 0x46, 0x06, 0x67, 0x4f, 0x57, 0xd1, 0xc8, 0x4f,
+    0xe0, 0x21, 0x97, 0x31, 0x7d, 0x5d, 0x89, 0x8c, 0x95, 0xde, 0x45, 0xd7, 0x22, 0x6f, 0xed, 0x8a,
 ];
 const WALLET_EXPECTED: [u8; 32] = [
     0xf3, 0x67, 0x3c, 0xb5, 0x64, 0xfe, 0xf4, 0x8a, 0x3c, 0x4a, 0x7b, 0x5e, 0x44, 0xeb, 0x0a, 0xa4,
@@ -43,6 +49,64 @@ fn argon2id_v19_known_answers_cover_supported_policy_domains() {
     ok &= derive_key_32(PasswordKdfPurpose::DeviceBoundBackup, PASSWORD, &SALT)
         == Ok(DEVICE_BOUND_EXPECTED);
     assert!(ok);
+}
+
+#[test]
+fn host_profile_is_v1_with_64_mib_and_matches_the_reference_vector() {
+    let host = PasswordKdfParams::host();
+    assert_eq!(
+        host,
+        PasswordKdfParams {
+            profile_version: PROFILE_VERSION_2,
+            argon_version: ARGON2_VERSION_13,
+            m_cost_kib: V2_MEMORY_KIB,
+            t_cost: V1_TIME_COST,
+            p_cost: V1_PARALLELISM,
+        }
+    );
+    assert_eq!(V2_MEMORY_KIB, 64 * 1024);
+    assert_eq!(
+        derive_key_32_with_params(PasswordKdfPurpose::PortableBackup, PASSWORD, &SALT, host),
+        Ok(PORTABLE_HOST_EXPECTED)
+    );
+    let metadata = encode_metadata(host).expect("host metadata");
+    assert_eq!(parse_metadata(&metadata), Ok(host));
+}
+
+#[test]
+fn profile_predicates_accept_exactly_the_two_fixed_profiles() {
+    let current = PasswordKdfParams::current();
+    let host = PasswordKdfParams::host();
+    assert!(current.is_current() & !current.is_host() & current.is_supported());
+    assert!(host.is_host() & !host.is_current() & host.is_supported());
+    // Mixing one profile's version with the other's memory matches neither.
+    let mixed = [
+        PasswordKdfParams {
+            profile_version: PROFILE_VERSION_2,
+            ..current
+        },
+        PasswordKdfParams {
+            profile_version: PROFILE_VERSION_1,
+            ..host
+        },
+    ];
+    for params in mixed {
+        assert!(!params.is_supported(), "{params:?}");
+        assert_eq!(
+            encode_metadata(params),
+            Err(PasswordKdfError::UnsupportedParameters)
+        );
+    }
+    for edit in [
+        |p: &mut PasswordKdfParams| p.argon_version -= 1,
+        |p: &mut PasswordKdfParams| p.m_cost_kib -= 1,
+        |p: &mut PasswordKdfParams| p.t_cost += 1,
+        |p: &mut PasswordKdfParams| p.p_cost += 1,
+    ] {
+        let mut changed = host;
+        edit(&mut changed);
+        assert!(!changed.is_host() & !changed.is_supported(), "{changed:?}");
+    }
 }
 
 #[test]

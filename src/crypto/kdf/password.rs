@@ -11,6 +11,7 @@ use zeroize::Zeroize;
 pub const KDF_ID_ARGON2ID: u8 = 2;
 pub const ARGON2_VERSION_13: u8 = 0x13;
 pub const PROFILE_VERSION_1: u8 = 1;
+pub const PROFILE_VERSION_2: u8 = 2;
 pub const SALT_SIZE: usize = 16;
 pub const KEY_SIZE: usize = 32;
 pub const MAX_PASSWORD_SIZE: usize = 128;
@@ -27,6 +28,10 @@ pub const WORKSPACE_BLOCK_ALIGN: usize = core::mem::align_of::<PasswordKdfBlock>
 pub const V1_MEMORY_KIB: u32 = 8_192;
 pub const V1_TIME_COST: u32 = 3;
 pub const V1_PARALLELISM: u32 = 1;
+
+// Fixed v2 host policy: the v1 shape with 64 MiB, for browsers, desktops and
+// phones whose ciphertext never has to open on an embedded signer.
+pub const V2_MEMORY_KIB: u32 = 65_536;
 
 const EFFECTIVE_SALT_DOMAIN: &[u8] = b"KaspaPortal/Argon2id/effective-salt/v1";
 
@@ -59,6 +64,7 @@ pub struct PasswordKdfParams {
 }
 
 impl PasswordKdfParams {
+    /// The v1 profile every embedded signer can derive (8 MiB).
     pub const fn current() -> Self {
         Self {
             profile_version: PROFILE_VERSION_1,
@@ -69,14 +75,36 @@ impl PasswordKdfParams {
         }
     }
 
+    /// The v2 host profile (64 MiB) for ciphertext only software opens.
+    pub const fn host() -> Self {
+        Self {
+            profile_version: PROFILE_VERSION_2,
+            m_cost_kib: V2_MEMORY_KIB,
+            ..Self::current()
+        }
+    }
+
     pub const fn is_current(self) -> bool {
+        self.is_profile(Self::current())
+    }
+
+    pub const fn is_host(self) -> bool {
+        self.is_profile(Self::host())
+    }
+
+    /// Exactly one of the fixed profiles; nothing in between is accepted.
+    pub const fn is_supported(self) -> bool {
+        self.is_current() | self.is_host()
+    }
+
+    const fn is_profile(self, profile: Self) -> bool {
         // Every comparison is side-effect free. Bitwise boolean composition keeps
         // the exact-profile check branch-light while still evaluating every field.
-        (self.profile_version == PROFILE_VERSION_1)
-            & (self.argon_version == ARGON2_VERSION_13)
-            & (self.m_cost_kib == V1_MEMORY_KIB)
-            & (self.t_cost == V1_TIME_COST)
-            & (self.p_cost == V1_PARALLELISM)
+        (self.profile_version == profile.profile_version)
+            & (self.argon_version == profile.argon_version)
+            & (self.m_cost_kib == profile.m_cost_kib)
+            & (self.t_cost == profile.t_cost)
+            & (self.p_cost == profile.p_cost)
     }
 
     pub const fn meets_v1_minimum(self) -> bool {
@@ -99,7 +127,7 @@ pub enum PasswordKdfError {
 pub fn encode_metadata(
     parameters: PasswordKdfParams,
 ) -> Result<[u8; METADATA_SIZE], PasswordKdfError> {
-    if !parameters.is_current() {
+    if !parameters.is_supported() {
         return Err(PasswordKdfError::UnsupportedParameters);
     }
     let mut out = [0u8; METADATA_SIZE];
@@ -113,7 +141,8 @@ pub fn encode_metadata(
 }
 
 /// Parse authenticated KDF metadata. Unknown IDs, versions, or downgraded
-/// parameters fail closed; readers accept only the authenticated current KDF profile.
+/// parameters fail closed; readers accept only an exact supported profile.
+/// Embedded readers additionally require [`PasswordKdfParams::is_current`].
 pub fn parse_metadata(input: &[u8]) -> Result<PasswordKdfParams, PasswordKdfError> {
     if input.len() != METADATA_SIZE || input[0] != KDF_ID_ARGON2ID {
         return Err(PasswordKdfError::UnsupportedParameters);
@@ -125,7 +154,7 @@ pub fn parse_metadata(input: &[u8]) -> Result<PasswordKdfParams, PasswordKdfErro
         m_cost_kib: u32::from_le_bytes([input[4], input[5], input[6], input[7]]),
         t_cost: u32::from_le_bytes([input[8], input[9], input[10], input[11]]),
     };
-    if !parameters.is_current() {
+    if !parameters.is_supported() {
         return Err(PasswordKdfError::UnsupportedParameters);
     }
     Ok(parameters)
@@ -142,9 +171,9 @@ pub fn derive_key_32(
 
 /// Derive exactly 32 bytes using explicit authenticated parameters.
 ///
-/// Current-format readers accept only the current v1 profile. This prevents an
+/// Readers accept only the fixed v1 and v2 profiles. This prevents an
 /// attacker from lowering authenticated parameters and avoids accepting an
-/// unrecognized future parameter profile as if it were current.
+/// unrecognized future parameter profile as if it were supported.
 pub fn derive_key_32_with_params(
     purpose: PasswordKdfPurpose,
     password: &[u8],
@@ -182,7 +211,7 @@ fn validate_current_inputs(
     if !valid_password {
         return Err(PasswordKdfError::InvalidPasswordLength);
     }
-    if !parameters.is_current() {
+    if !parameters.is_supported() {
         return Err(PasswordKdfError::UnsupportedParameters);
     }
     Ok(())
