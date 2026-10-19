@@ -99,6 +99,10 @@ fn every_json_syntax_error_has_a_distinct_actionable_message() {
             JsonSyntaxError::TrailingData,
             "PSKT JSON contains trailing data",
         ),
+        (
+            JsonSyntaxError::TooManyMembers,
+            "PSKT JSON object has too many members",
+        ),
     ];
     for (error, message) in messages {
         assert_eq!(error.to_string(), message);
@@ -125,6 +129,23 @@ fn canonical_json_nesting_limit_is_exact_for_objects_and_arrays() {
     assert_eq!(
         validate_canonical_json(objects(max + 1).as_bytes()),
         Err(JsonSyntaxError::NestingTooDeep)
+    );
+}
+
+/// Each member's key is compared once after sorting, never by re-reading
+/// earlier members, so a wide object of large values stays linear to scan.
+#[test]
+fn wide_objects_with_large_values_validate_without_rescanning_members() {
+    let value = format!(r#"{{"inner":[{}0]}}"#, "1,".repeat(64));
+    let members: Vec<String> = (0..20_000)
+        .map(|index| format!(r#""k{index:05}":{value}"#))
+        .collect();
+    let unique = format!("{{{}}}", members.join(","));
+    assert_eq!(validate_canonical_json(unique.as_bytes()), Ok(()));
+    let duplicated = format!(r#"{{{},"k00000":0}}"#, members.join(","));
+    assert_eq!(
+        validate_canonical_json(duplicated.as_bytes()),
+        Err(JsonSyntaxError::DuplicateKey)
     );
 }
 

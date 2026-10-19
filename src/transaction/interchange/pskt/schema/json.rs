@@ -1,6 +1,7 @@
 //! Restricted canonical-JSON syntax validator shared by host and embedded
 //! PSKT decoders.
 
+use alloc::vec::Vec;
 use core::fmt;
 
 use super::MAX_JSON_NESTING;
@@ -14,6 +15,8 @@ pub enum JsonSyntaxError {
     DuplicateKey,
     NestingTooDeep,
     TrailingData,
+    /// The member list of one object could not be held in memory.
+    TooManyMembers,
 }
 
 impl fmt::Display for JsonSyntaxError {
@@ -25,6 +28,7 @@ impl fmt::Display for JsonSyntaxError {
             Self::DuplicateKey => "duplicate JSON object key",
             Self::NestingTooDeep => "PSKT JSON exceeds maximum nesting depth",
             Self::TrailingData => "PSKT JSON contains trailing data",
+            Self::TooManyMembers => "PSKT JSON object has too many members",
         })
     }
 }
@@ -33,18 +37,11 @@ struct Cursor<'a> {
     input: &'a [u8],
     /// The unread suffix of `input`; reading only ever shortens it.
     rest: &'a [u8],
-    /// Off only while re-reading members an enclosing object already
-    /// validated, to find an earlier copy of a key.
-    check_duplicates: bool,
 }
 
 impl<'a> Cursor<'a> {
-    fn new(input: &'a [u8], pos: usize, check_duplicates: bool) -> Self {
-        Self {
-            input,
-            rest: &input[pos..],
-            check_duplicates,
-        }
+    const fn new(input: &'a [u8]) -> Self {
+        Self { input, rest: input }
     }
 
     /// Offset of the next unread byte within `input`.
@@ -143,32 +140,24 @@ impl<'a> Cursor<'a> {
         if self.consume_if(b'}') {
             return Ok(());
         }
-        let members_start = self.pos();
+        let mut keys = Vec::new();
         loop {
-            self.object_member(depth, members_start)?;
+            let key = self.object_member(depth)?;
+            keys.try_reserve(1)
+                .map_err(|_| JsonSyntaxError::TooManyMembers)?;
+            keys.push(key);
             if self.list_end(b'}')? {
-                return Ok(());
+                return reject_duplicate_keys(keys);
             }
         }
     }
 
-    fn object_member(&mut self, depth: usize, members_start: usize) -> Result<(), JsonSyntaxError> {
-        self.ws();
-        let key_token_start = self.pos();
+    /// One `"key": value` member; returns the key's content.
+    fn object_member(&mut self, depth: usize) -> Result<&'a [u8], JsonSyntaxError> {
         let (key_start, key_end) = self.string()?;
-        if self.check_duplicates
-            && key_seen_before(
-                self.input,
-                members_start,
-                key_token_start,
-                &self.input[key_start..key_end],
-                depth,
-            )?
-        {
-            return Err(JsonSyntaxError::DuplicateKey);
-        }
         self.byte(b':')?;
-        self.value(depth)
+        self.value(depth)?;
+        Ok(&self.input[key_start..key_end])
     }
 
     /// After a list item: `,` continues the list and `close` ends it.
@@ -207,36 +196,21 @@ fn nested(depth: usize) -> Result<usize, JsonSyntaxError> {
     }
 }
 
-/// Whether `key` already names a member between `members_start` and the
-/// current key token. Those members were validated before the current key was
-/// reached, so each is re-read without its own duplicate checks.
-fn key_seen_before(
-    input: &[u8],
-    members_start: usize,
-    current_key_token_start: usize,
-    key: &[u8],
-    depth: usize,
-) -> Result<bool, JsonSyntaxError> {
-    let mut members = Cursor::new(input, members_start, false);
-    loop {
-        members.ws();
-        if members.pos() >= current_key_token_start {
-            return Ok(false);
-        }
-        let (start, end) = members.string()?;
-        if &input[start..end] == key {
-            return Ok(true);
-        }
-        members.byte(b':')?;
-        members.value(depth)?;
-        members.byte(b',')?;
+/// Sorting makes every duplicate adjacent, so one object costs
+/// O(k log k) key comparisons instead of re-reading earlier members per key.
+fn reject_duplicate_keys(mut keys: Vec<&[u8]>) -> Result<(), JsonSyntaxError> {
+    keys.sort_unstable();
+    if keys.windows(2).any(|pair| pair[0] == pair[1]) {
+        Err(JsonSyntaxError::DuplicateKey)
+    } else {
+        Ok(())
     }
 }
 
 /// Validate the exact restricted JSON grammar used by both PSKT decoders,
 /// including recursive duplicate-key rejection.
 pub fn validate_canonical_json(input: &[u8]) -> Result<(), JsonSyntaxError> {
-    let mut cursor = Cursor::new(input, 0, true);
+    let mut cursor = Cursor::new(input);
     cursor.value(0)?;
     cursor.ws();
     if !cursor.rest.is_empty() {
