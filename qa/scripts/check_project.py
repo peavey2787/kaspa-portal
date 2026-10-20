@@ -351,7 +351,8 @@ if 'Value::from(gas)' in mutation_text:
 for forbidden_launcher in ['RUN-ALL-LINUX.sh', 'RUN-ALL-WINDOWS.cmd']:
     if forbidden_launcher in root_file_names:
         fail(f'uppercase launcher forbidden; use lowercase name: {forbidden_launcher}')
-for path in ROOT.rglob('*'):
+# Git-ignored build output (the browser E2E's wasm-pack target) never ships.
+for path in filter(shipped, ROOT.rglob('*')):
     if not path.is_file(): continue
     rel=path.relative_to(ROOT).as_posix()
     lower=rel.lower()

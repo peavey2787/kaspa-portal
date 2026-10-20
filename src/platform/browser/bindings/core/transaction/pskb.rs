@@ -2,13 +2,11 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     chain::utxo::UtxoEntry,
-    transaction::builder::{
-        GlobalThreadPolicy, GlobalThreadTopupRequest, GlobalThreadWithdrawalRequest,
-        PskbGlobalPlan, PskbPlan, SweepInputPolicy,
-    },
+    transaction::builder::{PskbGlobalPlan, PskbPlan, SweepInputPolicy},
 };
 
-use super::{bytes_hex, fixed32};
+use super::bytes_hex;
+use super::requests::{GlobalThreadTopupJson, GlobalThreadWithdrawalJson};
 use crate::platform::browser::bindings::core::{decimal, decode, encode, js_error};
 
 #[wasm_bindgen(js_name = KaspaPskb)]
@@ -63,74 +61,28 @@ impl WasmPskb {
         ))
     }
 
+    /// Plan a global-thread withdrawal from one camelCase request object:
+    /// `threadUtxos`, `covenantScriptPublicKeyHex`,
+    /// `destinationScriptPublicKeyHex`, `redeemScriptHex`, `covenantIdHex`,
+    /// `withdrawalSompi`, `feeSompi`, `csvSequence` and `policy`.
     #[wasm_bindgen(js_name = planGlobalThreadWithdrawal)]
-    pub fn plan_global_thread_withdrawal(
-        &self,
-        thread_utxos_json: &str,
-        covenant_script_public_key_hex: &str,
-        destination_script_public_key_hex: &str,
-        redeem_script_hex: &str,
-        covenant_id_hex: &str,
-        withdrawal_sompi: &str,
-        fee_sompi: &str,
-        csv_sequence: &str,
-        policy_json: &str,
-    ) -> Result<String, JsValue> {
-        let thread_utxos: Vec<UtxoEntry> = decode(thread_utxos_json)?;
-        let covenant_script = bytes_hex(covenant_script_public_key_hex, "covenant script")?;
-        let destination_script =
-            bytes_hex(destination_script_public_key_hex, "destination script")?;
-        let redeem_script = bytes_hex(redeem_script_hex, "redeem script")?;
-        let covenant_id = fixed32(covenant_id_hex, "covenant id")?;
-        let policy: GlobalThreadPolicy = decode(policy_json)?;
-        encode(
-            &self
-                .inner
-                .plan_global_thread_withdrawal(GlobalThreadWithdrawalRequest {
-                    thread_utxos: &thread_utxos,
-                    covenant_script_public_key: &covenant_script,
-                    destination_script_public_key: &destination_script,
-                    redeem_script: &redeem_script,
-                    covenant_id: &covenant_id,
-                    withdrawal: decimal(withdrawal_sompi, "withdrawal")?,
-                    fee: decimal(fee_sompi, "fee")?,
-                    csv_sequence: decimal(csv_sequence, "CSV sequence")?,
-                    policy: &policy,
-                })
-                .map_err(js_error)?,
-        )
+    pub fn plan_global_thread_withdrawal(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: GlobalThreadWithdrawalJson = decode(request_json)?;
+        let plan = request
+            .plan(|request| self.inner.plan_global_thread_withdrawal(request))?
+            .map_err(js_error)?;
+        encode(&plan)
     }
 
+    /// Plan a global-thread top-up from one camelCase request object:
+    /// `threadUtxo`, `walletUtxos`, `covenantScriptPublicKeyHex`,
+    /// `redeemScriptHex`, `covenantIdHex`, `feeSompi` and `policy`.
     #[wasm_bindgen(js_name = planGlobalThreadTopup)]
-    pub fn plan_global_thread_topup(
-        &self,
-        thread_utxo_json: &str,
-        wallet_utxos_json: &str,
-        covenant_script_public_key_hex: &str,
-        redeem_script_hex: &str,
-        covenant_id_hex: &str,
-        fee_sompi: &str,
-        policy_json: &str,
-    ) -> Result<String, JsValue> {
-        let thread_utxo: UtxoEntry = decode(thread_utxo_json)?;
-        let wallet_utxos: Vec<UtxoEntry> = decode(wallet_utxos_json)?;
-        let covenant_script = bytes_hex(covenant_script_public_key_hex, "covenant script")?;
-        let redeem_script = bytes_hex(redeem_script_hex, "redeem script")?;
-        let covenant_id = fixed32(covenant_id_hex, "covenant id")?;
-        let policy: GlobalThreadPolicy = decode(policy_json)?;
-        encode(
-            &self
-                .inner
-                .plan_global_thread_topup(GlobalThreadTopupRequest {
-                    thread_utxo,
-                    wallet_utxos: &wallet_utxos,
-                    covenant_script_public_key: &covenant_script,
-                    redeem_script: &redeem_script,
-                    covenant_id: &covenant_id,
-                    fee: decimal(fee_sompi, "fee")?,
-                    policy: &policy,
-                })
-                .map_err(js_error)?,
-        )
+    pub fn plan_global_thread_topup(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: GlobalThreadTopupJson = decode(request_json)?;
+        let plan = request
+            .plan(|request| self.inner.plan_global_thread_topup(request))?
+            .map_err(js_error)?;
+        encode(&plan)
     }
 }

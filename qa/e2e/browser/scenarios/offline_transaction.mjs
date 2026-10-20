@@ -94,26 +94,26 @@ export async function wasm_offline_transaction(page, fixture, standardNetwork, c
 
     const thread = { ...fixture.transaction.covenant.utxo, tx_id: '21'.repeat(32), index: 2, amount: '100000000' };
     const walletTopup = { ...fixture.transaction.covenant.utxo, tx_id: '22'.repeat(32), index: 3, amount: '20000000' };
-    const withdrawal = JSON.parse(covenantPskb.planGlobalThreadWithdrawal(
-      JSON.stringify([thread]),
-      'aabb',
-      fixture.transaction.covenant.destinationScriptHex,
-      '51ac',
-      '42'.repeat(32),
-      '20000000',
-      '1000000',
-      '9',
-      JSON.stringify({ withdrawalLockTime: '123', withdrawalBranch: 'beneficiary', topupBranch: 'owner', topupSequence: '0' }),
-    ));
-    const topup = JSON.parse(covenantPskb.planGlobalThreadTopup(
-      JSON.stringify(thread),
-      JSON.stringify([walletTopup]),
-      'aabb',
-      '51ac',
-      '42'.repeat(32),
-      '1000000',
-      JSON.stringify({ withdrawalLockTime: '0', withdrawalBranch: null, topupBranch: null, topupSequence: '11' }),
-    ));
+    const withdrawal = JSON.parse(covenantPskb.planGlobalThreadWithdrawal(JSON.stringify({
+      threadUtxos: [thread],
+      covenantScriptPublicKeyHex: 'aabb',
+      destinationScriptPublicKeyHex: fixture.transaction.covenant.destinationScriptHex,
+      redeemScriptHex: '51ac',
+      covenantIdHex: '42'.repeat(32),
+      withdrawalSompi: '20000000',
+      feeSompi: '1000000',
+      csvSequence: '9',
+      policy: { withdrawalLockTime: '123', withdrawalBranch: 'beneficiary', topupBranch: 'owner', topupSequence: '0' },
+    })));
+    const topup = JSON.parse(covenantPskb.planGlobalThreadTopup(JSON.stringify({
+      threadUtxo: thread,
+      walletUtxos: [walletTopup],
+      covenantScriptPublicKeyHex: 'aabb',
+      redeemScriptHex: '51ac',
+      covenantIdHex: '42'.repeat(32),
+      feeSompi: '1000000',
+      policy: { withdrawalLockTime: '0', withdrawalBranch: null, topupBranch: null, topupSequence: '11' },
+    })));
 
     return {
       planned,

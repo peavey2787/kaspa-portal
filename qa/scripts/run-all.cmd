@@ -139,9 +139,11 @@ if errorlevel 1 (
 echo ==^> WASM compile QA
 call :run rustup target add wasm32-unknown-unknown
 if errorlevel 1 exit /b 1
-call :run cargo check --target wasm32-unknown-unknown --features wasm
+call :run cargo clippy --target wasm32-unknown-unknown --features wasm -- -D warnings
 if errorlevel 1 exit /b 1
-call :run cargo check --target wasm32-unknown-unknown --features browser
+call :run cargo clippy --target wasm32-unknown-unknown --features browser -- -D warnings
+if errorlevel 1 exit /b 1
+call :run cargo clippy --manifest-path qa\e2e\wasm\Cargo.toml --target wasm32-unknown-unknown -- -D warnings
 if errorlevel 1 exit /b 1
 
 :formatting_qa

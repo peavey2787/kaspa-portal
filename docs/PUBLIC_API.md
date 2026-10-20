@@ -483,9 +483,9 @@ Decoded transaction lookup includes the transaction payload together with transa
 | `planSelectedSend(walletJson, destination, amountSompi, feeSompi, indicesJson)` | selected UTXO indices JSON | `Promise<string>` wire |
 | `planConsolidation(walletJson, feeSompi)` | wallet JSON, fee decimal | `Promise<string>` wire |
 | `scanMultisigBranch(descriptor, cosigner, depth, prefix)` | descriptor, two `u32` values, prefix | `Promise<string>` scan result |
-| `planMultisigConsolidation(...)` | descriptor, sources JSON, destination, amount/fee decimals, cosigner, change-index hint | `Promise<string>` wire |
-| `planCovenant(...)` | wallet JSON, covenant/change addresses, amount/fee decimals, UTXO index CSV, encoding kind, payload hex, genesis-tag flag | `Promise<string>` wire |
-| `planCovenantWithBinding(...)` | same as `planCovenant` | `Promise<string>` JSON with wire and optional covenant ID |
+| `planMultisigConsolidation(requestJson)` | `{descriptorText, sources, destinationAddress, amountSompi, feeSompi, cosigner, changeIndexHint}` | `Promise<string>` wire |
+| `planCovenant(requestJson)` | `{wallet, covenantAddress, sendAmountSompi, feeSompi, changeAddress, utxoIndicesCsv, encoding}`; `encoding` is `{kind: "payload", payloadHex, tagGenesis}` or `{kind: "boundGenesis"}` | `Promise<string>` wire |
+| `planCovenantWithBinding(requestJson)` | same as `planCovenant` | `Promise<string>` JSON with wire and optional covenant ID |
 | `planFromUtxos(walletJson, destination, amountSompi, feeSompi, utxosJson)` | explicit UTXO JSON | wire string |
 | `setPayload(wireHex, payload)` | wire hex and payload bytes | updated wire string |
 | `setTxLane(wireHex, subnetworkIdHex, gas, txVersion, payload)` | gas is decimal string | updated wire string |
@@ -506,8 +506,8 @@ Decoded transaction lookup includes the transaction payload together with transa
 | `encode(planJson)` | `PskbPlan` JSON | encoded wire string |
 | `encodeDocument(documentJson)` | PSKB document JSON | encoded wire string |
 | `planSweep(...)` | UTXO JSON, source/destination script hex, send amount decimal, global plan JSON, input-policy JSON | `PskbPlan` JSON |
-| `planGlobalThreadWithdrawal(...)` | thread UTXOs, scripts, covenant ID, withdrawal/fee/CSV decimals, policy JSON | withdrawal-plan JSON |
-| `planGlobalThreadTopup(...)` | thread UTXO, wallet UTXOs, scripts, covenant ID, fee decimal, policy JSON | top-up-plan JSON |
+| `planGlobalThreadWithdrawal(requestJson)` | `{threadUtxos, covenantScriptPublicKeyHex, destinationScriptPublicKeyHex, redeemScriptHex, covenantIdHex, withdrawalSompi, feeSompi, csvSequence, policy}` | withdrawal-plan JSON |
+| `planGlobalThreadTopup(requestJson)` | `{threadUtxo, walletUtxos, covenantScriptPublicKeyHex, redeemScriptHex, covenantIdHex, feeSompi, policy}` | top-up-plan JSON |
 
 ### `KaspaContract`
 

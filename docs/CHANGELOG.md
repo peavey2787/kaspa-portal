@@ -53,6 +53,15 @@ One implementation per primitive.
   JSON numbers up to 2^53 - 1 pass both; fractions, exponents, negatives,
   leading zeros and larger numbers pass neither.
 
+- Browser API: `planMultisigConsolidation`, `planCovenant`,
+  `planCovenantWithBinding`, `planGlobalThreadWithdrawal` and
+  `planGlobalThreadTopup` take one camelCase request-JSON object instead of
+  seven to nine positional arguments (see `docs/PUBLIC_API.md`); a covenant
+  `encoding` is `{kind: "payload", payloadHex, tagGenesis}` or
+  `{kind: "boundGenesis"}`, and unknown keys are refused. The wasm builds and
+  the E2E wasm crate are now linted with clippy `-D warnings` in run-all and
+  CI rather than only compiled.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.

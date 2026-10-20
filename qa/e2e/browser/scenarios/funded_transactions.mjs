@@ -37,15 +37,15 @@ export async function wasm_funded_standard_network_transactions(page, funded) {
     }
 
     const consolidation = await transaction.planConsolidation(walletJson, fee);
-    const multisig = await transaction.planMultisigConsolidation(
-      funded.multisig.descriptor,
-      funded.multisig.sourcesJson,
-      funded.wallet.receive_addresses[2],
-      funded.multisig.amountSompi,
-      funded.multisig.feeSompi,
-      0,
-      0,
-    );
+    const multisig = await transaction.planMultisigConsolidation(JSON.stringify({
+      descriptorText: funded.multisig.descriptor,
+      sources: JSON.parse(funded.multisig.sourcesJson),
+      destinationAddress: funded.wallet.receive_addresses[2],
+      amountSompi: funded.multisig.amountSompi,
+      feeSompi: funded.multisig.feeSompi,
+      cosigner: 0,
+      changeIndexHint: 0,
+    }));
     const reviews = [planned, selected, consolidation, multisig]
       .map((wire) => JSON.parse(transaction.review(wire, funded.addressPrefix)));
     portal.disconnect();
@@ -70,28 +70,20 @@ export async function wasm_funded_covenant_network_transactions(page, funded) {
     }));
     await portal.connect();
     const transaction = portal.transaction();
-    const walletJson = JSON.stringify(funded.wallet);
+    const covenantRequest = (payloadHex, tagGenesis) => JSON.stringify({
+      wallet: funded.wallet,
+      covenantAddress: funded.address,
+      sendAmountSompi: '50000000',
+      feeSompi: funded.feeSompi,
+      changeAddress: funded.changeAddress,
+      utxoIndicesCsv: '',
+      encoding: { kind: 'payload', payloadHex, tagGenesis },
+    });
     const covenant = await transaction.planCovenant(
-      walletJson,
-      funded.address,
-      '50000000',
-      funded.feeSompi,
-      funded.changeAddress,
-      '',
-      'payload',
-      '706f7274616c2d7761736d2d653265',
-      false,
+      covenantRequest('706f7274616c2d7761736d2d653265', false),
     );
     const bound = JSON.parse(await transaction.planCovenantWithBinding(
-      walletJson,
-      funded.address,
-      '50000000',
-      funded.feeSompi,
-      funded.changeAddress,
-      '',
-      'payload',
-      '706f7274616c2d7761736d2d626f756e64',
-      true,
+      covenantRequest('706f7274616c2d7761736d2d626f756e64', true),
     ));
     const reviews = [covenant, bound.wire]
       .map((wire) => JSON.parse(transaction.review(wire, funded.addressPrefix)));

@@ -29,7 +29,7 @@ impl WasmVrfSecretKey {
     }
 
     pub fn prove(&self, input: &[u8]) -> core::result::Result<String, JsValue> {
-        let result = crate::randomness::vrf::VrfApi::default()
+        let result = crate::randomness::vrf::VrfApi
             .prove(&self.inner, input)
             .map_err(|error| js(error.to_string()))?;
         serde_json::to_string(&result).map_err(|error| js(format!("encode VRF result: {error}")))
@@ -47,13 +47,15 @@ pub struct WasmRandomness {
     inner: RandomnessApi,
 }
 
-impl WasmRandomness {
-    pub(crate) fn new_inner() -> Self {
+impl Default for WasmRandomness {
+    fn default() -> Self {
         Self {
             inner: RandomnessApi::new(crate::platform::curby_client()),
         }
     }
+}
 
+impl WasmRandomness {
     pub(crate) fn from_api(inner: RandomnessApi) -> Self {
         Self { inner }
     }
@@ -63,7 +65,7 @@ impl WasmRandomness {
 impl WasmRandomness {
     #[wasm_bindgen(constructor)]
     pub fn new() -> WasmRandomness {
-        Self::new_inner()
+        Self::default()
     }
 
     #[wasm_bindgen(js_name = observeKaspaBlock)]

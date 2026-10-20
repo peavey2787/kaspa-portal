@@ -2,22 +2,16 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     chain::utxo::UtxoEntry,
-    transaction::{
-        builder::{
-            CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding,
-            MultisigConsolidationRequest,
-        },
-        interchange::kspt::SignedResponse,
-        model::SigHashType,
-        TransactionApi,
-    },
+    transaction::{interchange::kspt::SignedResponse, model::SigHashType, TransactionApi},
     wallet::account::derivation::WalletData,
 };
 
 use super::{decimal, decode, encode, js_error};
 
 mod pskb;
+mod requests;
 pub use pskb::WasmPskb;
+use requests::{CovenantPlanJson, MultisigConsolidationJson};
 
 #[wasm_bindgen(js_name = KaspaTransaction)]
 pub struct WasmTransaction {
@@ -128,88 +122,39 @@ impl WasmTransaction {
             .map_err(js_error)
     }
 
+    /// Plan a multisig consolidation from one camelCase request object:
+    /// `descriptorText`, `sources`, `destinationAddress`, `amountSompi`,
+    /// `feeSompi`, `cosigner` and `changeIndexHint`.
     #[wasm_bindgen(js_name = planMultisigConsolidation)]
-    pub async fn plan_multisig_consolidation(
-        &self,
-        descriptor_text: &str,
-        sources_json: &str,
-        destination_address: &str,
-        amount_sompi: &str,
-        fee_sompi: &str,
-        cosigner: u32,
-        change_index_hint: u32,
-    ) -> Result<String, JsValue> {
+    pub async fn plan_multisig_consolidation(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: MultisigConsolidationJson = decode(request_json)?;
+        let sources = request.encoded_sources()?;
         self.inner
-            .plan_multisig_consolidation(MultisigConsolidationRequest {
-                descriptor_text,
-                sources_json,
-                destination_address,
-                amount: decimal(amount_sompi, "amount")?,
-                fee: decimal(fee_sompi, "fee")?,
-                cosigner,
-                change_index_hint,
-            })
+            .plan_multisig_consolidation(request.request(&sources)?)
             .await
             .map_err(js_error)
     }
 
+    /// Plan a covenant send from one camelCase request object: `wallet`,
+    /// `covenantAddress`, `sendAmountSompi`, `feeSompi`, `changeAddress`,
+    /// `utxoIndicesCsv` and `encoding` (`{kind: "payload", payloadHex,
+    /// tagGenesis}` or `{kind: "boundGenesis"}`).
     #[wasm_bindgen(js_name = planCovenant)]
-    pub async fn plan_covenant(
-        &self,
-        wallet_json: &str,
-        covenant_address: &str,
-        send_amount_sompi: &str,
-        fee_sompi: &str,
-        change_address: &str,
-        utxo_indices_csv: &str,
-        encoding_kind: &str,
-        payload_hex: &str,
-        tag_genesis: bool,
-    ) -> Result<String, JsValue> {
-        let wallet: WalletData = decode(wallet_json)?;
-        let encoding = covenant_encoding(encoding_kind, payload_hex, tag_genesis)?;
+    pub async fn plan_covenant(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: CovenantPlanJson = decode(request_json)?;
         self.inner
-            .plan_covenant(CovenantBuildRequest {
-                wallet: &wallet,
-                covenant_address,
-                send_amount: decimal(send_amount_sompi, "send amount")?,
-                fee: decimal(fee_sompi, "fee")?,
-                change_address,
-                utxo_indices_csv,
-                dust_policy: CovenantDustPolicy::Preserve,
-                encoding,
-            })
+            .plan_covenant(request.request()?)
             .await
             .map_err(js_error)
     }
 
+    /// [`Self::plan_covenant`] that also reports the bound covenant ID.
     #[wasm_bindgen(js_name = planCovenantWithBinding)]
-    pub async fn plan_covenant_with_binding(
-        &self,
-        wallet_json: &str,
-        covenant_address: &str,
-        send_amount_sompi: &str,
-        fee_sompi: &str,
-        change_address: &str,
-        utxo_indices_csv: &str,
-        encoding_kind: &str,
-        payload_hex: &str,
-        tag_genesis: bool,
-    ) -> Result<String, JsValue> {
-        let wallet: WalletData = decode(wallet_json)?;
-        let encoding = covenant_encoding(encoding_kind, payload_hex, tag_genesis)?;
+    pub async fn plan_covenant_with_binding(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: CovenantPlanJson = decode(request_json)?;
         let (wire, binding) = self
             .inner
-            .plan_covenant_with_binding(CovenantBuildRequest {
-                wallet: &wallet,
-                covenant_address,
-                send_amount: decimal(send_amount_sompi, "send amount")?,
-                fee: decimal(fee_sompi, "fee")?,
-                change_address,
-                utxo_indices_csv,
-                dust_policy: CovenantDustPolicy::Preserve,
-                encoding,
-            })
+            .plan_covenant_with_binding(request.request()?)
             .await
             .map_err(js_error)?;
         Ok(serde_json::json!({
@@ -361,23 +306,6 @@ impl WasmTransaction {
     #[wasm_bindgen(js_name = broadcastWire)]
     pub async fn broadcast_wire(&self, wire_hex: &str) -> Result<String, JsValue> {
         self.broadcast(wire_hex).await
-    }
-}
-
-fn covenant_encoding<'a>(
-    kind: &str,
-    payload_hex: &'a str,
-    tag_genesis: bool,
-) -> Result<CovenantEncoding<'a>, JsValue> {
-    match kind {
-        "payload" => Ok(CovenantEncoding::Payload {
-            payload_hex,
-            tag_genesis,
-        }),
-        "boundGenesis" | "bound_genesis" => Ok(CovenantEncoding::BoundGenesis),
-        _ => Err(JsValue::from_str(
-            "encoding kind must be 'payload' or 'boundGenesis'",
-        )),
     }
 }
 
