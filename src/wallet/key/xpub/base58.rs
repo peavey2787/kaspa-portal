@@ -22,9 +22,9 @@ const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghij
 
 // ─── Base58 Encoding ──────────────────────────────────────────────────
 
-/// Most Base58 digits a [`MAX_BASE58_BYTES`] value needs: each byte carries
-/// log58(256) < 1.38 digits.
-const MAX_BASE58_CHARS: usize = MAX_BASE58_BYTES * 138 / 100 + 1;
+/// Most Base58 digits a [`MAX_BASE58_BYTES`] value needs:
+/// ceil(128 * log58(256)) = ceil(174.80) = 175, reached by 128 bytes of 0xff.
+const MAX_BASE58_CHARS: usize = 175;
 
 /// Why bytes could not be written as Base58 text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
