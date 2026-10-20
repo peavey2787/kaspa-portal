@@ -36,6 +36,11 @@ One implementation per primitive.
   truncated, and a full 128-byte value now encodes (175 characters) rather
   than failing. The power-on self-test pins Base58Check(`00`) = `1Wh4bh`.
 
+- The animated-QR decoder ends its session on every rejected frame (mixed
+  session, conflicting duplicate, digest mismatch), so the next transfer
+  starts clean without a `reset_decoder` call; text that is not a frame
+  leaves a transfer in progress untouched.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.

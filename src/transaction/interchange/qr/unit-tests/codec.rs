@@ -88,10 +88,15 @@ fn conflicting_mixed_and_forged_frames_are_rejected() {
     assert!(decode_frame(&frame(&original, 0, 2, &original[1..92]))
         .unwrap_err()
         .contains("Conflicting duplicate"));
-    assert!(decode_frame(&frame(&other, 1, 2, &other[91..182]))
+    assert_eq!(decoder_progress(), "0/0");
+
+    assert_eq!(
+        decode_frame(&frame(&original, 0, 2, &original[..91])),
+        Ok(None)
+    );
+    assert!(decode_frame(&frame(&other, 1, 2, &other[91..]))
         .unwrap_err()
         .contains("Mixed multi-frame"));
-    reset_decoder();
     assert_eq!(decoder_progress(), "0/0");
 
     // Fragments that do not hash to the announced session are refused.
@@ -108,6 +113,46 @@ fn conflicting_mixed_and_forged_frames_are_rejected() {
     assert!(decode_frame("00")
         .unwrap_err()
         .contains("Invalid multi-frame"));
+}
+
+#[test]
+fn reset_decoder_abandons_a_transfer_in_progress() {
+    let original = data(182);
+    assert_eq!(
+        decode_frame(&frame(&original, 0, 2, &original[..91])),
+        Ok(None)
+    );
+    assert_eq!(decoder_progress(), r#"{"total":2,"count":1,"bits":[1,0]}"#);
+    reset_decoder();
+    assert_eq!(decoder_progress(), "0/0");
+    assert_eq!(
+        decode_frame(&frame(&original, 1, 2, &original[91..])),
+        Ok(None)
+    );
+}
+
+#[test]
+fn a_rejected_frame_never_blocks_the_next_transfer() {
+    let first = data(182);
+    let second = data(183);
+    assert_eq!(decode_frame(&frame(&first, 0, 2, &first[..91])), Ok(None));
+    assert!(decode_frame(&frame(&second, 1, 2, &second[91..]))
+        .unwrap_err()
+        .contains("Mixed multi-frame"));
+    // No reset_decoder call: the second transfer assembles on its own.
+    assert_eq!(decode_frame(&frame(&second, 0, 2, &second[..91])), Ok(None));
+    assert_eq!(
+        decode_frame(&frame(&second, 1, 2, &second[91..])),
+        Ok(Some(hex::encode(&second)))
+    );
+
+    // Text that is not a frame leaves a transfer in progress untouched.
+    assert_eq!(decode_frame(&frame(&first, 0, 2, &first[..91])), Ok(None));
+    assert!(decode_frame("00").is_err());
+    assert_eq!(
+        decode_frame(&frame(&first, 1, 2, &first[91..])),
+        Ok(Some(hex::encode(&first)))
+    );
 }
 
 #[test]

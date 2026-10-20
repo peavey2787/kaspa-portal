@@ -7,6 +7,7 @@
 //! Animated-QR frame encoding and decoding for air-gapped transfer between
 //! Kaspa Portal producers and consumers.
 
+use crate::transaction::interchange::qr::frame::ParsedFrame;
 use serde::Serialize;
 use std::cell::RefCell;
 use std::fmt::Write;
@@ -173,44 +174,52 @@ impl DecoderState {
         }
         Ok(())
     }
+
+    /// Record one frame of the session; the assembled payload once every
+    /// frame is in, `None` while frames are still missing.
+    fn absorb(&mut self, frame: &ParsedFrame<'_>) -> Result<Option<Vec<u8>>, String> {
+        self.accept_session(frame.session_id, frame.total_frames)?;
+        let index = usize::from(frame.frame_index);
+        if self.received[index] {
+            return if self.fragments[index] == frame.fragment {
+                Ok(None)
+            } else {
+                Err("Conflicting duplicate QR frame rejected".to_string())
+            };
+        }
+        self.received[index] = true;
+        self.fragments[index] = frame.fragment.to_vec();
+        self.assembled()
+    }
+
+    fn assembled(&self) -> Result<Option<Vec<u8>>, String> {
+        let total = usize::from(self.total_frames);
+        if !self.received[..total].iter().all(|received| *received) {
+            return Ok(None);
+        }
+        let complete = self.fragments[..total].concat();
+        if !crate::transaction::interchange::qr::frame::verify_session(&complete, &self.session_id)
+        {
+            return Err("Assembled QR session digest mismatch".to_string());
+        }
+        Ok(Some(complete))
+    }
 }
 
+/// Feed one scanned frame to the decoder. A completed transfer and every
+/// rejected frame both end the session, so the next scan always starts clean;
+/// text that is not a frame at all leaves a session in progress untouched.
 pub fn decode_frame(frame_hex: &str) -> Result<Option<String>, String> {
     let payload = hex::decode(frame_hex).map_err(|error| format!("Invalid hex: {}", error))?;
     let frame = crate::transaction::interchange::qr::frame::parse_frame(&payload)
         .map_err(|error| format!("Invalid multi-frame QR: {:?}", error))?;
-    let frame_index = usize::from(frame.frame_index);
-    let total = usize::from(frame.total_frames);
-
     DECODER.with(|cell| {
         let mut state = cell.borrow_mut();
-        state.accept_session(frame.session_id, frame.total_frames)?;
-
-        if state.received[frame_index] {
-            if state.fragments[frame_index].as_slice() != frame.fragment {
-                return Err("Conflicting duplicate QR frame rejected".to_string());
-            }
-            return Ok(None);
-        }
-        state.received[frame_index] = true;
-        state.fragments[frame_index] = frame.fragment.to_vec();
-
-        if !(0..total).all(|index| state.received[index]) {
-            return Ok(None);
-        }
-
-        let mut complete = Vec::new();
-        for index in 0..total {
-            complete.extend_from_slice(&state.fragments[index]);
-        }
-        let expected_session = state.session_id;
-        if !crate::transaction::interchange::qr::frame::verify_session(&complete, &expected_session)
-        {
+        let outcome = state.absorb(&frame);
+        if !matches!(outcome, Ok(None)) {
             state.reset();
-            return Err("Assembled QR session digest mismatch".to_string());
         }
-        state.reset();
-        Ok(Some(hex::encode(complete)))
+        outcome.map(|complete| complete.map(hex::encode))
     })
 }
 
