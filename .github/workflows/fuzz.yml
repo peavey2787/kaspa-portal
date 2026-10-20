@@ -45,7 +45,7 @@ jobs:
         with:
           workspaces: qa/tests/fuzz
       - name: Install cargo-fuzz
-        run: cargo +nightly install cargo-fuzz --version 0.12.0 --locked
+        run: cargo +nightly install cargo-fuzz --version 0.13.2 --locked
       - name: Fuzz ${{ matrix.target }}
         run: >
           cargo +nightly fuzz run --fuzz-dir qa/tests/fuzz ${{ matrix.target }}
