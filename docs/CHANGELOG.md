@@ -31,6 +31,11 @@ One implementation per primitive.
   removed. UTXO outpoints must be exactly 37 bytes, and an entry whose script
   version is not 0 is refused rather than relabelled as version 0.
 
+- Base58 and Base58Check encoding return `Result`: input over 128 bytes and
+  an output buffer too small for the whole text are refused instead of
+  truncated, and a full 128-byte value now encodes (175 characters) rather
+  than failing. The power-on self-test pins Base58Check(`00`) = `1Wh4bh`.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.

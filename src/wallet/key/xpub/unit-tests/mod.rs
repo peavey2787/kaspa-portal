@@ -81,8 +81,7 @@ fn base58check_roundtrips_boundary_payloads_and_rejects_corruption() {
         &[0x55u8; XPUB_PAYLOAD_LEN][..],
     ] {
         let mut encoded = [0u8; 192];
-        let encoded_len = base58check_encode(payload, &mut encoded);
-        assert!(encoded_len > 0);
+        let encoded_len = base58check_encode(payload, &mut encoded).expect("fits");
 
         let mut decoded = [0u8; 128];
         let decoded_len = base58check_decode(&encoded[..encoded_len], &mut decoded).unwrap_or(0);
@@ -96,7 +95,7 @@ fn base58check_roundtrips_boundary_payloads_and_rejects_corruption() {
     assert_eq!(base58check_decode(b"0OIl", &mut decoded).unwrap_or(0), 0);
 
     let mut encoded = [0u8; 192];
-    let encoded_len = base58check_encode(b"checksum", &mut encoded);
+    let encoded_len = base58check_encode(b"checksum", &mut encoded).expect("fits");
     encoded[encoded_len - 1] = if encoded[encoded_len - 1] == b'1' {
         b'2'
     } else {
@@ -109,17 +108,23 @@ fn base58check_roundtrips_boundary_payloads_and_rejects_corruption() {
 }
 
 #[test]
-fn base58_encoding_respects_output_capacity_and_leading_zeroes() {
-    let mut empty = [];
-    assert_eq!(base58_encode(b"nonempty", &mut empty), 0);
+fn base58_encoding_refuses_an_output_it_would_have_to_cut_short() {
+    use base58::Base58EncodeError::BufferTooSmall;
 
-    let mut one = [0u8; 1];
-    assert_eq!(base58_encode(&[0, 0, 1], &mut one), 1);
-    assert_eq!(one, [b'1']);
+    let mut empty = [];
+    assert_eq!(base58_encode(b"nonempty", &mut empty), Err(BufferTooSmall));
+    assert_eq!(base58_encode(&[], &mut empty), Ok(0));
+
+    let mut short = [0u8; 2];
+    assert_eq!(base58_encode(&[0, 0, 1], &mut short), Err(BufferTooSmall));
+    assert_eq!(short, [0, 0], "nothing is written when it does not fit");
 
     let mut exact = [0u8; 3];
-    assert_eq!(base58_encode(&[0, 0, 1], &mut exact), 3);
+    assert_eq!(base58_encode(&[0, 0, 1], &mut exact), Ok(3));
     assert_eq!(&exact, b"112");
+
+    let mut checked = [0u8; 5];
+    assert_eq!(base58check_encode(&[0], &mut checked), Err(BufferTooSmall));
 }
 
 #[test]
@@ -141,8 +146,7 @@ fn account_xprv_import_rejects_each_metadata_boundary_with_valid_checksum() {
         payload.copy_from_slice(&decoded[..XPUB_PAYLOAD_LEN]);
         payload[offset] = replacement;
         let mut invalid = [0u8; XPRV_MAX_LEN];
-        let invalid_len = base58check_encode(&payload, &mut invalid);
-        assert!(invalid_len > 0, "offset {offset}");
+        let invalid_len = base58check_encode(&payload, &mut invalid).expect("fits");
         crate::test_support::assert_err(
             &import_xprv_with_metadata(&invalid[..invalid_len]),
             "InvalidKey",
@@ -188,9 +192,24 @@ fn base58_extreme_lengths_and_each_checksum_byte_are_rejected() {
     let mut encoded = [0u8; 512];
     let mut decoded = [0u8; 128];
 
-    // A full 128-byte non-zero integer cannot be represented in the fixed
-    // 128-character encoder scratch space and must fail closed.
-    assert_eq!(base58_encode(&[0xff; 128], &mut encoded), 0);
+    // The largest input needs 175 digits; it encodes whole and round-trips.
+    let encoded_len = base58_encode(&[0xff; 128], &mut encoded).expect("largest input");
+    assert_eq!(encoded_len, 175);
+    let mut raw = [0u8; 128];
+    assert_eq!(
+        base58::base58_decode(&encoded[..encoded_len], &mut raw),
+        Ok(128)
+    );
+    assert_eq!(raw, [0xff; 128]);
+    // One byte more is refused rather than truncated.
+    assert_eq!(
+        base58_encode(&[0xff; 129], &mut encoded),
+        Err(base58::Base58EncodeError::InputTooLong)
+    );
+    assert_eq!(
+        base58check_encode(&[0xff; 125], &mut encoded),
+        Err(base58::Base58EncodeError::InputTooLong)
+    );
     // Excessively long Base58 input must not overrun the fixed decode integer.
     assert_eq!(
         base58check_decode(&[b'z'; 300], &mut decoded),
@@ -204,8 +223,7 @@ fn base58_extreme_lengths_and_each_checksum_byte_are_rejected() {
         raw[..payload.len()].copy_from_slice(payload);
         raw[payload.len()..payload.len() + 4].copy_from_slice(&checksum[..4]);
         raw[payload.len() + checksum_index] ^= 1;
-        let encoded_len = base58_encode(&raw[..payload.len() + 4], &mut encoded);
-        assert!(encoded_len > 0);
+        let encoded_len = base58_encode(&raw[..payload.len() + 4], &mut encoded).expect("fits");
         assert_eq!(
             base58check_decode(&encoded[..encoded_len], &mut decoded).unwrap_or(0),
             0

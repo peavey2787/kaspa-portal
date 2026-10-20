@@ -42,7 +42,8 @@ fn serialize_account_xprv(
 
     let length = base58check_encode(&payload, out);
     zeroize_buf(&mut payload);
-    Ok(length)
+    // `XPRV_MAX_LEN` holds any 82-byte payload, so this cannot fail.
+    length.map_err(|_| Bip32Error::InvalidKey)
 }
 
 /// Serialize an already-imported account XPrv without discarding its metadata.

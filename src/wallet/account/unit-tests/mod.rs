@@ -150,7 +150,8 @@ fn base58_kpub_imports_to_the_same_wallet_as_canonical_text() {
 
     let payload = decode_kpub_text(&canonical_account_text()).expect("canonical account text");
     let mut encoded = [0u8; 128];
-    let length = crate::wallet::key::xpub::base58::base58check_encode(&payload, &mut encoded);
+    let length = crate::wallet::key::xpub::base58::base58check_encode(&payload, &mut encoded)
+        .expect("kpub fits");
     let base58 = core::str::from_utf8(&encoded[..length])
         .expect("ASCII")
         .to_string();

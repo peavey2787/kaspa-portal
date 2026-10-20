@@ -13,25 +13,25 @@ fn test_base58_encoding() -> bool {
     // Test vector: empty → ""
     let mut out = [0u8; 64];
     let len = base58_encode(&[], &mut out);
-    if len != 0 {
+    if len != Ok(0) {
         return false;
     }
 
     // Test vector: [0] → "1"
     let len = base58_encode(&[0], &mut out);
-    if len != 1 || out[0] != b'1' {
+    if len != Ok(1) || out[0] != b'1' {
         return false;
     }
 
     // Test vector: [0, 0, 1] → "112"
     let len = base58_encode(&[0, 0, 1], &mut out);
-    if len != 3 || &out[..3] != b"112" {
+    if len != Ok(3) || &out[..3] != b"112" {
         return false;
     }
 
     // Test vector: "Hello World" → "JxF12TrwUP45BMd"
     let len = base58_encode(b"Hello World", &mut out);
-    if len != 15 || &out[..15] != b"JxF12TrwUP45BMd" {
+    if len != Ok(15) || &out[..15] != b"JxF12TrwUP45BMd" {
         return false;
     }
 
@@ -44,8 +44,7 @@ fn test_base58check() -> bool {
     // (this is used as Bitcoin version 0x00 → address starting with "1")
     let mut out = [0u8; 64];
     let len = base58check_encode(&[0u8; 1], &mut out);
-    // SHA256d([0x00]) checksum is known, result should start with '1'
-    if len == 0 || out[0] != b'1' {
+    if len != Ok(6) || &out[..6] != b"1Wh4bh" {
         return false;
     }
 

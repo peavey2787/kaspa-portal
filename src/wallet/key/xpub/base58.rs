@@ -22,52 +22,72 @@ const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghij
 
 // ─── Base58 Encoding ──────────────────────────────────────────────────
 
-/// Encode bytes as base58 string. Returns the number of chars written to `out`.
+/// Most Base58 digits a [`MAX_BASE58_BYTES`] value needs: each byte carries
+/// log58(256) < 1.38 digits.
+const MAX_BASE58_CHARS: usize = MAX_BASE58_BYTES * 138 / 100 + 1;
+
+/// Why bytes could not be written as Base58 text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Base58EncodeError {
+    /// More than [`MAX_BASE58_BYTES`] to encode.
+    InputTooLong,
+    /// `out` cannot hold the whole encoding.
+    BufferTooSmall,
+}
+
+/// Encode bytes as Base58 into `out`; returns the number of characters
+/// written. Input longer than [`MAX_BASE58_BYTES`] and an `out` too small for
+/// the whole encoding are refused, so the text is never silently cut short.
 ///
-/// Algorithm: repeatedly divmod by 58 on the big-endian integer,
-/// then reverse. Leading zero bytes become '1' characters.
-pub(crate) fn base58_encode(data: &[u8], out: &mut [u8]) -> usize {
+/// Leading zero bytes become '1' characters; the rest is the big-endian
+/// integer's base-58 digits.
+pub(crate) fn base58_encode(data: &[u8], out: &mut [u8]) -> Result<usize, Base58EncodeError> {
+    if data.len() > MAX_BASE58_BYTES {
+        return Err(Base58EncodeError::InputTooLong);
+    }
     let leading_zeros = data.iter().take_while(|byte| **byte == 0).count();
-    let mut buf = [0u8; 128];
-    let len = data.len().min(buf.len());
-    buf[..len].copy_from_slice(&data[..len]);
+    let mut number = [0u8; MAX_BASE58_BYTES];
+    number[..data.len()].copy_from_slice(data);
+    let mut digits = [0u8; MAX_BASE58_CHARS];
+    let digit_count = base58_digits(&mut number[..data.len()], leading_zeros, &mut digits);
+    let total = leading_zeros + digit_count;
+    let result = out
+        .get_mut(..total)
+        .ok_or(Base58EncodeError::BufferTooSmall)
+        .map(|target| {
+            target[..leading_zeros].fill(b'1');
+            for (slot, digit) in target[leading_zeros..]
+                .iter_mut()
+                .zip(digits[..digit_count].iter().rev())
+            {
+                *slot = *digit;
+            }
+            total
+        });
+    digits.fill(0);
+    result
+}
 
-    let mut encoded = [0u8; 128];
-    let mut encoded_len = 0usize;
-    let mut start = leading_zeros.min(len);
-    for _ in 0..len.saturating_mul(2).saturating_add(1) {
-        start = buf
-            .get(start..len)
-            .and_then(|slice| slice.iter().position(|byte| *byte != 0))
-            .and_then(|relative| start.checked_add(relative))
-            .unwrap_or(len);
-        if start >= len {
-            break;
-        }
-
-        let mut remainder: u32 = 0;
-        for byte in &mut buf[start..len] {
-            let value = remainder.wrapping_shl(8).wrapping_add(u32::from(*byte));
+/// Divide `number` by 58 until it is zero, collecting the remainders as
+/// least-significant-first digits. `number` is consumed (left all zero).
+fn base58_digits(
+    number: &mut [u8],
+    mut start: usize,
+    digits: &mut [u8; MAX_BASE58_CHARS],
+) -> usize {
+    let mut count = 0;
+    while let Some(offset) = number[start..].iter().position(|byte| *byte != 0) {
+        start += offset;
+        let mut remainder = 0u32;
+        for byte in &mut number[start..] {
+            let value = (remainder << 8) | u32::from(*byte);
             *byte = (value / 58) as u8;
             remainder = value % 58;
         }
-        if encoded_len >= encoded.len() {
-            return 0;
-        }
-        encoded[encoded_len] = BASE58_ALPHABET[remainder as usize];
-        encoded_len += 1;
+        digits[count] = BASE58_ALPHABET[remainder as usize];
+        count += 1;
     }
-
-    let mut pos = leading_zeros.min(out.len());
-    out[..pos].fill(b'1');
-    for digit in encoded[..encoded_len].iter().rev().copied() {
-        let Some(slot) = out.get_mut(pos) else {
-            break;
-        };
-        *slot = digit;
-        pos += 1;
-    }
-    pos
+    count
 }
 
 /// SHA256 double hash (SHA256d): SHA256(SHA256(data))
@@ -85,17 +105,18 @@ pub(crate) fn sha256d(data: &[u8]) -> [u8; 32] {
 
 /// Base58Check encode: data + 4-byte SHA256d checksum → base58 string.
 /// Returns the number of chars written to `out`.
-pub(crate) fn base58check_encode(data: &[u8], out: &mut [u8]) -> usize {
-    // Compute checksum
-    let checksum = sha256d(data);
-
-    // Build payload + checksum
-    let total_len = data.len() + 4;
-    let mut buf = [0u8; 128];
+pub(crate) fn base58check_encode(data: &[u8], out: &mut [u8]) -> Result<usize, Base58EncodeError> {
+    let total_len = data
+        .len()
+        .checked_add(4)
+        .filter(|length| *length <= MAX_BASE58_BYTES)
+        .ok_or(Base58EncodeError::InputTooLong)?;
+    let mut buf = [0u8; MAX_BASE58_BYTES];
     buf[..data.len()].copy_from_slice(data);
-    buf[data.len()..total_len].copy_from_slice(&checksum[..4]);
-
-    base58_encode(&buf[..total_len], out)
+    buf[data.len()..total_len].copy_from_slice(&sha256d(data)[..4]);
+    let result = base58_encode(&buf[..total_len], out);
+    buf.fill(0);
+    result
 }
 
 // ─── Base58 Decode ───────────────────────────────────────────────────
