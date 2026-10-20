@@ -16,6 +16,13 @@ One implementation per primitive.
   session must reassemble in any frame order. New `qr_session` target; a
   nightly `fuzz` workflow runs each libFuzzer target for five minutes.
 
+- KSPT decoding is canonical: a script length below 255 written in the
+  three-byte long form is refused (`WireError::NonCanonicalEncoding`,
+  `PsktError::NonCanonicalEncoding`). Signature records keep the order they
+  were added, because anti-klepto proofs bind each signature to its slot. The
+  `kspt` fuzz oracle requires every accepted envelope to re-encode to exactly
+  its input bytes.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.

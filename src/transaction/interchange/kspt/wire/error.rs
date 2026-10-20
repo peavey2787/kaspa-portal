@@ -22,9 +22,10 @@ pub enum WireError {
     TooManyOutputs,
     PayloadTooLong,
     UnsupportedTransactionVersion,
+    NonCanonicalEncoding,
 }
 
-const WIRE_ERROR_MESSAGES: [&str; 19] = [
+const WIRE_ERROR_MESSAGES: [&str; 20] = [
     "KSPT is truncated",
     "KSPT output buffer is too small",
     "invalid KSPT magic",
@@ -44,6 +45,7 @@ const WIRE_ERROR_MESSAGES: [&str; 19] = [
     "KSPT declares more outputs than the consumer permits",
     "KSPT payload exceeds the consumer limit",
     "unsupported KSPT transaction version",
+    "KSPT encodes a value in a non-canonical form",
 ];
 
 impl fmt::Display for WireError {

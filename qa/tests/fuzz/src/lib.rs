@@ -55,19 +55,18 @@ pub fn script(data: &[u8]) {
     let _ = extract_csv_sequence(data);
 }
 
-/// A compact KSPT Portal accepts re-encodes to a stable form.
+/// A compact KSPT Portal accepts re-encodes to exactly the bytes it came from.
 pub fn kspt(data: &[u8]) {
     let mut transaction = Transaction::try_new().expect("transaction storage");
     if parse_compact_kspt(data, &mut transaction).is_err() {
         return;
     }
-    let encoded = serialize_compact_kspt_vec(&transaction).expect("accepted KSPT re-encodes");
-    let mut reparsed = Transaction::try_new().expect("transaction storage");
-    parse_compact_kspt(&encoded, &mut reparsed).expect("re-encoded KSPT parses");
+    // KSPT is canonical: every accepted envelope is the one encoding of the
+    // transaction it describes.
     assert_eq!(
-        serialize_compact_kspt_vec(&reparsed).expect("reparsed KSPT re-encodes"),
-        encoded,
-        "KSPT encoding is not stable"
+        serialize_compact_kspt_vec(&transaction).expect("accepted KSPT re-encodes"),
+        data,
+        "accepted KSPT is not in canonical form"
     );
 }
 

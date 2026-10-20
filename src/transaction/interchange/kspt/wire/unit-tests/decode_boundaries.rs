@@ -169,10 +169,75 @@ fn canonical_decoder_rejects_header_capacity_and_required_trailer_boundaries() {
     );
 }
 
+const SIGNATURE_POSITION_OFFSET: usize = 113;
+/// The second record follows position + sighash + 64-byte signature.
+const SECOND_SIGNATURE_POSITION_OFFSET: usize = SIGNATURE_POSITION_OFFSET + 66;
+/// header (6) + global (47) + output amount/version (10)
+const OUTPUT_SCRIPT_PREFIX_OFFSET: usize = 63;
+
+/// One input carrying two signature records whose public-key positions are
+/// given in the order the model added them.
+struct TwoSignatureSource(OneInputSource, [u8; 2]);
+
+impl TwoSignatureSource {
+    fn new(positions: [u8; 2]) -> Self {
+        Self(OneInputSource::new(), positions)
+    }
+}
+
+impl EncodeSource for TwoSignatureSource {
+    fn covenant_execution(&self, _index: usize) -> Option<CovenantExecution> {
+        None
+    }
+    fn global(&self) -> Global<'_> {
+        self.0.global()
+    }
+    fn input(&self, index: usize) -> Input<'_> {
+        self.0.input(index)
+    }
+    fn signature_count(&self, _input: usize) -> usize {
+        2
+    }
+    fn signature(&self, _input: usize, slot: usize) -> Signature {
+        let position = self.1[slot];
+        Signature {
+            position,
+            sighash: 0x01,
+            bytes: [position; 64],
+        }
+    }
+    fn redeem(&self, input: usize) -> &[u8] {
+        self.0.redeem(input)
+    }
+    fn output(&self, index: usize) -> Output<'_> {
+        self.0.output(index)
+    }
+    fn network(&self) -> u8 {
+        self.0.network()
+    }
+    fn stealth(&self) -> Option<[u8; 32]> {
+        None
+    }
+    fn input_derivation(&self, _index: usize) -> Option<Derivation> {
+        None
+    }
+    fn output_derivation(&self, _index: usize) -> Option<Derivation> {
+        None
+    }
+    fn input_ms45(&self, _index: usize) -> Option<Ms45Derivation> {
+        None
+    }
+    fn output_ms45(&self, _index: usize) -> Option<Ms45Derivation> {
+        None
+    }
+    fn covenant(&self, _index: usize) -> Option<Covenant> {
+        None
+    }
+}
+
 #[test]
 fn canonical_decoder_rejects_signature_and_script_boundaries() {
     const SIGNATURE_COUNT_OFFSET: usize = 112;
-    const SIGNATURE_POSITION_OFFSET: usize = 113;
     const SIGNATURE_SIGHASH_OFFSET: usize = 114;
 
     let mut wire = encode_vec(&OneInputSource::new()).expect("one-input vector");
@@ -183,68 +248,47 @@ fn canonical_decoder_rejects_signature_and_script_boundaries() {
     wire[SIGNATURE_SIGHASH_OFFSET] = 0;
     assert_wire_error(&wire, WireError::InvalidSigHashType);
 
-    struct TwoSignatureSource(OneInputSource);
-    impl EncodeSource for TwoSignatureSource {
-        fn covenant_execution(&self, _index: usize) -> Option<CovenantExecution> {
-            None
-        }
-        fn global(&self) -> Global<'_> {
-            self.0.global()
-        }
-        fn input(&self, index: usize) -> Input<'_> {
-            self.0.input(index)
-        }
-        fn signature_count(&self, _input: usize) -> usize {
-            2
-        }
-        fn signature(&self, _input: usize, slot: usize) -> Signature {
-            Signature {
-                position: slot as u8,
-                sighash: 0x01,
-                bytes: [0x44; 64],
-            }
-        }
-        fn redeem(&self, input: usize) -> &[u8] {
-            self.0.redeem(input)
-        }
-        fn output(&self, index: usize) -> Output<'_> {
-            self.0.output(index)
-        }
-        fn network(&self) -> u8 {
-            self.0.network()
-        }
-        fn stealth(&self) -> Option<[u8; 32]> {
-            None
-        }
-        fn input_derivation(&self, _index: usize) -> Option<Derivation> {
-            None
-        }
-        fn output_derivation(&self, _index: usize) -> Option<Derivation> {
-            None
-        }
-        fn input_ms45(&self, _index: usize) -> Option<Ms45Derivation> {
-            None
-        }
-        fn output_ms45(&self, _index: usize) -> Option<Ms45Derivation> {
-            None
-        }
-        fn covenant(&self, _index: usize) -> Option<Covenant> {
-            None
-        }
-    }
-    let mut wire =
-        encode_vec(&TwoSignatureSource(OneInputSource::new())).expect("two-signature vector");
-    // Second record follows position+sighash+64-byte signature = 66 bytes.
-    wire[SIGNATURE_POSITION_OFFSET + 66] = wire[SIGNATURE_POSITION_OFFSET];
+    let mut wire = encode_vec(&TwoSignatureSource::new([0, 1])).expect("two-signature vector");
+    wire[SECOND_SIGNATURE_POSITION_OFFSET] = wire[SIGNATURE_POSITION_OFFSET];
     assert_wire_error(&wire, WireError::DuplicateSignaturePosition);
 
     let mut wire = encode_vec(&VectorSource::minimal(MAX_SCRIPT_SIZE)).expect("max script vector");
-    // header (6) + global (47) + output amount/version (10)
-    let script_prefix = 63usize;
+    let script_prefix = OUTPUT_SCRIPT_PREFIX_OFFSET;
     assert_eq!(wire[script_prefix], EXTENDED_SCRIPT_LENGTH);
     wire[script_prefix + 1..script_prefix + 3]
         .copy_from_slice(&((MAX_SCRIPT_SIZE + 1) as u16).to_le_bytes());
     assert_wire_error(&wire, WireError::ScriptTooLong);
+}
+
+#[test]
+fn signature_record_order_is_the_order_signatures_were_added() {
+    // Anti-klepto proofs name a signature by its slot, so record order is
+    // data rather than an alternative encoding; it must survive unchanged.
+    for positions in [[2, 0], [0, 2]] {
+        let wire = encode_vec(&TwoSignatureSource::new(positions)).expect("two-signature vector");
+        assert_eq!(wire[SIGNATURE_POSITION_OFFSET], positions[0]);
+        assert_eq!(wire[SIGNATURE_POSITION_OFFSET + 2], positions[0]);
+        assert_eq!(wire[SECOND_SIGNATURE_POSITION_OFFSET], positions[1]);
+        assert_eq!(wire[SECOND_SIGNATURE_POSITION_OFFSET + 2], positions[1]);
+        assert_eq!(
+            validate(&wire).map(|envelope| envelope.flags),
+            Ok(FLAG_SIGNED_OR_COMPLETE)
+        );
+    }
+}
+
+#[test]
+fn canonical_decoder_rejects_a_long_form_length_for_a_short_script() {
+    let short = usize::from(EXTENDED_SCRIPT_LENGTH) - 1;
+    let mut wire = encode_vec(&VectorSource::minimal(short)).expect("short script vector");
+    assert_eq!(usize::from(wire[OUTPUT_SCRIPT_PREFIX_OFFSET]), short);
+    let mut long_form = vec![EXTENDED_SCRIPT_LENGTH];
+    long_form.extend_from_slice(&(short as u16).to_le_bytes());
+    wire.splice(
+        OUTPUT_SCRIPT_PREFIX_OFFSET..=OUTPUT_SCRIPT_PREFIX_OFFSET,
+        long_form,
+    );
+    assert_wire_error(&wire, WireError::NonCanonicalEncoding);
 }
 
 #[test]

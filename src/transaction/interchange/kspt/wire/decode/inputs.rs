@@ -73,6 +73,8 @@ fn read_signatures<S: DecodeSink>(
     count: u8,
     sink: &mut S,
 ) -> Result<(), DecodeError<S::Error>> {
+    // Records stay in the order they were added: anti-klepto proofs bind each
+    // signature to its slot, so the order is data and is not normalised.
     let mut seen = [false; 256];
     for slot in 0..count {
         let signature = read_signature(reader, &mut seen)?;

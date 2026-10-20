@@ -47,7 +47,12 @@ impl<'a> Reader<'a> {
     pub fn script(&mut self) -> Result<&'a [u8], WireError> {
         let prefix = self.u8()?;
         let len = if prefix == EXTENDED_SCRIPT_LENGTH {
-            usize::from(self.u16()?)
+            let len = usize::from(self.u16()?);
+            // Lengths below the marker have exactly one encoding: the short form.
+            if len < usize::from(EXTENDED_SCRIPT_LENGTH) {
+                return Err(WireError::NonCanonicalEncoding);
+            }
+            len
         } else {
             usize::from(prefix)
         };

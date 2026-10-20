@@ -51,6 +51,8 @@ pub enum PsktError {
     StorageExhausted,
     /// The transaction version is newer than this codec supports.
     UnsupportedTransactionVersion,
+    /// A field has more than one encoding and this one is not the canonical form.
+    NonCanonicalEncoding,
 }
 
 impl From<super::wire::WireError> for PsktError {
@@ -74,6 +76,7 @@ impl From<super::wire::WireError> for PsktError {
             WireError::TooManyOutputs => Self::TooManyOutputs,
             WireError::PayloadTooLong => Self::PayloadTooLong,
             WireError::UnsupportedTransactionVersion => Self::UnsupportedTransactionVersion,
+            WireError::NonCanonicalEncoding => Self::NonCanonicalEncoding,
         }
     }
 }

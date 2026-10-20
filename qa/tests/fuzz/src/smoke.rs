@@ -88,6 +88,20 @@ fn sample_transaction() -> Transaction {
     tx
 }
 
+/// The sample KSPT with its first input script length rewritten in the
+/// three-byte long form, which a canonical decoder must refuse.
+fn long_form_script_length(kspt: &[u8]) -> Vec<u8> {
+    // header (6) + global (47, empty payload) + input fields before the script (55)
+    const INPUT_SCRIPT_PREFIX: usize = 108;
+    assert_eq!(kspt[INPUT_SCRIPT_PREFIX], 34, "sample input script length");
+    [
+        &kspt[..INPUT_SCRIPT_PREFIX],
+        &[0xff, 34, 0][..],
+        &kspt[INPUT_SCRIPT_PREFIX + 1..],
+    ]
+    .concat()
+}
+
 fn pskt_json(tx: &Transaction) -> Vec<u8> {
     let wire = serialize_pskt_vec(tx, &PsktParsed::empty(), &[], TxInputFormat::PsktSingle)
         .expect("sample PSKT serializes");
@@ -113,7 +127,11 @@ fn parsers_and_codecs_survive_mutated_wire_input() {
     let json = pskt_json(&tx);
     let payload: Vec<u8> = (0..=255u8).cycle().take(400).collect();
 
-    drive(super::kspt, &[kspt.clone(), Vec::new()], 1);
+    drive(
+        super::kspt,
+        &[kspt.clone(), long_form_script_length(&kspt), Vec::new()],
+        1,
+    );
     drive(super::signed_transaction, &[kspt], 2);
     let single = with_prefix(0, &json);
     let bundle = with_prefix(1, &[b"[", json.as_slice(), b"]"].concat());
