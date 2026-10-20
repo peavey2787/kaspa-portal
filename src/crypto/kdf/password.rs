@@ -92,9 +92,14 @@ impl PasswordKdfParams {
         self.is_profile(Self::host())
     }
 
-    /// Exactly one of the fixed profiles; nothing in between is accepted.
+    /// Exactly one of the fixed profiles; nothing in between is accepted. The
+    /// version names the single profile the remaining fields must then match.
     pub const fn is_supported(self) -> bool {
-        self.is_current() | self.is_host()
+        match self.profile_version {
+            PROFILE_VERSION_1 => self.is_current(),
+            PROFILE_VERSION_2 => self.is_host(),
+            _ => false,
+        }
     }
 
     const fn is_profile(self, profile: Self) -> bool {
