@@ -49,7 +49,7 @@ pub(crate) fn base58_encode(data: &[u8], out: &mut [u8]) -> Result<usize, Base58
     let mut number = [0u8; MAX_BASE58_BYTES];
     number[..data.len()].copy_from_slice(data);
     let mut digits = [0u8; MAX_BASE58_CHARS];
-    let digit_count = base58_digits(&mut number[..data.len()], leading_zeros, &mut digits);
+    let digit_count = base58_digits(&mut number[leading_zeros..data.len()], &mut digits);
     let total = leading_zeros + digit_count;
     let result = out
         .get_mut(..total)
@@ -69,18 +69,15 @@ pub(crate) fn base58_encode(data: &[u8], out: &mut [u8]) -> Result<usize, Base58
 }
 
 /// Divide `number` by 58 until it is zero, collecting the remainders as
-/// least-significant-first digits. `number` is consumed (left all zero).
-fn base58_digits(
-    number: &mut [u8],
-    mut start: usize,
-    digits: &mut [u8; MAX_BASE58_CHARS],
-) -> usize {
+/// least-significant-first digits. Each pass narrows `number` past the bytes
+/// that have already become zero; it is consumed (left all zero).
+fn base58_digits(mut number: &mut [u8], digits: &mut [u8; MAX_BASE58_CHARS]) -> usize {
     let mut count = 0;
-    while let Some(offset) = number[start..].iter().position(|byte| *byte != 0) {
-        start += offset;
+    while let Some(offset) = number.iter().position(|byte| *byte != 0) {
+        number = &mut core::mem::take(&mut number)[offset..];
         let mut remainder = 0u32;
-        for byte in &mut number[start..] {
-            let value = (remainder << 8) | u32::from(*byte);
+        for byte in number.iter_mut() {
+            let value = remainder * 256 + u32::from(*byte);
             *byte = (value / 58) as u8;
             remainder = value % 58;
         }

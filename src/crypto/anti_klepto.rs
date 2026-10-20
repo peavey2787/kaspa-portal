@@ -156,8 +156,10 @@ fn provisional_nonce(
     if bool::from(nonce.is_zero()) {
         return Err(AntiKleptoError::InvalidProvisionalSignature);
     }
+    // The signer may have negated `k'` for an even-Y `R`; in a prime field
+    // `k^2 = k'^2` holds exactly when `k = +-k'`, so one comparison covers both.
     let deterministic = zero_aux_nonce(secret, public_x, message);
-    if bool::from(nonce.ct_eq(&deterministic) | nonce.ct_eq(&deterministic.neg())) {
+    if bool::from((nonce * nonce).ct_eq(&(deterministic * deterministic))) {
         return Err(AntiKleptoError::ReusableProvisionalNonce);
     }
     Ok(nonce)
