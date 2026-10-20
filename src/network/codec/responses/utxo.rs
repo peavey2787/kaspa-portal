@@ -1,3 +1,4 @@
+use super::envelope::{require_consumed, response_body};
 use crate::{
     network::{codec::primitives::WireReader, error::NetworkError},
     primitives::utxo::UtxoEntry,
@@ -6,17 +7,11 @@ use crate::{
 /// 16 MiB.
 const MAX_BLOB_BYTES: usize = 16_777_216;
 const MAX_UTXOS: usize = 1_000_000;
-
-fn entries_blob(data: &[u8]) -> Result<&[u8], NetworkError> {
-    let mut reader = WireReader::new(data);
-    if reader.read_u8()? == 255 {
-        reader = WireReader::new(data);
-    }
-    let outer = reader.read_bytes(MAX_BLOB_BYTES)?;
-    let mut outer_reader = WireReader::new(outer);
-    outer_reader.read_u16()?;
-    outer_reader.read_bytes(MAX_BLOB_BYTES)
-}
+const RESPONSE: &str = "GetUtxosByAddressesResponse";
+/// Outpoint version (1) + transaction id (32) + output index (4).
+const OUTPOINT_BYTES: usize = 37;
+/// The only script version Portal's transaction builder signs for.
+const SPENDABLE_SCRIPT_VERSION: u16 = 0;
 
 pub(crate) fn decode_entries(entries_blob: &[u8]) -> Result<Vec<UtxoEntry>, NetworkError> {
     let mut reader = WireReader::new(entries_blob);
@@ -30,25 +25,21 @@ pub(crate) fn decode_entries(entries_blob: &[u8]) -> Result<Vec<UtxoEntry>, Netw
         let entry_blob = reader.read_bytes(MAX_BLOB_BYTES)?;
         entries.push(decode_entry(entry_blob, index_in_response)?);
     }
+    require_consumed(&reader, "UTXO entry list")?;
     Ok(entries)
 }
 
 pub fn decode(data: &[u8]) -> Result<Vec<UtxoEntry>, NetworkError> {
-    if data.len() < 6 {
-        return Ok(Vec::new());
-    }
-    let entries = entries_blob(data)?;
-    if entries.is_empty() {
-        return Ok(Vec::new());
-    }
-    decode_entries(entries)
+    let mut response = response_body(data, MAX_BLOB_BYTES, RESPONSE)?;
+    decode_entries(response.read_bytes(MAX_BLOB_BYTES)?)
 }
 
 fn decode_entry(data: &[u8], index_in_response: usize) -> Result<UtxoEntry, NetworkError> {
     let mut reader = WireReader::new(data);
     skip_entry_metadata(&mut reader)?;
     let (tx_id, index) = decode_outpoint(&mut reader, index_in_response)?;
-    let (amount, script_public_key, block_daa_score, covenant_id) = decode_utxo(&mut reader)?;
+    let (amount, script_public_key, block_daa_score, covenant_id) =
+        decode_utxo(&mut reader, index_in_response)?;
     Ok(UtxoEntry {
         tx_id,
         index,
@@ -80,29 +71,32 @@ fn decode_outpoint(
     index_in_response: usize,
 ) -> Result<(String, u32), NetworkError> {
     let outpoint = reader.read_bytes(MAX_BLOB_BYTES)?;
-    if outpoint.len() < 37 {
-        return Err(NetworkError::InvalidEncoding(format!(
-            "entry {index_in_response}: outpoint {} bytes",
-            outpoint.len()
-        )));
-    }
-    let tx_id = hex::encode(&outpoint[1..33]);
-    let index = u32::from_le_bytes(
-        outpoint[33..37]
-            .try_into()
-            .map_err(|_| NetworkError::TruncatedPayload)?,
-    );
-    Ok((tx_id, index))
+    let [_version, tx_id @ .., i0, i1, i2, i3] = <[u8; OUTPOINT_BYTES]>::try_from(outpoint)
+        .map_err(|_| {
+            NetworkError::InvalidEncoding(format!(
+                "entry {index_in_response}: outpoint {} bytes",
+                outpoint.len()
+            ))
+        })?;
+    Ok((hex::encode(tx_id), u32::from_le_bytes([i0, i1, i2, i3])))
 }
 
 fn decode_utxo(
     reader: &mut WireReader<'_>,
+    index_in_response: usize,
 ) -> Result<(u64, Vec<u8>, u64, Option<String>), NetworkError> {
     let utxo_blob = reader.read_bytes(MAX_BLOB_BYTES)?;
     let mut utxo_reader = WireReader::new(utxo_blob);
     let version = utxo_reader.read_u8()?;
     let amount = utxo_reader.read_u64()?;
-    utxo_reader.read_u16()?;
+    // `UtxoEntry` carries no script version because every input is signed as
+    // version 0; any other version is refused rather than relabelled.
+    let script_version = utxo_reader.read_u16()?;
+    if script_version != SPENDABLE_SCRIPT_VERSION {
+        return Err(NetworkError::InvalidEncoding(format!(
+            "entry {index_in_response}: script version {script_version} is not spendable"
+        )));
+    }
     let script_public_key = utxo_reader.read_bytes(MAX_BLOB_BYTES)?.to_vec();
     let block_daa_score = utxo_reader.read_u64()?;
     utxo_reader.read_bool()?;

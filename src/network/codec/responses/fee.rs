@@ -1,3 +1,4 @@
+use super::envelope::response_body;
 use crate::network::{
     codec::primitives::WireReader, error::NetworkError, model::fee_estimate::FeeEstimate,
 };
@@ -5,17 +6,6 @@ use crate::network::{
 /// 1 MiB.
 const MAX_BLOB_BYTES: usize = 1_048_576;
 const MAX_BUCKETS: usize = 10_000;
-
-fn estimate_blob(data: &[u8]) -> Result<&[u8], NetworkError> {
-    let mut reader = WireReader::new(data);
-    if reader.read_u8()? == 255 {
-        reader = WireReader::new(data);
-    }
-    let outer = reader.read_bytes(MAX_BLOB_BYTES)?;
-    let mut outer_reader = WireReader::new(outer);
-    outer_reader.read_u16()?;
-    outer_reader.read_bytes(MAX_BLOB_BYTES)
-}
 
 fn decode_estimate(estimate: &[u8]) -> Result<FeeEstimate, NetworkError> {
     let mut reader = WireReader::new(estimate);
@@ -36,11 +26,10 @@ fn decode_estimate(estimate: &[u8]) -> Result<FeeEstimate, NetworkError> {
     })
 }
 
+/// Callers choose their own fallback rate when the node's answer is unusable.
 pub fn decode(data: &[u8]) -> Result<FeeEstimate, NetworkError> {
-    if data.len() < 6 {
-        return Ok(FeeEstimate::conservative_fallback());
-    }
-    decode_estimate(estimate_blob(data)?)
+    let mut response = response_body(data, MAX_BLOB_BYTES, "GetFeeEstimateResponse")?;
+    decode_estimate(response.read_bytes(MAX_BLOB_BYTES)?)
 }
 
 fn read_first_bucket(

@@ -1,10 +1,9 @@
 use crate::network::codec::responses::utxo;
 
 #[test]
-fn short_utxo_response_is_an_empty_set() {
-    assert!(utxo::decode(&[])
-        .expect("empty response should decode")
-        .is_empty());
+fn short_utxo_response_is_an_error_not_an_empty_set() {
+    crate::test_support::assert_err(&utxo::decode(&[]), "TruncatedPayload");
+    crate::test_support::assert_err(&utxo::decode(&[1, 0, 0]), "TruncatedPayload");
 }
 
 #[test]
@@ -109,7 +108,10 @@ fn utxo_response_preserves_every_entry_in_multi_entry_reply() {
 
 #[test]
 fn utxo_response_covers_empty_count_limit_optional_and_outpoint_boundaries() {
-    assert!(utxo::decode(&wrap_entries(&[])).unwrap().is_empty());
+    assert!(utxo::decode(&wrap_entries(&0u32.to_le_bytes()))
+        .unwrap()
+        .is_empty());
+    crate::test_support::assert_err(&utxo::decode(&wrap_entries(&[])), "TruncatedPayload");
 
     let too_many = (1_000_001u32).to_le_bytes();
     crate::test_support::assert_err(&utxo::decode(&wrap_entries(&too_many)), "InvalidLength");
@@ -123,6 +125,53 @@ fn utxo_response_covers_empty_count_limit_optional_and_outpoint_boundaries() {
     crate::test_support::assert_err(
         &utxo::decode(&short_outpoint),
         r#"InvalidEncoding("entry 0: outpoint 36 bytes")"#,
+    );
+    let long_outpoint = one_entry_response(&encoded_entry(0, 38, 1, None));
+    crate::test_support::assert_err(
+        &utxo::decode(&long_outpoint),
+        r#"InvalidEncoding("entry 0: outpoint 38 bytes")"#,
+    );
+}
+
+#[test]
+fn utxo_with_a_script_version_the_builder_cannot_sign_is_refused() {
+    // marker/tag (2) + outpoint field (4 + 37) + utxo length (4)
+    // + entry version (1) + amount (8)
+    const SCRIPT_VERSION_OFFSET: usize = 56;
+    let mut entry = encoded_entry(0, 37, 1, None);
+    assert_eq!(
+        entry[SCRIPT_VERSION_OFFSET..SCRIPT_VERSION_OFFSET + 2],
+        [0, 0]
+    );
+    entry[SCRIPT_VERSION_OFFSET] = 1;
+    crate::test_support::assert_err(
+        &utxo::decode(&one_entry_response(&entry)),
+        r#"InvalidEncoding("entry 0: script version 1 is not spendable")"#,
+    );
+}
+
+#[test]
+fn utxo_response_rejects_a_missing_marker_and_trailing_bytes() {
+    let mut unmarked = one_entry_response(&encoded_entry(0, 37, 1, None));
+    unmarked[0] = 0;
+    crate::test_support::assert_err(
+        &utxo::decode(&unmarked),
+        r#"InvalidEncoding("GetUtxosByAddressesResponse is missing its payload marker")"#,
+    );
+
+    let mut padded = one_entry_response(&encoded_entry(0, 37, 1, None));
+    padded.push(0);
+    crate::test_support::assert_err(
+        &utxo::decode(&padded),
+        r#"InvalidEncoding("trailing bytes after GetUtxosByAddressesResponse")"#,
+    );
+
+    let mut entries = 1u32.to_le_bytes().to_vec();
+    entries.extend_from_slice(&bytes_field(&encoded_entry(0, 37, 1, None)));
+    entries.push(0);
+    crate::test_support::assert_err(
+        &utxo::decode(&wrap_entries(&entries)),
+        r#"InvalidEncoding("trailing bytes after UTXO entry list")"#,
     );
 }
 
@@ -151,16 +200,6 @@ fn utxo_response_covers_both_covenant_version_short_circuit_paths() {
     assert!(utxo::decode(&version_two_without_covenant).unwrap()[0]
         .covenant_id
         .is_none());
-}
-
-#[test]
-fn utxo_response_accepts_length_prefix_whose_first_byte_is_sentinel() {
-    let mut outer = 1u16.to_le_bytes().to_vec();
-    outer.extend_from_slice(&bytes_field(&[]));
-    outer.resize(255, 0);
-    let mut response = 255u32.to_le_bytes().to_vec();
-    response.extend_from_slice(&outer);
-    assert!(utxo::decode(&response).unwrap().is_empty());
 }
 
 #[test]

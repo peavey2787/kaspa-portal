@@ -94,7 +94,7 @@ fn get_blocks_response_requires_the_payload_marker() {
     unmarked[0] = 0;
     crate::test_support::assert_err(
         &blocks::decode(&unmarked),
-        r#"InvalidEncoding("GetBlocks response is missing its payload marker")"#,
+        r#"InvalidEncoding("GetBlocksResponse is missing its payload marker")"#,
     );
     crate::test_support::assert_err(&blocks::decode(&[]), "TruncatedPayload");
 }

@@ -1,12 +1,9 @@
 use crate::network::codec::responses::fee;
 
 #[test]
-fn short_fee_response_uses_conservative_fallback() {
-    let estimate = fee::decode(&[]).expect("fallback should be available");
-    assert_eq!(estimate.priority_sompi_per_gram, 1.0);
-    assert_eq!(estimate.normal_sompi_per_gram, 1.0);
-    assert_eq!(estimate.low_sompi_per_gram, 1.0);
-    assert_eq!(estimate.suggested_fee, 10_000);
+fn short_fee_response_is_an_error_not_a_guess() {
+    crate::test_support::assert_err(&fee::decode(&[]), "TruncatedPayload");
+    crate::test_support::assert_err(&fee::decode(&[1, 0, 0]), "TruncatedPayload");
 }
 
 #[test]
@@ -83,26 +80,19 @@ fn fee_response_covers_multiple_bucket_selection_and_count_limit() {
 }
 
 #[test]
-fn fee_response_accepts_length_prefix_whose_first_byte_is_sentinel() {
-    // Sentinel 255 makes the decoder rewind and interpret the first four bytes
-    // as the outer length. Supply exactly 255 bytes of outer data.
-    let estimate = {
-        let mut value = Vec::new();
-        value.extend_from_slice(&1u16.to_le_bytes());
-        value.extend_from_slice(&2.0f64.to_le_bytes());
-        value.extend_from_slice(&3.0f64.to_le_bytes());
-        value.extend_from_slice(&0u32.to_le_bytes());
-        value.extend_from_slice(&0u32.to_le_bytes());
-        value
-    };
-    let mut outer = 1u16.to_le_bytes().to_vec();
-    outer.extend_from_slice(&bytes_field(&estimate));
-    outer.resize(255, 0);
-    let mut response = 255u32.to_le_bytes().to_vec();
-    response.extend_from_slice(&outer);
-    let estimate = fee::decode(&response).expect("sentinel-prefixed fee response");
-    assert_eq!(estimate.normal_sompi_per_gram, 1.0);
-    assert_eq!(estimate.low_sompi_per_gram, 1.0);
+fn fee_response_without_its_marker_or_with_trailing_bytes_is_rejected() {
+    let mut unmarked = fee_payload(&[], &[]);
+    unmarked[0] = 0xff;
+    crate::test_support::assert_err(
+        &fee::decode(&unmarked),
+        r#"InvalidEncoding("GetFeeEstimateResponse is missing its payload marker")"#,
+    );
+    let mut padded = fee_payload(&[], &[]);
+    padded.push(0);
+    crate::test_support::assert_err(
+        &fee::decode(&padded),
+        r#"InvalidEncoding("trailing bytes after GetFeeEstimateResponse")"#,
+    );
 }
 
 #[test]
@@ -113,12 +103,6 @@ fn suggested_fee_prices_a_2300_gram_transaction_above_the_floor() {
         (estimate.low_sompi_per_gram, estimate.low_seconds),
         (1.0, 1800.0)
     );
-}
-
-#[test]
-fn six_byte_response_is_decoded_not_treated_as_missing() {
-    crate::test_support::assert_err(&fee::decode(&[1, 0, 0, 0, 0, 0]), "TruncatedPayload");
-    assert!(fee::decode(&[1, 0, 0, 0, 0]).is_ok());
 }
 
 #[test]

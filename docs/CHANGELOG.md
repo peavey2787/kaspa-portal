@@ -23,6 +23,14 @@ One implementation per primitive.
   `kspt` fuzz oracle requires every accepted envelope to re-encode to exactly
   its input bytes.
 
+- wRPC response decoders share one strict success envelope: the `1` payload
+  marker, the length-prefixed body and nothing after it. A short reply to
+  `GetUtxosByAddresses` is an error instead of an empty UTXO set, and a short
+  fee reply is an error instead of a 1 sompi/gram guess (callers already
+  choose their own fallback rate); `FeeEstimate::conservative_fallback` is
+  removed. UTXO outpoints must be exactly 37 bytes, and an entry whose script
+  version is not 0 is refused rather than relabelled as version 0.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.
