@@ -267,9 +267,16 @@ fn finalize_with_material(
         u32::try_from(input_index).map_err(|_| PsktError::TooManyInputs)?,
         slot as u8,
     )
-    .map_err(|_| PsktError::SigningFailed)?;
+    .map_err(finalization_error)?;
     tx.inputs[input_index].sigs[slot].signature = final_signature.bytes;
     Ok(())
+}
+
+fn finalization_error(error: crypto::AntiKleptoError) -> PsktError {
+    match error {
+        crypto::AntiKleptoError::ReusableProvisionalNonce => PsktError::ReusableNonce,
+        _ => PsktError::SigningFailed,
+    }
 }
 
 fn stealth_material(

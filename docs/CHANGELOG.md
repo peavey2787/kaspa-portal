@@ -41,6 +41,13 @@ One implementation per primitive.
   starts clean without a `reset_decoder` call; text that is not a frame
   leaves a transfer in progress untouched.
 
+- Anti-klepto finalization refuses a provisional signature made with BIP340's
+  deterministic (zero-aux) nonce: `tweak_provisional_signature` returns
+  `AntiKleptoError::ReusableProvisionalNonce` and the KSPT `finalize_*`
+  functions `PsktError::ReusableNonce`. Finalizing one nonce under two host
+  secrets reveals the key, so provisional signatures must come from an
+  `_with_entropy` signer fed fresh entropy per session.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.

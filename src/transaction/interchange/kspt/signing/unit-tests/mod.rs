@@ -1236,6 +1236,29 @@ fn anti_klepto_finalization_rejects_invalid_ranges_slots_sighashes_and_keys() {
     );
 }
 
+#[test]
+fn anti_klepto_finalization_refuses_deterministic_provisional_signatures() {
+    use super::{finalize_raw_key_signatures, initial_signature_counts, sign_transaction_in_place};
+
+    let private_key = [1u8; 32];
+    let mut provisional = anti_klepto_p2pk_transaction(&private_key);
+    let initial = initial_signature_counts(&provisional);
+    sign_transaction_in_place(&mut provisional, &private_key, SigHashType::All)
+        .expect("deterministic signature");
+    let before = provisional.inputs[0].sigs[0].signature;
+    assert_eq!(
+        finalize_raw_key_signatures(
+            &mut provisional,
+            &private_key,
+            &initial,
+            &[0x41; crate::transaction::signing::anti_klepto::protocol::SESSION_ID_LEN],
+            &[0x52; 32],
+        ),
+        Err(PsktError::ReusableNonce),
+    );
+    assert_eq!(provisional.inputs[0].sigs[0].signature, before);
+}
+
 fn provisional_from_wire(tx: &Transaction) -> Transaction {
     use crate::transaction::interchange::kspt::{parse_compact_kspt, serialize_compact_kspt};
 

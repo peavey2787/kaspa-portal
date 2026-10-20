@@ -41,6 +41,9 @@ pub enum PsktError {
     DerivationFailed,
     /// Schnorr signing failed.
     SigningFailed,
+    /// An anti-klepto provisional signature used a nonce its signer would
+    /// reproduce, so finalizing it could reveal the private key.
+    ReusableNonce,
     /// Aggregate input values exceed the u64 monetary domain.
     InputAmountOverflow,
     /// Aggregate output values exceed the u64 monetary domain.

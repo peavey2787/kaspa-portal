@@ -9,6 +9,7 @@ use k256::elliptic_curve::{
     group::Group,
     ops::{Neg, Reduce},
     sec1::ToEncodedPoint,
+    subtle::ConstantTimeEq,
 };
 use k256::{ProjectivePoint, Scalar, U256};
 use sha2::{Digest, Sha256};
@@ -22,6 +23,9 @@ const HOST_SCALAR_DOMAIN: &[u8] = b"KaspaPortal/anti-klepto/host-scalar/v1";
 pub enum AntiKleptoError {
     InvalidPrivateKey,
     InvalidProvisionalSignature,
+    /// The provisional nonce is the deterministic BIP340 nonce for this key and
+    /// message. Finalizing it under two host secrets would reveal the key.
+    ReusableProvisionalNonce,
     InvalidHostContribution,
     InvalidNoncePoint,
     InvalidFinalSignature,
@@ -105,14 +109,7 @@ pub fn tweak_provisional_signature(
     let (secret, public_x) = normalized_secret_and_public_x(private_key)?;
     let public_key = canonical_public_key(&public_x);
     let nonce_point = provisional_nonce_point(provisional);
-
-    let response = scalar_from_canonical(provisional.s_bytes())
-        .ok_or(AntiKleptoError::InvalidProvisionalSignature)?;
-    let first_challenge = challenge(provisional.r_bytes(), &public_x, message);
-    let provisional_nonce = response - first_challenge * secret;
-    if bool::from(provisional_nonce.is_zero()) {
-        return Err(AntiKleptoError::InvalidProvisionalSignature);
-    }
+    let provisional_nonce = provisional_nonce(provisional, &secret, &public_x, message)?;
 
     let contribution = host_scalar(
         session_id,
@@ -138,6 +135,48 @@ pub fn tweak_provisional_signature(
     super::schnorr::schnorr_verify(&public_x, message, &signature)
         .map_err(|_| AntiKleptoError::InvalidFinalSignature)?;
     Ok(signature)
+}
+
+/// Recover the provisional nonce `k = s - e*d` and refuse one that is not fresh.
+///
+/// The host scalar differs per host secret, so a nonce finalized twice yields
+/// two signatures with one unknown `k` and the key falls out of their
+/// difference. Any signing path that reproduces the same `k` for the same
+/// message makes that possible; BIP340's zero-aux mode is such a path and is
+/// recognisable here, so it is refused rather than trusted to the caller.
+fn provisional_nonce(
+    provisional: &SchnorrSignature,
+    secret: &Scalar,
+    public_x: &[u8; 32],
+    message: &[u8; 32],
+) -> Result<Scalar, AntiKleptoError> {
+    let response = scalar_from_canonical(provisional.s_bytes())
+        .ok_or(AntiKleptoError::InvalidProvisionalSignature)?;
+    let nonce = response - challenge(provisional.r_bytes(), public_x, message) * secret;
+    if bool::from(nonce.is_zero()) {
+        return Err(AntiKleptoError::InvalidProvisionalSignature);
+    }
+    let deterministic = zero_aux_nonce(secret, public_x, message);
+    if bool::from(nonce.ct_eq(&deterministic) | nonce.ct_eq(&deterministic.neg())) {
+        return Err(AntiKleptoError::ReusableProvisionalNonce);
+    }
+    Ok(nonce)
+}
+
+/// The BIP340 nonce `k'` for all-zero auxiliary randomness, before the signer
+/// negates it to give `R` an even Y.
+fn zero_aux_nonce(secret: &Scalar, public_x: &[u8; 32], message: &[u8; 32]) -> Scalar {
+    let mask = tagged_hash(b"BIP0340/aux", &[0u8; 32]);
+    let mut data = [0u8; 96];
+    for ((masked, secret_byte), mask_byte) in data[..32].iter_mut().zip(secret.to_bytes()).zip(mask)
+    {
+        *masked = secret_byte ^ mask_byte;
+    }
+    data[32..64].copy_from_slice(public_x);
+    data[64..].copy_from_slice(message);
+    let digest = tagged_hash(b"BIP0340/nonce", &data);
+    crate::primitives::bytes::zeroize_bytes(&mut data);
+    <Scalar as Reduce<U256>>::reduce_bytes(&digest.into())
 }
 
 /// Return the BIP340-normalized secret scalar and x-only public key.

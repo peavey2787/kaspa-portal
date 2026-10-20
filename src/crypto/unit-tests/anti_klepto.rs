@@ -239,3 +239,53 @@ fn anti_klepto_rejects_a_provisional_signature_with_zero_recovered_nonce() {
         Err(AntiKleptoError::InvalidProvisionalSignature),
     );
 }
+
+#[test]
+fn zero_aux_provisional_nonces_are_refused_whichever_way_r_was_negated() {
+    let session = [0x11u8; crate::crypto::anti_klepto::SESSION_ID_LEN];
+    let mut odd_and_even = [false; 2];
+    for seed in 1u8..=16 {
+        let private_key = scalar_bytes(seed);
+        let message = [seed.wrapping_mul(0x35); 32];
+        let (secret, public_x) = normalized_secret_and_public_x(&private_key).expect("key");
+        let unnegated = zero_aux_nonce(&secret, &public_x, &message);
+        let (nonce_x, odd_y) =
+            point_x_and_parity(&(ProjectivePoint::GENERATOR * unnegated)).expect("nonce point");
+        odd_and_even[usize::from(odd_y)] = true;
+
+        let deterministic =
+            crate::crypto::schnorr::schnorr_sign(&private_key, &message).expect("sign");
+        assert_eq!(deterministic.r_bytes(), &nonce_x, "seed {seed}");
+        assert_eq!(
+            tweak_provisional_signature(
+                &private_key,
+                &message,
+                &deterministic,
+                &session,
+                &[0x22; 32],
+                0,
+                0
+            ),
+            Err(AntiKleptoError::ReusableProvisionalNonce),
+            "seed {seed}"
+        );
+
+        let hedged =
+            crate::crypto::schnorr::schnorr_sign_with_aux_rand(&private_key, &message, &[seed; 32])
+                .expect("sign");
+        assert!(
+            tweak_provisional_signature(
+                &private_key,
+                &message,
+                &hedged,
+                &session,
+                &[0x22; 32],
+                0,
+                0
+            )
+            .is_ok(),
+            "seed {seed}"
+        );
+    }
+    assert_eq!(odd_and_even, [true, true]);
+}

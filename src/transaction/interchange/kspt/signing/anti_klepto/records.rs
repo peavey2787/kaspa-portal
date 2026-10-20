@@ -41,6 +41,13 @@ fn added_signatures<'a>(
     Ok((start, signatures))
 }
 
+/// Commit to the nonces of the signatures added since `initial_counts`.
+///
+/// Those provisional signatures must come from an `_with_entropy` signer fed
+/// fresh entropy for this session: a nonce committed in two sessions and
+/// finalized under two host secrets reveals the private key. Finalization
+/// refuses BIP340's deterministic nonce with [`PsktError::ReusableNonce`], but
+/// cannot recognise entropy a caller has replayed.
 pub fn nonce_commitment_records(
     tx: &Transaction,
     initial_counts: &[u8],
