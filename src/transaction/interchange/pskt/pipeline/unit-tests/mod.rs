@@ -2,6 +2,7 @@ mod consensus;
 mod covenant_paths;
 mod coverage_ratchet;
 mod finalization;
+mod parser_agreement;
 mod schema_rules;
 
 use serde_json::json;

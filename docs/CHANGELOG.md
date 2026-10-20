@@ -48,6 +48,11 @@ One implementation per primitive.
   secrets reveals the key, so provisional signatures must come from an
   `_with_entropy` signer fed fresh entropy per session.
 
+- A differential test pins the PSKT host pipeline and the Vault parser to
+  the same u64 grammar on every numeric field: canonical decimal strings and
+  JSON numbers up to 2^53 - 1 pass both; fractions, exponents, negatives,
+  leading zeros and larger numbers pass neither.
+
 - E2E covenant workflows default to testnet-10 (covenants are live there
   since Toccata). The funding helpers check the wallet balance first and
   only prompt when it holds less than 10 KAS.
