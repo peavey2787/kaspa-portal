@@ -91,6 +91,47 @@ pub fn build_global_allowance_script(
     s
 }
 
+/// The fields of a canonical global allowance script; a zero cooldown or
+/// start is unset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GlobalAllowanceFields {
+    pub owner_pubkey: [u8; 32],
+    pub beneficiary_pubkey: [u8; 32],
+    pub max_withdraw_sompi: u64,
+    pub cooldown_daa: u64,
+    pub start_daa: u64,
+    pub salt: [u8; 8],
+}
+
+/// Recognize `script` as exactly what [`build_global_allowance_script`] builds.
+#[must_use]
+pub fn global_allowance_script_fields(script: &[u8]) -> Option<GlobalAllowanceFields> {
+    use crate::contract::script::{
+        extract_cltv_locktime, extract_csv_sequence, find_preceding_script_integer,
+    };
+    let elements = crate::contract::script::complete_elements(script)?;
+    // The optional start and cooldown clauses shift every later element, so
+    // they and the withdrawal cap are read by the opcode each one precedes.
+    let fields = GlobalAllowanceFields {
+        salt: elements.first()?.data.try_into().ok()?,
+        owner_pubkey: elements.get(3)?.data.try_into().ok()?,
+        beneficiary_pubkey: elements.get(6)?.data.try_into().ok()?,
+        max_withdraw_sompi: find_preceding_script_integer(script, super::covenant_ops::OP_SUB)
+            .ok()??,
+        cooldown_daa: extract_csv_sequence(script).ok()?.unwrap_or(0),
+        start_daa: extract_cltv_locktime(script).ok()?.unwrap_or(0),
+    };
+    let rebuilt = build_global_allowance_script(
+        &fields.owner_pubkey,
+        &fields.beneficiary_pubkey,
+        fields.max_withdraw_sompi,
+        fields.cooldown_daa,
+        fields.start_daa,
+        &fields.salt,
+    );
+    (rebuilt == script).then_some(fields)
+}
+
 /// Build an allowance covenant redeem script.
 ///
 /// Spending limit + relative time-lock (CSV). After each withdrawal,

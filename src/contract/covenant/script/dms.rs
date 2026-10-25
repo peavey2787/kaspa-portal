@@ -36,3 +36,28 @@ pub fn build_dms_csv_script(
     s.push(OP_ENDIF);
     s
 }
+
+/// The fields of a canonical dead man's switch script.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DmsFields {
+    pub owner_pubkey: [u8; 32],
+    pub heir_pubkey: [u8; 32],
+    pub inactivity_daa: u64,
+}
+
+/// Recognize `script` as exactly what [`build_dms_csv_script`] builds.
+#[must_use]
+pub fn dms_script_fields(script: &[u8]) -> Option<DmsFields> {
+    let elements = crate::contract::script::complete_elements(script)?;
+    let fields = DmsFields {
+        owner_pubkey: elements.get(1)?.data.try_into().ok()?,
+        inactivity_daa: crate::contract::script::element_integer(elements.get(4)?)?,
+        heir_pubkey: elements.get(6)?.data.try_into().ok()?,
+    };
+    let rebuilt = build_dms_csv_script(
+        &fields.owner_pubkey,
+        &fields.heir_pubkey,
+        fields.inactivity_daa,
+    );
+    (rebuilt == script).then_some(fields)
+}

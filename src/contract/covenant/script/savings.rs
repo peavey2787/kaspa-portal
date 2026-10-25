@@ -165,3 +165,66 @@ pub fn build_timelocked_savings_script(
 
     s
 }
+
+/// The fields of a canonical Piggy Bank script; a zero goal or deadline is unset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PiggyBankFields {
+    pub owner_pubkey: [u8; 32],
+    pub threshold_sompi: u64,
+    pub deadline_daa: u64,
+    pub salt: [u8; 8],
+}
+
+/// Recognize `script` as exactly what [`build_piggy_bank_script`] builds.
+#[must_use]
+pub fn piggy_bank_script_fields(script: &[u8]) -> Option<PiggyBankFields> {
+    use super::covenant_ops::OP_GREATERTHANOREQUAL;
+    let elements = crate::contract::script::complete_elements(script)?;
+    // The goal check is the first `>=`; without a goal the first `>=` is the
+    // deposit path's, which compares two amounts rather than an integer push.
+    let fields = PiggyBankFields {
+        salt: elements.first()?.data.try_into().ok()?,
+        owner_pubkey: elements.get(3)?.data.try_into().ok()?,
+        threshold_sompi: crate::contract::script::find_preceding_script_integer(
+            script,
+            OP_GREATERTHANOREQUAL,
+        )
+        .ok()?
+        .unwrap_or(0),
+        deadline_daa: crate::contract::script::extract_cltv_locktime(script)
+            .ok()?
+            .unwrap_or(0),
+    };
+    let rebuilt = build_piggy_bank_script(
+        &fields.owner_pubkey,
+        fields.threshold_sompi,
+        fields.deadline_daa,
+        &fields.salt,
+    );
+    (rebuilt == script).then_some(fields)
+}
+
+/// The fields of a canonical time-locked savings script.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TimelockedSavingsFields {
+    pub wallet1_pubkey: [u8; 32],
+    pub wallet2_pubkey: [u8; 32],
+    pub locktime_daa: u64,
+}
+
+/// Recognize `script` as exactly what [`build_timelocked_savings_script`] builds.
+#[must_use]
+pub fn timelocked_savings_script_fields(script: &[u8]) -> Option<TimelockedSavingsFields> {
+    let elements = crate::contract::script::complete_elements(script)?;
+    let fields = TimelockedSavingsFields {
+        wallet1_pubkey: elements.get(1)?.data.try_into().ok()?,
+        locktime_daa: crate::contract::script::element_integer(elements.get(3)?)?,
+        wallet2_pubkey: elements.get(7)?.data.try_into().ok()?,
+    };
+    let rebuilt = build_timelocked_savings_script(
+        &fields.wallet1_pubkey,
+        &fields.wallet2_pubkey,
+        fields.locktime_daa,
+    );
+    (rebuilt == script).then_some(fields)
+}

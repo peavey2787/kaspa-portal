@@ -81,3 +81,35 @@ pub fn build_payjoin_covenant_script(
     s.push(OP_ENDIF);
     s
 }
+
+/// The fields of a canonical PayJoin covenant script.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PayjoinFields {
+    pub owner_pubkey: [u8; 32],
+    pub beneficiary_pubkey: [u8; 32],
+    pub locktime_daa: u64,
+    pub min_inputs: u64,
+    pub min_outputs: u64,
+}
+
+/// Recognize `script` as exactly what [`build_payjoin_covenant_script`] builds.
+#[must_use]
+pub fn payjoin_script_fields(script: &[u8]) -> Option<PayjoinFields> {
+    use crate::contract::script::element_integer;
+    let elements = crate::contract::script::complete_elements(script)?;
+    let fields = PayjoinFields {
+        owner_pubkey: elements.get(1)?.data.try_into().ok()?,
+        locktime_daa: element_integer(elements.get(3)?)?,
+        beneficiary_pubkey: elements.get(7)?.data.try_into().ok()?,
+        min_inputs: element_integer(elements.get(10)?)?,
+        min_outputs: element_integer(elements.get(14)?)?,
+    };
+    let rebuilt = build_payjoin_covenant_script(
+        &fields.owner_pubkey,
+        &fields.beneficiary_pubkey,
+        fields.locktime_daa,
+        fields.min_inputs,
+        fields.min_outputs,
+    );
+    (rebuilt == script).then_some(fields)
+}

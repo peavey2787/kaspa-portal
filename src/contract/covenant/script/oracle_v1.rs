@@ -51,59 +51,52 @@ pub fn build_oracle_v1_covenant_script(
     script
 }
 
-#[derive(Clone, Copy)]
-struct OracleV1BoundFields {
-    salt: [u8; 16],
-    owner: [u8; 32],
-    beneficiary: [u8; 32],
-    commitment: [u8; 32],
-    oracle: [u8; 32],
+/// The fields of a canonical Oracle-v1 covenant script.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OracleV1Fields {
+    pub owner_pubkey: [u8; 32],
+    pub beneficiary_pubkey: [u8; 32],
+    pub oracle_pubkey: [u8; 32],
+    pub message_commitment: [u8; 32],
+    pub locktime_daa: u64,
+    pub salt: [u8; 16],
 }
 
-fn oracle_v1_bound_fields(script: &[u8], tail: usize) -> Option<OracleV1BoundFields> {
-    let mut salt = [0u8; 16];
-    salt.copy_from_slice(script.get(1..17)?);
-    let mut owner = [0u8; 32];
-    owner.copy_from_slice(script.get(20..52)?);
-    let mut beneficiary = [0u8; 32];
-    beneficiary.copy_from_slice(script.get(tail + 4..tail + 36)?);
-    let mut commitment = [0u8; 32];
-    commitment.copy_from_slice(script.get(tail + 38..tail + 70)?);
-    let mut oracle = [0u8; 32];
-    oracle.copy_from_slice(script.get(tail + 71..tail + 103)?);
-    Some(OracleV1BoundFields {
-        salt,
-        owner,
-        beneficiary,
-        commitment,
-        oracle,
-    })
-}
-
-pub fn oracle_v1_attestation_binding(script: &[u8]) -> Option<([u8; 32], [u8; 32], [u8; 32])> {
-    // Exact canonical layout. Everything after the variable-width locktime push
-    // is fixed at 107 bytes, and everything before it is fixed at 53 bytes.
-    // Parsing the fields and rebuilding the script prevents imported data from
-    // smuggling extra branches around an Oracle-looking claim segment.
-    let tail = script.len().checked_sub(107)?;
-    // The rebuilt-script comparison below rejects every other layout deviation.
-    let locktime = crate::contract::script::extract_cltv_locktime(script)
-        .ok()
-        .flatten()?;
-    let fields = oracle_v1_bound_fields(script, tail)?;
-    let canonical = build_oracle_v1_covenant_script(
-        &fields.owner,
-        &fields.beneficiary,
-        &fields.oracle,
-        &fields.commitment,
-        locktime,
+/// Recognize `script` as exactly what [`build_oracle_v1_covenant_script`]
+/// builds. Rebuilding prevents imported data from smuggling extra branches
+/// around an Oracle-looking claim segment.
+#[must_use]
+pub fn oracle_v1_script_fields(script: &[u8]) -> Option<OracleV1Fields> {
+    let elements = crate::contract::script::complete_elements(script)?;
+    let fields = OracleV1Fields {
+        salt: elements.first()?.data.try_into().ok()?,
+        owner_pubkey: elements.get(3)?.data.try_into().ok()?,
+        locktime_daa: crate::contract::script::element_integer(elements.get(5)?)?,
+        beneficiary_pubkey: elements.get(9)?.data.try_into().ok()?,
+        message_commitment: elements.get(11)?.data.try_into().ok()?,
+        oracle_pubkey: elements.get(12)?.data.try_into().ok()?,
+    };
+    let rebuilt = build_oracle_v1_covenant_script(
+        &fields.owner_pubkey,
+        &fields.beneficiary_pubkey,
+        &fields.oracle_pubkey,
+        &fields.message_commitment,
+        fields.locktime_daa,
         &fields.salt,
     );
-    (canonical.as_slice() == script).then_some((
-        fields.beneficiary,
-        fields.commitment,
-        fields.oracle,
-    ))
+    (rebuilt == script).then_some(fields)
+}
+
+/// The beneficiary, statement commitment and oracle key a canonical
+/// Oracle-v1 script binds.
+pub fn oracle_v1_attestation_binding(script: &[u8]) -> Option<([u8; 32], [u8; 32], [u8; 32])> {
+    oracle_v1_script_fields(script).map(|fields| {
+        (
+            fields.beneficiary_pubkey,
+            fields.message_commitment,
+            fields.oracle_pubkey,
+        )
+    })
 }
 
 pub fn oracle_v1_script_commits_to(

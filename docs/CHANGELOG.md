@@ -4,6 +4,16 @@
 
 One implementation per primitive.
 
+- Every shareable covenant family has a template recognizer beside its
+  builder: `dms_script_fields`, `timelocked_savings_script_fields`,
+  `piggy_bank_script_fields`, `escrow_script_fields`,
+  `global_allowance_script_fields`, `payjoin_script_fields` and
+  `oracle_v1_script_fields`. Each reads its terms out of a redeem script and
+  returns them only when rebuilding from those terms reproduces the script
+  byte for byte, so an imported script's displayed terms are its real terms.
+  `oracle_v1_attestation_binding` is now a view over `oracle_v1_script_fields`
+  instead of a separate byte-offset parser.
+
 - `ThreadWithdrawFee::maximum_withdraw` fixes its answer bit by bit in a
   bounded 64-step search instead of an open `while` loop.
 - `element_integer` drops any trailing zero sign byte (value-preserving).

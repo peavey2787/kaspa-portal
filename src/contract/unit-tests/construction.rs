@@ -252,6 +252,148 @@ fn template_recognizers_return_exactly_the_built_fields() {
     assert_eq!(merkle_whitelist_script_fields(&[0x51; 4]), None);
 }
 
+/// A recognizer accepts exactly its builder's output: never a tampered,
+/// truncated or extended script.
+fn assert_recognizes_only_canonical<T: core::fmt::Debug + PartialEq>(
+    script: &[u8],
+    fields: &T,
+    recognize: fn(&[u8]) -> Option<T>,
+) {
+    assert_eq!(recognize(script).as_ref(), Some(fields));
+    let mut altered = script.to_vec();
+    *altered.last_mut().unwrap() ^= 0x01;
+    assert_eq!(recognize(&altered), None);
+    assert_eq!(recognize(&script[..script.len() - 1]), None);
+    assert_eq!(recognize(&[script, &[0x51]].concat()), None);
+}
+
+#[test]
+fn covenant_recognizers_return_exactly_the_built_fields() {
+    use crate::contract::covenant::script::*;
+
+    for locktime in [0u64, 7, 1_000_000] {
+        let dms = DmsFields {
+            owner_pubkey: [1; 32],
+            heir_pubkey: [2; 32],
+            inactivity_daa: locktime,
+        };
+        let script = build_dms_csv_script(&dms.owner_pubkey, &dms.heir_pubkey, locktime);
+        assert_recognizes_only_canonical(&script, &dms, dms_script_fields);
+
+        let savings = TimelockedSavingsFields {
+            wallet1_pubkey: [3; 32],
+            wallet2_pubkey: [4; 32],
+            locktime_daa: locktime,
+        };
+        let script = build_timelocked_savings_script(&[3; 32], &[4; 32], locktime);
+        assert_recognizes_only_canonical(&script, &savings, timelocked_savings_script_fields);
+
+        let payjoin = PayjoinFields {
+            owner_pubkey: [5; 32],
+            beneficiary_pubkey: [6; 32],
+            locktime_daa: locktime,
+            min_inputs: 2,
+            min_outputs: 300,
+        };
+        let script = build_payjoin_covenant_script(&[5; 32], &[6; 32], locktime, 2, 300);
+        assert_recognizes_only_canonical(&script, &payjoin, payjoin_script_fields);
+
+        let oracle = OracleV1Fields {
+            owner_pubkey: [7; 32],
+            beneficiary_pubkey: [8; 32],
+            oracle_pubkey: [9; 32],
+            message_commitment: [10; 32],
+            locktime_daa: locktime,
+            salt: [11; 16],
+        };
+        let script = build_oracle_v1_covenant_script(
+            &[7; 32], &[8; 32], &[9; 32], &[10; 32], locktime, &[11; 16],
+        );
+        assert_recognizes_only_canonical(&script, &oracle, oracle_v1_script_fields);
+    }
+
+    for (threshold_sompi, deadline_daa) in [(0, 0), (50_000_000, 0), (0, 123_456), (1, 2)] {
+        let piggy = PiggyBankFields {
+            owner_pubkey: [12; 32],
+            threshold_sompi,
+            deadline_daa,
+            salt: [13; 8],
+        };
+        let script = build_piggy_bank_script(&[12; 32], threshold_sompi, deadline_daa, &[13; 8]);
+        assert_recognizes_only_canonical(&script, &piggy, piggy_bank_script_fields);
+    }
+
+    for (cooldown_daa, start_daa) in [(0, 0), (600, 0), (0, 9_000), (600, 9_000)] {
+        let allowance = GlobalAllowanceFields {
+            owner_pubkey: [14; 32],
+            beneficiary_pubkey: [15; 32],
+            max_withdraw_sompi: 25_000_000,
+            cooldown_daa,
+            start_daa,
+            salt: [16; 8],
+        };
+        let script = build_global_allowance_script(
+            &[14; 32],
+            &[15; 32],
+            25_000_000,
+            cooldown_daa,
+            start_daa,
+            &[16; 8],
+        );
+        assert_recognizes_only_canonical(&script, &allowance, global_allowance_script_fields);
+    }
+
+    let p2pk = |key: u8| [&[0x20][..], &[key; 32], &[0xac]].concat();
+    let escrow = EscrowFields {
+        alice_pubkey: [17; 32],
+        bob_pubkey: [18; 32],
+        arbiter_pubkey: [19; 32],
+        alice_spk: p2pk(17),
+        bob_spk: p2pk(18),
+        salt: [20; 8],
+    };
+    let script = build_escrow_script(
+        &[17; 32],
+        &[18; 32],
+        &[19; 32],
+        &p2pk(17),
+        &p2pk(18),
+        &[20; 8],
+    );
+    assert_recognizes_only_canonical(&script, &escrow, escrow_script_fields);
+}
+
+#[test]
+fn covenant_recognizers_reject_every_other_family() {
+    use crate::contract::covenant::script::*;
+
+    let scripts = [
+        build_dms_csv_script(&[1; 32], &[2; 32], 100),
+        build_timelocked_savings_script(&[1; 32], &[2; 32], 100),
+        build_payjoin_covenant_script(&[1; 32], &[2; 32], 100, 2, 2),
+        build_oracle_v1_covenant_script(&[1; 32], &[2; 32], &[3; 32], &[4; 32], 100, &[5; 16]),
+        build_piggy_bank_script(&[1; 32], 100, 100, &[5; 8]),
+        build_global_allowance_script(&[1; 32], &[2; 32], 100, 100, 100, &[5; 8]),
+        build_escrow_script(&[1; 32], &[2; 32], &[3; 32], &[0x51], &[0x52], &[5; 8]),
+    ];
+    let recognized = |script: &[u8]| {
+        [
+            dms_script_fields(script).is_some(),
+            timelocked_savings_script_fields(script).is_some(),
+            payjoin_script_fields(script).is_some(),
+            oracle_v1_script_fields(script).is_some(),
+            piggy_bank_script_fields(script).is_some(),
+            global_allowance_script_fields(script).is_some(),
+            escrow_script_fields(script).is_some(),
+        ]
+    };
+    for (family, script) in scripts.iter().enumerate() {
+        let expected: [bool; 7] = core::array::from_fn(|index| index == family);
+        assert_eq!(recognized(script), expected, "family {family}");
+    }
+    assert_eq!(recognized(&[]), [false; 7]);
+}
+
 #[test]
 fn commit_reveal_reveal_reads_the_preimage_and_checks_the_commitment() {
     use crate::contract::{

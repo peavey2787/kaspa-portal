@@ -8,8 +8,8 @@ mod push;
 pub mod walk;
 
 pub use locktime::{extract_cltv_locktime, extract_csv_sequence};
-pub(crate) use number::element_integer;
 pub use number::push_int;
+pub(crate) use number::{element_integer, find_preceding_script_integer};
 pub use push::{push_data, push_pubkey};
 
 /// Every element of a well-formed script, for template recognizers that

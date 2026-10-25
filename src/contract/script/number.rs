@@ -83,7 +83,7 @@ pub(crate) fn element_integer(element: &crate::primitives::script::Element<'_>) 
     }
 }
 
-pub(super) fn find_preceding_script_integer(
+pub(crate) fn find_preceding_script_integer(
     script: &[u8],
     target_opcode: u8,
 ) -> Result<Option<u64>, String> {

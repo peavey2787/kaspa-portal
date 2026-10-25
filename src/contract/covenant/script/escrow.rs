@@ -139,6 +139,41 @@ pub fn build_escrow_script(
     s
 }
 
+/// The fields of a canonical arbitrated escrow script. The destination
+/// scripts exclude the two-byte script version the script commits to.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowFields {
+    pub alice_pubkey: [u8; 32],
+    pub bob_pubkey: [u8; 32],
+    pub arbiter_pubkey: [u8; 32],
+    pub alice_spk: Vec<u8>,
+    pub bob_spk: Vec<u8>,
+    pub salt: [u8; 8],
+}
+
+/// Recognize `script` as exactly what [`build_escrow_script`] builds.
+#[must_use]
+pub fn escrow_script_fields(script: &[u8]) -> Option<EscrowFields> {
+    let elements = crate::contract::script::complete_elements(script)?;
+    let fields = EscrowFields {
+        salt: elements.first()?.data.try_into().ok()?,
+        alice_pubkey: elements.get(3)?.data.try_into().ok()?,
+        bob_spk: elements.get(7)?.data.get(2..)?.to_vec(),
+        bob_pubkey: elements.get(12)?.data.try_into().ok()?,
+        alice_spk: elements.get(16)?.data.get(2..)?.to_vec(),
+        arbiter_pubkey: elements.get(21)?.data.try_into().ok()?,
+    };
+    let rebuilt = build_escrow_script(
+        &fields.alice_pubkey,
+        &fields.bob_pubkey,
+        &fields.arbiter_pubkey,
+        &fields.alice_spk,
+        &fields.bob_spk,
+        &fields.salt,
+    );
+    (rebuilt == script).then_some(fields)
+}
+
 /// Build a time-locked escrow covenant redeem script.
 ///
 /// Two-party escrow with automatic refund after timeout.
