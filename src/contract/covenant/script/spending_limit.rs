@@ -53,3 +53,35 @@ pub fn build_global_spending_limit_script(
 
     s
 }
+
+/// The fields of a canonical global spending-limit script.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GlobalSpendingLimitFields {
+    pub owner_pubkey: [u8; 32],
+    pub max_withdraw_sompi: u64,
+    pub cooldown_daa: u64,
+    pub salt: [u8; 8],
+}
+
+/// Recognize `script` as exactly what [`build_global_spending_limit_script`] builds.
+#[must_use]
+pub fn global_spending_limit_script_fields(script: &[u8]) -> Option<GlobalSpendingLimitFields> {
+    let elements = crate::contract::script::complete_elements(script)?;
+    let fields = GlobalSpendingLimitFields {
+        salt: elements.first()?.data.try_into().ok()?,
+        owner_pubkey: elements.get(2)?.data.try_into().ok()?,
+        cooldown_daa: crate::contract::script::element_integer(elements.get(4)?)?,
+        max_withdraw_sompi: crate::contract::script::find_preceding_script_integer(
+            script,
+            super::covenant_ops::OP_SUB,
+        )
+        .ok()??,
+    };
+    let rebuilt = build_global_spending_limit_script(
+        &fields.owner_pubkey,
+        fields.max_withdraw_sompi,
+        fields.cooldown_daa,
+        &fields.salt,
+    );
+    (rebuilt == script).then_some(fields)
+}

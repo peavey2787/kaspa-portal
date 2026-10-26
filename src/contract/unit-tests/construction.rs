@@ -341,6 +341,16 @@ fn covenant_recognizers_return_exactly_the_built_fields() {
             &[16; 8],
         );
         assert_recognizes_only_canonical(&script, &allowance, global_allowance_script_fields);
+
+        let limit = GlobalSpendingLimitFields {
+            owner_pubkey: [21; 32],
+            max_withdraw_sompi: start_daa,
+            cooldown_daa,
+            salt: [22; 8],
+        };
+        let script =
+            build_global_spending_limit_script(&[21; 32], start_daa, cooldown_daa, &[22; 8]);
+        assert_recognizes_only_canonical(&script, &limit, global_spending_limit_script_fields);
     }
 
     let p2pk = |key: u8| [&[0x20][..], &[key; 32], &[0xac]].concat();
@@ -375,6 +385,7 @@ fn covenant_recognizers_reject_every_other_family() {
         build_piggy_bank_script(&[1; 32], 100, 100, &[5; 8]),
         build_global_allowance_script(&[1; 32], &[2; 32], 100, 100, 100, &[5; 8]),
         build_escrow_script(&[1; 32], &[2; 32], &[3; 32], &[0x51], &[0x52], &[5; 8]),
+        build_global_spending_limit_script(&[1; 32], 100, 100, &[5; 8]),
     ];
     let recognized = |script: &[u8]| {
         [
@@ -385,13 +396,14 @@ fn covenant_recognizers_reject_every_other_family() {
             piggy_bank_script_fields(script).is_some(),
             global_allowance_script_fields(script).is_some(),
             escrow_script_fields(script).is_some(),
+            global_spending_limit_script_fields(script).is_some(),
         ]
     };
     for (family, script) in scripts.iter().enumerate() {
-        let expected: [bool; 7] = core::array::from_fn(|index| index == family);
+        let expected: [bool; 8] = core::array::from_fn(|index| index == family);
         assert_eq!(recognized(script), expected, "family {family}");
     }
-    assert_eq!(recognized(&[]), [false; 7]);
+    assert_eq!(recognized(&[]), [false; 8]);
 }
 
 #[test]
