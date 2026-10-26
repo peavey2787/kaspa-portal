@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
-use k256::elliptic_curve::sec1::ToEncodedPoint;
-use k256::elliptic_curve::ScalarPrimitive;
+use k256::elliptic_curve::sec1::ToSec1Point;
+use k256::elliptic_curve::ScalarValue;
 use k256::{AffinePoint, PublicKey, Scalar, Secp256k1};
 
 pub fn x_only_pub(public_key: &PublicKey) -> [u8; 32] {
@@ -9,12 +9,12 @@ pub fn x_only_pub(public_key: &PublicKey) -> [u8; 32] {
 }
 
 pub(crate) fn x_only_bytes(public_key: &PublicKey) -> [u8; 32] {
-    let encoded = public_key.to_encoded_point(true);
+    let encoded = public_key.to_sec1_point(true);
     x_coordinate(encoded.as_bytes())
 }
 
 pub(crate) fn x_only_from_affine(affine: &AffinePoint) -> [u8; 32] {
-    let encoded = affine.to_encoded_point(true);
+    let encoded = affine.to_sec1_point(true);
     x_coordinate(encoded.as_bytes())
 }
 
@@ -38,7 +38,7 @@ pub fn pubkey_from_xonly(bytes: &[u8]) -> Result<PublicKey, String> {
 }
 
 pub(crate) fn scalar_from_bytes(bytes: &[u8; 32]) -> Result<Scalar, String> {
-    let primitive = ScalarPrimitive::<Secp256k1>::from_slice(bytes)
+    let primitive = ScalarValue::<Secp256k1>::from_slice(bytes)
         .map_err(|error| format!("Invalid scalar: {error}"))?;
     Ok(Scalar::from(primitive))
 }

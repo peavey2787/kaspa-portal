@@ -270,7 +270,7 @@ pub(crate) fn verify_bip340(
     message: &[u8; 32],
     signature: &[u8; 64],
 ) -> Result<(), String> {
-    let key = VerifyingKey::from_bytes(public_key)
+    let key = VerifyingKey::from_bytes(public_key.into())
         .map_err(|_| "invalid Schnorr public key".to_string())?;
     let signature = K256Signature::try_from(signature.as_slice())
         .map_err(|_| "invalid Schnorr signature encoding".to_string())?;

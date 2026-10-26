@@ -15,10 +15,10 @@
 
 use k256::{
     elliptic_curve::{
-        sec1::{FromEncodedPoint, ToEncodedPoint},
-        Group, ScalarPrimitive,
+        sec1::{FromSec1Point, ToSec1Point},
+        Group, ScalarValue,
     },
-    AffinePoint, EncodedPoint, ProjectivePoint, Scalar, Secp256k1,
+    AffinePoint, ProjectivePoint, Scalar, Sec1Point, Secp256k1,
 };
 
 use crate::wallet::derivation::hmac::{hmac_sha512, zeroize_buf};
@@ -211,8 +211,7 @@ fn scalar_and_chain_code(digest: &[u8; 64]) -> Result<(Scalar, [u8; 32]), Bip32E
         zeroize_buf(&mut chain_code);
         return Err(Bip32Error::InvalidKey);
     }
-    let primitive =
-        ScalarPrimitive::<Secp256k1>::from_slice(&il).map_err(|_| Bip32Error::InvalidKey);
+    let primitive = ScalarValue::<Secp256k1>::from_slice(&il).map_err(|_| Bip32Error::InvalidKey);
     zeroize_buf(&mut il);
     match primitive {
         Ok(value) => Ok((Scalar::from(&value), chain_code)),
@@ -227,14 +226,14 @@ fn decode_parent_point(
     parent: &ExtendedPubKey,
     child_chain_code: &mut [u8; 32],
 ) -> Result<ProjectivePoint, Bip32Error> {
-    let encoded = match EncodedPoint::from_bytes(parent.pubkey) {
+    let encoded = match Sec1Point::from_bytes(parent.pubkey) {
         Ok(encoded) => encoded,
         Err(_) => {
             zeroize_buf(child_chain_code);
             return Err(Bip32Error::CurveError);
         }
     };
-    let affine = Option::<AffinePoint>::from(AffinePoint::from_encoded_point(&encoded));
+    let affine = Option::<AffinePoint>::from(AffinePoint::from_sec1_point(&encoded));
     match affine {
         Some(point) => Ok(ProjectivePoint::from(point)),
         None => {
@@ -260,7 +259,7 @@ fn encode_child_point(
     child_point: &ProjectivePoint,
     child_chain_code: &mut [u8; 32],
 ) -> Result<[u8; 33], Bip32Error> {
-    let encoded = child_point.to_affine().to_encoded_point(true);
+    let encoded = child_point.to_affine().to_sec1_point(true);
     let bytes = encoded.as_bytes();
     if bytes.len() != 33 {
         zeroize_buf(child_chain_code);

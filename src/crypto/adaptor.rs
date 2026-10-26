@@ -8,10 +8,10 @@
 use k256::elliptic_curve::{
     group::Group,
     ops::{Neg, Reduce},
-    sec1::ToEncodedPoint,
-    ScalarPrimitive,
+    sec1::ToSec1Point,
+    ScalarValue,
 };
-use k256::{ProjectivePoint, Scalar, U256};
+use k256::{FieldBytes, ProjectivePoint, Scalar};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -65,7 +65,7 @@ pub fn adaptor_base_nonce_point(
         aux_rand,
     )?;
     let point = ProjectivePoint::GENERATOR * nonce;
-    let encoded = point.to_affine().to_encoded_point(true);
+    let encoded = point.to_affine().to_sec1_point(true);
     let mut out = [0u8; 33];
     out.copy_from_slice(encoded.as_bytes());
     Ok(out)
@@ -92,7 +92,7 @@ pub fn create_adaptor_presignature(
         aux_rand,
     )?;
     let base_point = ProjectivePoint::GENERATOR * base_nonce;
-    let base_encoded = base_point.to_affine().to_encoded_point(true);
+    let base_encoded = base_point.to_affine().to_sec1_point(true);
     let mut base_nonce_point = [0u8; 33];
     base_nonce_point.copy_from_slice(base_encoded.as_bytes());
     let host = host_scalar(
@@ -278,7 +278,7 @@ fn host_scalar(
 }
 
 fn nonzero_reduced_scalar(digest: &[u8; 32], error: AdaptorError) -> Result<Scalar, AdaptorError> {
-    let scalar = <Scalar as Reduce<U256>>::reduce_bytes(&(*digest).into());
+    let scalar = <Scalar as Reduce<FieldBytes>>::reduce(&(*digest).into());
     if bool::from(scalar.is_zero()) {
         Err(error)
     } else {
@@ -302,7 +302,7 @@ fn nonzero_scalar_sum(
 fn normalized_secret_and_public_x(
     private_key: &[u8; 32],
 ) -> Result<(Scalar, [u8; 32]), AdaptorError> {
-    let primitive = ScalarPrimitive::<k256::Secp256k1>::from_slice(private_key)
+    let primitive = ScalarValue::<k256::Secp256k1>::from_slice(private_key)
         .map_err(|_| AdaptorError::InvalidPrivateKey)?;
     let raw = Scalar::from(primitive);
     if bool::from(raw.is_zero()) {
@@ -310,7 +310,7 @@ fn normalized_secret_and_public_x(
     }
     let encoded = (ProjectivePoint::GENERATOR * raw)
         .to_affine()
-        .to_encoded_point(true);
+        .to_sec1_point(true);
     let bytes = encoded.as_bytes();
     let normalized = if bytes[0] == 0x03 { raw.neg() } else { raw };
     let mut x = [0u8; 32];
@@ -342,11 +342,11 @@ fn challenge(rx: &[u8; 32], px: &[u8; 32], message: &[u8; 32]) -> Scalar {
     hasher.update(tag);
     hasher.update(data);
     let digest: [u8; 32] = hasher.finalize().into();
-    <Scalar as Reduce<U256>>::reduce_bytes(&digest.into())
+    <Scalar as Reduce<FieldBytes>>::reduce(&digest.into())
 }
 
 fn scalar_from_canonical(bytes: &[u8; 32]) -> Option<Scalar> {
-    ScalarPrimitive::<k256::Secp256k1>::from_slice(bytes)
+    ScalarValue::<k256::Secp256k1>::from_slice(bytes)
         .ok()
         .map(Scalar::from)
 }
@@ -355,7 +355,7 @@ fn point_x_and_parity(point: &ProjectivePoint) -> Option<([u8; 32], bool)> {
     if bool::from(point.is_identity()) {
         return None;
     }
-    let encoded = point.to_affine().to_encoded_point(false);
+    let encoded = point.to_affine().to_sec1_point(false);
     let x = encoded.x()?;
     let y = encoded.y()?;
     let mut out = [0u8; 32];

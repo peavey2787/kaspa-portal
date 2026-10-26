@@ -24,25 +24,25 @@ fn stealth_target(
     account: &crate::wallet::derivation::bip32::ExtendedPrivKey,
     tweak_bytes: [u8; 32],
 ) -> [u8; 32] {
-    use k256::elliptic_curve::{ops::Add, sec1::ToEncodedPoint, ScalarPrimitive};
+    use k256::elliptic_curve::{ops::Add, sec1::ToSec1Point, ScalarValue};
     use k256::{ProjectivePoint, Scalar};
 
-    let primitive = ScalarPrimitive::<k256::Secp256k1>::from_slice(account.private_key_bytes())
+    let primitive = ScalarValue::<k256::Secp256k1>::from_slice(account.private_key_bytes())
         .expect("account scalar");
     let raw = Scalar::from(primitive);
     let point = (ProjectivePoint::GENERATOR * raw)
         .to_affine()
-        .to_encoded_point(true);
+        .to_sec1_point(true);
     let normalized = if point.as_bytes()[0] == 0x03 {
         -raw
     } else {
         raw
     };
-    let tweak = ScalarPrimitive::<k256::Secp256k1>::from_slice(&tweak_bytes).expect("tweak scalar");
+    let tweak = ScalarValue::<k256::Secp256k1>::from_slice(&tweak_bytes).expect("tweak scalar");
     let combined = normalized.add(&Scalar::from(tweak));
     let encoded = (ProjectivePoint::GENERATOR * combined)
         .to_affine()
-        .to_encoded_point(true);
+        .to_sec1_point(true);
     let mut target = [0u8; 32];
     target.copy_from_slice(&encoded.as_bytes()[1..33]);
     target

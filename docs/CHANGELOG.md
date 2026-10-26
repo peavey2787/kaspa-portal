@@ -4,6 +4,14 @@
 
 One implementation per primitive.
 
+- Dependencies carry no known advisory. `k256` 0.14 brings `crypto-bigint`
+  0.7, which removes the secret-dependent branches in scalar arithmetic
+  reported as RUSTSEC-2026-0387. arkworks 0.6 moves the crowdfund circuit
+  to the gr1cs API and drops `tracing-subscriber` 0.2 (RUSTSEC-2025-0055).
+  `qa/scripts/check_dependencies.py` runs `cargo audit --deny warnings`
+  over every committed lockfile in run-all and CI. The only accepted
+  advisory is the compile-time `derivative` proc-macro.
+
 - Every shareable covenant family has a template recognizer beside its
   builder: `dms_script_fields`, `timelocked_savings_script_fields`,
   `piggy_bank_script_fields`, `escrow_script_fields`,

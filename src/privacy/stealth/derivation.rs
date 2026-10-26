@@ -1,4 +1,4 @@
-use k256::elliptic_curve::ScalarPrimitive;
+use k256::elliptic_curve::ScalarValue;
 use k256::{Scalar, Secp256k1};
 use sha2::{Digest, Sha256};
 
@@ -18,10 +18,10 @@ pub(crate) fn stealth_tweak(shared_secret_x: &[u8; 32], counter: u32) -> (Scalar
     hasher.update(shared_secret_x);
     hasher.update(counter.to_be_bytes());
     let hash: [u8; 32] = hasher.finalize().into();
-    let primitive = ScalarPrimitive::<Secp256k1>::from_slice(&hash).unwrap_or_else(|_| {
+    let primitive = ScalarValue::<Secp256k1>::from_slice(&hash).unwrap_or_else(|_| {
         let mut adjusted = [0u8; 32];
         adjusted[1..].copy_from_slice(&hash[..31]);
-        ScalarPrimitive::<Secp256k1>::from_slice(&adjusted).expect("31-byte reduced stealth tweak")
+        ScalarValue::<Secp256k1>::from_slice(&adjusted).expect("31-byte reduced stealth tweak")
     });
     let index =
         u32::from_be_bytes(hash[..4].try_into().expect("four-byte hash prefix")) & 0x7fff_ffff;

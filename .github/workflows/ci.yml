@@ -54,6 +54,10 @@ jobs:
       - name: Pinned toolchain (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2
+      - name: Dependency advisories (warnings denied)
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          python3 qa/scripts/check_dependencies.py
       - name: Formatting
         run: |
           cargo fmt --all -- --check

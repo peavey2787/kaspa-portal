@@ -285,28 +285,28 @@ fn stealth_material(
     tx: &Transaction,
     target_xonly: &[u8; 32],
 ) -> Option<SigningKeyMaterial> {
-    use k256::elliptic_curve::{ops::Add, sec1::ToEncodedPoint, ScalarPrimitive};
+    use k256::elliptic_curve::{ops::Add, sec1::ToSec1Point, ScalarValue};
     use k256::{ProjectivePoint, Scalar};
 
     let account = context.account_material(seed_index)?;
     let account_primitive =
-        ScalarPrimitive::<k256::Secp256k1>::from_slice(&account.private_key).ok()?;
+        ScalarValue::<k256::Secp256k1>::from_slice(&account.private_key).ok()?;
     let account_scalar = {
         let scalar = Scalar::from(account_primitive);
         let encoded = (ProjectivePoint::GENERATOR * scalar)
             .to_affine()
-            .to_encoded_point(true);
+            .to_sec1_point(true);
         if encoded.as_bytes()[0] == 0x03 {
             -scalar
         } else {
             scalar
         }
     };
-    let tweak = ScalarPrimitive::<k256::Secp256k1>::from_slice(&tx.stealth_tweak).ok()?;
+    let tweak = ScalarValue::<k256::Secp256k1>::from_slice(&tx.stealth_tweak).ok()?;
     let combined = account_scalar.add(&Scalar::from(tweak));
     let point = (ProjectivePoint::GENERATOR * combined)
         .to_affine()
-        .to_encoded_point(true);
+        .to_sec1_point(true);
     if &point.as_bytes()[1..33] != target_xonly {
         return None;
     }

@@ -1,7 +1,7 @@
 //! Power-on known-answer self-test, shared with the unit tests.
 
 use crate::crypto::schnorr::*;
-use k256::{elliptic_curve::sec1::ToEncodedPoint, SecretKey};
+use k256::{elliptic_curve::sec1::ToSec1Point, SecretKey};
 
 /// Test: sign and verify roundtrip
 /// Test: sign then verify succeeds.
@@ -37,7 +37,7 @@ fn test_sign_verify_roundtrip() -> bool {
         Err(_) => return false,
     };
     let pk = sk.public_key();
-    let pk_point = pk.to_encoded_point(true);
+    let pk_point = pk.to_sec1_point(true);
     let mut pubkey_x = [0u8; 32];
     pubkey_x.copy_from_slice(&pk_point.as_bytes()[1..33]);
 
@@ -93,7 +93,7 @@ fn test_invalid_signature_fails() -> bool {
         Err(_) => return false,
     };
     let pk = sk.public_key();
-    let pk_point = pk.to_encoded_point(true);
+    let pk_point = pk.to_sec1_point(true);
     let mut pubkey_x = [0u8; 32];
     pubkey_x.copy_from_slice(&pk_point.as_bytes()[1..33]);
 

@@ -1,6 +1,6 @@
 //! Power-on known-answer self-test, shared with the unit tests.
 
-use k256::{elliptic_curve::sec1::ToEncodedPoint, SecretKey};
+use k256::{elliptic_curve::sec1::ToSec1Point, SecretKey};
 
 use crate::wallet::derivation::{
     bip32::{
@@ -83,7 +83,7 @@ fn test_vector1_official() -> bool {
         Err(_) => return false,
     };
     let pk = sk.public_key();
-    let point = pk.to_encoded_point(true);
+    let point = pk.to_sec1_point(true);
     let pk_bytes = point.as_bytes();
 
     // Expected compressed public key

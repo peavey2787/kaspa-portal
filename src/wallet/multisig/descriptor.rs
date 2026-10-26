@@ -1,6 +1,6 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
-use k256::elliptic_curve::sec1::ToEncodedPoint;
+use k256::elliptic_curve::sec1::ToSec1Point;
 
 use super::{
     grammar::{
@@ -254,7 +254,7 @@ fn derived_45_compressed(
         .derive_child(address_index)?;
     child
         .key
-        .to_encoded_point(true)
+        .to_sec1_point(true)
         .as_bytes()
         .try_into()
         .map_err(|_| "Derived public key has invalid length".to_string())
@@ -271,7 +271,7 @@ fn derive_45(
         .map_err(|_| "Derived public key has invalid length".to_string())
 }
 fn xonly(key: &k256::PublicKey) -> Result<[u8; 32], String> {
-    key.to_encoded_point(true).as_bytes()[1..33]
+    key.to_sec1_point(true).as_bytes()[1..33]
         .try_into()
         .map_err(|_| "Derived public key has invalid length".to_string())
 }

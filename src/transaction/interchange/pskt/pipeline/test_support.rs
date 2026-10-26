@@ -40,7 +40,7 @@ pub(crate) fn xonly(marker: u8) -> [u8; 32] {
 }
 
 fn signing_key(marker: u8) -> k256::schnorr::SigningKey {
-    k256::schnorr::SigningKey::from_bytes(&[marker; 32]).expect("test signing key")
+    k256::schnorr::SigningKey::from_bytes((&[marker; 32]).into()).expect("test signing key")
 }
 
 /// `m`-of-`n` multisig over the deterministic test signers `keys`.

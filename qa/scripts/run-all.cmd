@@ -100,6 +100,9 @@ if /I "%RESUME_STAGE%"=="funded-e2e" goto :rust_e2e_qa
 if /I "%RESUME_STAGE%"=="browser-e2e" goto :browser_e2e_qa
 if /I "%RESUME_STAGE%"=="resources-e2e" goto :resource_e2e_qa
 
+echo ==^> Dependency advisories
+call :run_python "qa\scripts\check_dependencies.py"
+if errorlevel 1 exit /b 1
 echo ==^> Rust compile/test QA
 call :run cargo check --all-targets --all-features
 if errorlevel 1 exit /b 1

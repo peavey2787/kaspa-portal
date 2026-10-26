@@ -117,27 +117,27 @@ fn sign_stealth_input(
     sighash_type: SigHashType,
     signing_entropy: Option<&[u8; 32]>,
 ) -> Result<bool, PsktError> {
-    use k256::elliptic_curve::{ops::Add, sec1::ToEncodedPoint, ScalarPrimitive};
+    use k256::elliptic_curve::{ops::Add, sec1::ToSec1Point, ScalarValue};
     use k256::{ProjectivePoint, Scalar};
 
     let account_primitive =
-        ScalarPrimitive::<k256::Secp256k1>::from_slice(account_key.private_key_bytes())
+        ScalarValue::<k256::Secp256k1>::from_slice(account_key.private_key_bytes())
             .map_err(|_| PsktError::DerivationFailed)?;
     let account_scalar = {
         let scalar = Scalar::from(account_primitive);
         let point = (ProjectivePoint::GENERATOR * scalar).to_affine();
-        let encoded = point.to_encoded_point(true);
+        let encoded = point.to_sec1_point(true);
         if encoded.as_bytes()[0] == 0x03 {
             -scalar
         } else {
             scalar
         }
     };
-    let tweak = ScalarPrimitive::<k256::Secp256k1>::from_slice(&tx.stealth_tweak)
+    let tweak = ScalarValue::<k256::Secp256k1>::from_slice(&tx.stealth_tweak)
         .map_err(|_| PsktError::DerivationFailed)?;
     let combined_scalar = account_scalar.add(&Scalar::from(tweak));
     let combined_point = (ProjectivePoint::GENERATOR * combined_scalar).to_affine();
-    let combined_public_key = combined_point.to_encoded_point(true);
+    let combined_public_key = combined_point.to_sec1_point(true);
     if &combined_public_key.as_bytes()[1..33] != target_public_key {
         return Ok(false);
     }

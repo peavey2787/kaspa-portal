@@ -64,7 +64,7 @@ pub(crate) fn verify_oracle_attestation(
     template: &OracleTemplate,
     signature: &[u8],
 ) -> Result<K256Signature, String> {
-    let key = VerifyingKey::from_bytes(&template.oracle_key)
+    let key = VerifyingKey::from_bytes((&template.oracle_key).into())
         .map_err(|_| format!("input[{index}] oracle-v1 embedded oracle key is invalid"))?;
     let signature = K256Signature::try_from(signature).map_err(|_| {
         format!("input[{index}] oracle-v1 attestation signature encoding is invalid")

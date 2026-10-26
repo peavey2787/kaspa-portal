@@ -10,7 +10,7 @@
 use crate::alloc_prelude::*;
 
 use hmac::{Hmac, Mac};
-use k256::elliptic_curve::sec1::ToEncodedPoint;
+use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::PublicKey;
 use serde::{Deserialize, Serialize};
 use sha2::Sha512;
@@ -110,7 +110,7 @@ impl ExtPubKey {
             return Err("Cannot derive hardened child from public key".into());
         }
 
-        let parent_point = self.key.to_encoded_point(true);
+        let parent_point = self.key.to_sec1_point(true);
         let parent_bytes = parent_point.as_bytes(); // 33 bytes compressed
 
         let mut mac =
@@ -124,10 +124,10 @@ impl ExtPubKey {
 
         // Child key = parent_key + il*G (point addition via scalar tweak)
         use k256::elliptic_curve::ops::Add;
-        use k256::elliptic_curve::ScalarPrimitive;
+        use k256::elliptic_curve::ScalarValue;
         use k256::Secp256k1;
 
-        let tweak = ScalarPrimitive::<Secp256k1>::from_slice(il)
+        let tweak = ScalarValue::<Secp256k1>::from_slice(il)
             .map_err(|e| format!("Invalid tweak: {}", e))?;
         let tweak_scalar = k256::Scalar::from(tweak);
 
@@ -151,7 +151,7 @@ impl ExtPubKey {
 
     /// Get the x-only (Schnorr) public key bytes (32 bytes)
     pub fn x_only_bytes(&self) -> [u8; 32] {
-        let point = self.key.to_encoded_point(true);
+        let point = self.key.to_sec1_point(true);
         let compressed = point.as_bytes(); // 33 bytes: [prefix][x]
         let mut x = [0u8; 32];
         x.copy_from_slice(&compressed[1..33]);

@@ -39,7 +39,7 @@ for bad in ['tests','benches','fuzz','crates','apps']:
     if (ROOT/bad).exists(): fail(f'forbidden top-level directory: {bad}')
 for needed in ['qa/tests/fuzz','qa/benches','scripts']:
     if not (ROOT/needed).is_dir(): fail(f'missing {needed}')
-for needed_file in ['qa/scripts/run-all.sh', 'qa/scripts/run-all.cmd', 'qa/scripts/cleanup_windows_progress_artifacts.py', 'qa/scripts/check_capability_parity.py', 'qa/scripts/check_resource_coverage.py', 'qa/e2e/capabilities.toml', 'qa/resource/profiles.toml', 'qa/scripts/run-e2e-resources.sh', 'qa/scripts/run-e2e-resources.cmd', 'run-all-linux.sh', 'run-all-windows.cmd', 'scripts/run-e2e-browser-linux.sh', 'scripts/run-e2e-browser-windows.cmd', 'scripts/run-e2e-rust-linux.sh', 'scripts/run-e2e-rust-windows.cmd', 'scripts/run-e2e-resources-linux.sh', 'scripts/run-e2e-resources-windows.cmd', 'scripts/run-e2e-soak-linux.sh', 'scripts/run-e2e-soak-windows.cmd', 'qa/src/bin/e2e_wallet.rs', 'qa/e2e/networks.toml', 'qa/scripts/select_e2e_network.py', 'qa/scripts/load-e2e-networks.sh', 'qa/scripts/load-e2e-networks.cmd', 'qa/scripts/prepare-e2e-funding.sh', 'qa/scripts/prepare-e2e-funding.cmd', '.gitignore']:
+for needed_file in ['qa/scripts/run-all.sh', 'qa/scripts/run-all.cmd', 'qa/scripts/cleanup_windows_progress_artifacts.py', 'qa/scripts/check_capability_parity.py', 'qa/scripts/check_resource_coverage.py', 'qa/scripts/check_dependencies.py', 'qa/e2e/capabilities.toml', 'qa/resource/profiles.toml', 'qa/scripts/run-e2e-resources.sh', 'qa/scripts/run-e2e-resources.cmd', 'run-all-linux.sh', 'run-all-windows.cmd', 'scripts/run-e2e-browser-linux.sh', 'scripts/run-e2e-browser-windows.cmd', 'scripts/run-e2e-rust-linux.sh', 'scripts/run-e2e-rust-windows.cmd', 'scripts/run-e2e-resources-linux.sh', 'scripts/run-e2e-resources-windows.cmd', 'scripts/run-e2e-soak-linux.sh', 'scripts/run-e2e-soak-windows.cmd', 'qa/src/bin/e2e_wallet.rs', 'qa/e2e/networks.toml', 'qa/scripts/select_e2e_network.py', 'qa/scripts/load-e2e-networks.sh', 'qa/scripts/load-e2e-networks.cmd', 'qa/scripts/prepare-e2e-funding.sh', 'qa/scripts/prepare-e2e-funding.cmd', '.gitignore']:
     if not (ROOT/needed_file).is_file(): fail(f'missing {needed_file}')
 
 windows_runner = ROOT/'qa/scripts/run-all.cmd'
@@ -56,6 +56,8 @@ for runner in [ROOT/'qa/scripts/run-all.sh', ROOT/'qa/scripts/run-all.cmd']:
         fail(f'capability/parity gate is not wired into {runner.relative_to(ROOT)}')
     if 'check_resource_coverage.py' not in runner_text:
         fail(f'resource coverage gate is not wired into {runner.relative_to(ROOT)}')
+    if 'check_dependencies.py' not in runner_text:
+        fail(f'dependency advisory gate is not wired into {runner.relative_to(ROOT)}')
     for e2e_runner in ['run-e2e-rust', 'run-e2e-browser', 'run-e2e-resources']:
         if e2e_runner not in runner_text:
             fail(f'{e2e_runner} is not wired into {runner.relative_to(ROOT)}')

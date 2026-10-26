@@ -25,7 +25,7 @@ fn final_signature_is_bip340_and_bound_to_host_nonce() {
     )
     .unwrap();
 
-    let signing_key = SigningKey::from_bytes(&private_key).unwrap();
+    let signing_key = SigningKey::from_bytes((&private_key).into()).unwrap();
     let public_x: [u8; 32] = signing_key.verifying_key().to_bytes().into();
     crate::crypto::schnorr::schnorr_verify(&public_x, &message, &final_signature).unwrap();
     let public_key = canonical_public_key(&public_x);
@@ -60,7 +60,7 @@ fn wrong_host_secret_breaks_nonce_relation() {
         2,
     )
     .unwrap();
-    let signing_key = SigningKey::from_bytes(&private_key).unwrap();
+    let signing_key = SigningKey::from_bytes((&private_key).into()).unwrap();
     let public_x: [u8; 32] = signing_key.verifying_key().to_bytes().into();
     let public_key = canonical_public_key(&public_x);
     crate::test_support::assert_err(
@@ -139,7 +139,7 @@ fn anti_klepto_rejects_invalid_key_points_and_scalar_boundaries() {
     let provisional =
         crate::crypto::schnorr::schnorr_sign_with_aux_rand(&private_key, &message, &[0x63u8; 32])
             .expect("provisional signature");
-    let signing_key = SigningKey::from_bytes(&private_key).expect("signing key");
+    let signing_key = SigningKey::from_bytes((&private_key).into()).expect("signing key");
     let public_x: [u8; 32] = signing_key.verifying_key().to_bytes().into();
     let public_key = canonical_public_key(&public_x);
     let final_signature = tweak_provisional_signature(

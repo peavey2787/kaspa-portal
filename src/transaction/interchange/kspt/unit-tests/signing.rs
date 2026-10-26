@@ -74,19 +74,18 @@ fn raw_key_signer_rejects_nonmatching_inputs() {
 
 #[test]
 fn imported_account_signer_handles_stealth_tweaks_and_rejects_mismatches() {
-    use k256::elliptic_curve::{ops::Add, sec1::ToEncodedPoint, ScalarPrimitive};
+    use k256::elliptic_curve::{ops::Add, sec1::ToSec1Point, ScalarValue};
     use k256::{ProjectivePoint, Scalar};
 
     let seed = [0x41u8; 64];
     let account = derive_account_key(&seed).expect("account derivation");
-    let account_primitive =
-        ScalarPrimitive::<k256::Secp256k1>::from_slice(account.private_key_bytes())
-            .expect("account scalar");
+    let account_primitive = ScalarValue::<k256::Secp256k1>::from_slice(account.private_key_bytes())
+        .expect("account scalar");
     let account_scalar = {
         let scalar = Scalar::from(account_primitive);
         let encoded = (ProjectivePoint::GENERATOR * scalar)
             .to_affine()
-            .to_encoded_point(true);
+            .to_sec1_point(true);
         if encoded.as_bytes()[0] == 0x03 {
             -scalar
         } else {
@@ -95,12 +94,11 @@ fn imported_account_signer_handles_stealth_tweaks_and_rejects_mismatches() {
     };
     let mut tweak_bytes = [0u8; 32];
     tweak_bytes[31] = 1;
-    let tweak =
-        ScalarPrimitive::<k256::Secp256k1>::from_slice(&tweak_bytes).expect("stealth tweak");
+    let tweak = ScalarValue::<k256::Secp256k1>::from_slice(&tweak_bytes).expect("stealth tweak");
     let combined = account_scalar.add(&Scalar::from(tweak));
     let encoded = (ProjectivePoint::GENERATOR * combined)
         .to_affine()
-        .to_encoded_point(true);
+        .to_sec1_point(true);
     let mut target = [0u8; 32];
     target.copy_from_slice(&encoded.as_bytes()[1..33]);
 

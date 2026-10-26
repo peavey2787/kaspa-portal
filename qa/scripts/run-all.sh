@@ -40,6 +40,7 @@ command -v cargo >/dev/null 2>&1 || {
 }
 
 if [[ "$resume_stage" == "full" ]]; then
+  python3 qa/scripts/check_dependencies.py
   cargo check --all-targets --all-features
   cargo test --all-targets
   cargo test --doc

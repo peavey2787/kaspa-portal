@@ -11,7 +11,7 @@ fn roundtrip() {
     let sk = SecretKey::from_slice(&priv_bytes).unwrap();
     let scalar: Scalar = *sk.to_nonzero_scalar();
     let pub_point = (ProjectivePoint::GENERATOR * scalar).to_affine();
-    let pub_encoded = pub_point.to_encoded_point(false);
+    let pub_encoded = pub_point.to_sec1_point(false);
     let mut xonly = [0u8; 32];
     xonly.copy_from_slice(&pub_encoded.as_bytes()[1..33]);
 
@@ -41,7 +41,7 @@ fn wrong_key_fails() {
     let sk = SecretKey::from_slice(&priv_bytes).unwrap();
     let scalar: Scalar = *sk.to_nonzero_scalar();
     let pub_point = (ProjectivePoint::GENERATOR * scalar).to_affine();
-    let pub_encoded = pub_point.to_encoded_point(false);
+    let pub_encoded = pub_point.to_sec1_point(false);
     let mut xonly = [0u8; 32];
     xonly.copy_from_slice(&pub_encoded.as_bytes()[1..33]);
 

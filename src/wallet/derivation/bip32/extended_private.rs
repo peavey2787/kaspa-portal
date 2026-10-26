@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use k256::{elliptic_curve::sec1::ToEncodedPoint, SecretKey};
+use k256::{elliptic_curve::sec1::ToSec1Point, SecretKey};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -84,7 +84,7 @@ impl ExtendedPrivKey {
     pub fn public_key_compressed(&self) -> Result<[u8; 33], Bip32Error> {
         let sk = SecretKey::from_slice(&self.key).map_err(|_| Bip32Error::CurveError)?;
         let pk = sk.public_key();
-        let point = pk.to_encoded_point(true); // compressed
+        let point = pk.to_sec1_point(true); // compressed
         let bytes = point.as_bytes();
         let mut result = [0u8; 33];
         result.copy_from_slice(bytes);
@@ -104,7 +104,7 @@ impl ExtendedPrivKey {
 /// Derive the compressed public key (33 bytes) from a raw private key.
 pub fn compressed_pubkey_from_raw_key(privkey: &[u8; 32]) -> Result<[u8; 33], Bip32Error> {
     let secret_key = SecretKey::from_slice(privkey).map_err(|_| Bip32Error::CurveError)?;
-    let encoded = secret_key.public_key().to_encoded_point(true);
+    let encoded = secret_key.public_key().to_sec1_point(true);
     let mut compressed = [0u8; 33];
     compressed.copy_from_slice(encoded.as_bytes());
     Ok(compressed)

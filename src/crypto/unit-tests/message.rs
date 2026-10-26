@@ -28,7 +28,7 @@ fn message_signature_verifies_only_against_domain_digest() {
     let entropy = [0x22u8; 32];
     let signature = sign_message_with_entropy(&private_key, b"reviewed text", &entropy)
         .expect("domain-separated message signs");
-    let public = k256::schnorr::SigningKey::from_bytes(&private_key)
+    let public = k256::schnorr::SigningKey::from_bytes((&private_key).into())
         .expect("test key")
         .verifying_key()
         .to_bytes();

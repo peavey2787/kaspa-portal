@@ -56,7 +56,7 @@ fn document(redeem: &[u8], mask: u16, truth: u16) -> Value {
 /// Sign with `marker` and return the document plus the 65-byte signature push.
 fn signed(mut document: Value, marker: u8) -> (Value, Vec<u8>) {
     let digest = sighash_all_for_pskt(&pskb(&document), Network::Mainnet, 0).expect("sighash");
-    let signing = SigningKey::from_bytes(&[marker; 32]).expect("test signing key");
+    let signing = SigningKey::from_bytes((&[marker; 32]).into()).expect("test signing key");
     let signature = signing.sign_raw(&digest, &[0u8; 32]).expect("signature");
     document["inputs"][0]["partialSigs"] = json!({
         format!("02{}", hex::encode(signing.verifying_key().to_bytes())): {

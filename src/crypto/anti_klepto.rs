@@ -8,10 +8,10 @@
 use k256::elliptic_curve::{
     group::Group,
     ops::{Neg, Reduce},
-    sec1::ToEncodedPoint,
+    sec1::ToSec1Point,
     subtle::ConstantTimeEq,
 };
-use k256::{ProjectivePoint, Scalar, U256};
+use k256::{FieldBytes, ProjectivePoint, Scalar};
 use sha2::{Digest, Sha256};
 
 use super::schnorr::{SchnorrError, SchnorrSignature};
@@ -80,7 +80,7 @@ pub fn host_scalar(
 }
 
 fn nonzero_host_scalar(material: &[u8; 32]) -> Result<Scalar, AntiKleptoError> {
-    let scalar = <Scalar as Reduce<U256>>::reduce_bytes(&(*material).into());
+    let scalar = <Scalar as Reduce<FieldBytes>>::reduce(&(*material).into());
     if bool::from(scalar.is_zero()) {
         Err(AntiKleptoError::InvalidHostContribution)
     } else {
@@ -178,7 +178,7 @@ fn zero_aux_nonce(secret: &Scalar, public_x: &[u8; 32], message: &[u8; 32]) -> S
     data[64..].copy_from_slice(message);
     let digest = tagged_hash(b"BIP0340/nonce", &data);
     crate::primitives::bytes::zeroize_bytes(&mut data);
-    <Scalar as Reduce<U256>>::reduce_bytes(&digest.into())
+    <Scalar as Reduce<FieldBytes>>::reduce(&digest.into())
 }
 
 /// Return the BIP340-normalized secret scalar and x-only public key.
@@ -189,9 +189,9 @@ fn zero_aux_nonce(secret: &Scalar, public_x: &[u8; 32], message: &[u8; 32]) -> S
 fn normalized_secret_and_public_x(
     private_key: &[u8; 32],
 ) -> Result<(Scalar, [u8; 32]), AntiKleptoError> {
-    use k256::elliptic_curve::ScalarPrimitive;
+    use k256::elliptic_curve::ScalarValue;
 
-    let primitive = ScalarPrimitive::<k256::Secp256k1>::from_slice(private_key)
+    let primitive = ScalarValue::<k256::Secp256k1>::from_slice(private_key)
         .map_err(|_| AntiKleptoError::InvalidPrivateKey)?;
     let raw_secret = Scalar::from(primitive);
     if bool::from(raw_secret.is_zero()) {
@@ -200,7 +200,7 @@ fn normalized_secret_and_public_x(
 
     let encoded = (ProjectivePoint::GENERATOR * raw_secret)
         .to_affine()
-        .to_encoded_point(true);
+        .to_sec1_point(true);
     // k256 guarantees a compressed, non-identity secp256k1 point here. The
     // encoded point is therefore exactly prefix || x, where prefix is 0x02/0x03.
     let bytes = encoded.as_bytes();
@@ -262,7 +262,7 @@ fn challenge(nonce_x: &[u8; 32], public_x: &[u8; 32], message: &[u8; 32]) -> Sca
     data[32..64].copy_from_slice(public_x);
     data[64..].copy_from_slice(message);
     let digest = tagged_hash(b"BIP0340/challenge", &data);
-    <Scalar as Reduce<U256>>::reduce_bytes(&digest.into())
+    <Scalar as Reduce<FieldBytes>>::reduce(&digest.into())
 }
 
 fn tagged_hash(tag: &[u8], data: &[u8]) -> [u8; 32] {
@@ -275,8 +275,8 @@ fn tagged_hash(tag: &[u8], data: &[u8]) -> [u8; 32] {
 }
 
 fn scalar_from_canonical(bytes: &[u8; 32]) -> Option<Scalar> {
-    use k256::elliptic_curve::ScalarPrimitive;
-    let primitive = ScalarPrimitive::<k256::Secp256k1>::from_slice(bytes).ok()?;
+    use k256::elliptic_curve::ScalarValue;
+    let primitive = ScalarValue::<k256::Secp256k1>::from_slice(bytes).ok()?;
     Some(Scalar::from(primitive))
 }
 
@@ -284,7 +284,7 @@ fn point_x_and_parity(point: &ProjectivePoint) -> Option<([u8; 32], bool)> {
     if bool::from(point.is_identity()) {
         return None;
     }
-    let encoded = point.to_affine().to_encoded_point(false);
+    let encoded = point.to_affine().to_sec1_point(false);
     let x = encoded.x()?;
     let y = encoded.y()?;
     let mut x_bytes = [0u8; 32];

@@ -596,7 +596,7 @@ fn oracle_v1_claim_document() -> Value {
 fn oracle_v1_claim_document_signed_by(signer: u8) -> Value {
     let refund = 0x51;
     let claimer = 0x52;
-    let oracle = SigningKey::from_bytes(&[0x53; 32]).expect("oracle signing key");
+    let oracle = SigningKey::from_bytes((&[0x53; 32]).into()).expect("oracle signing key");
     let commitment = [0x5a; 32];
     let oracle_signature = oracle
         .sign_raw(&commitment, &[0u8; 32])

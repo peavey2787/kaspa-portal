@@ -1520,28 +1520,28 @@ fn anti_klepto_account_finalization_covers_stealth_material_resolution() {
         finalize_account_signatures, initial_signature_counts, nonce_commitment_records,
         sign_transaction_multi_addr_with_entropy,
     };
-    use k256::elliptic_curve::{ops::Add, sec1::ToEncodedPoint, ScalarPrimitive};
+    use k256::elliptic_curve::{ops::Add, sec1::ToSec1Point, ScalarValue};
     use k256::{ProjectivePoint, Scalar};
 
     let seed = [0x31u8; 64];
     let account = derive_account_key(&seed).expect("account");
-    let primitive = ScalarPrimitive::<k256::Secp256k1>::from_slice(account.private_key_bytes())
+    let primitive = ScalarValue::<k256::Secp256k1>::from_slice(account.private_key_bytes())
         .expect("account scalar");
     let raw = Scalar::from(primitive);
     let account_point = (ProjectivePoint::GENERATOR * raw)
         .to_affine()
-        .to_encoded_point(true);
+        .to_sec1_point(true);
     let normalized = if account_point.as_bytes()[0] == 0x03 {
         -raw
     } else {
         raw
     };
     let tweak_bytes = [1u8; 32];
-    let tweak = ScalarPrimitive::<k256::Secp256k1>::from_slice(&tweak_bytes).expect("tweak");
+    let tweak = ScalarValue::<k256::Secp256k1>::from_slice(&tweak_bytes).expect("tweak");
     let combined = normalized.add(&Scalar::from(tweak));
     let combined_point = (ProjectivePoint::GENERATOR * combined)
         .to_affine()
-        .to_encoded_point(true);
+        .to_sec1_point(true);
     let mut target = [0u8; 32];
     target.copy_from_slice(&combined_point.as_bytes()[1..33]);
 

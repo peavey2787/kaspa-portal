@@ -75,7 +75,7 @@ pub fn schnorr_sign_with_aux_rand(
     aux_rand: &[u8; 32],
 ) -> Result<SchnorrSignature, SchnorrError> {
     let signing_key =
-        SigningKey::from_bytes(private_key).map_err(|_| SchnorrError::InvalidPrivateKey)?;
+        SigningKey::from_bytes(private_key.into()).map_err(|_| SchnorrError::InvalidPrivateKey)?;
     let signature = signing_key
         .sign_raw(message, aux_rand)
         .map_err(|_| SchnorrError::SigningFailed)?;
@@ -86,7 +86,7 @@ pub fn schnorr_sign_with_aux_rand(
 
 #[inline(never)]
 fn parse_verifying_key(pubkey_x: &[u8; 32]) -> Result<VerifyingKey, SchnorrError> {
-    VerifyingKey::from_bytes(pubkey_x).map_err(|_| SchnorrError::InvalidSignature)
+    VerifyingKey::from_bytes(pubkey_x.into()).map_err(|_| SchnorrError::InvalidSignature)
 }
 
 #[inline(never)]

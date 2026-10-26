@@ -20,7 +20,7 @@ use aes_gcm::{
     aead::{generic_array::GenericArray, AeadInPlace, KeyInit},
     Aes256Gcm,
 };
-use k256::{elliptic_curve::sec1::ToEncodedPoint, AffinePoint, ProjectivePoint, Scalar, SecretKey};
+use k256::{elliptic_curve::sec1::ToSec1Point, AffinePoint, ProjectivePoint, Scalar, SecretKey};
 
 /// Encrypt plaintext for a recipient identified by their 32-byte x-only pubkey.
 /// Returns the ciphertext in wire format (33 + 12 + N + 16 bytes).
@@ -42,7 +42,7 @@ pub fn encrypt(
     let eph_pub_point = (ProjectivePoint::GENERATOR * eph_scalar).to_affine();
 
     // Compressed ephemeral public key (33 bytes: 0x02/0x03 + x)
-    let eph_pub_encoded = eph_pub_point.to_encoded_point(true);
+    let eph_pub_encoded = eph_pub_point.to_sec1_point(true);
     let eph_pub_bytes: &[u8] = eph_pub_encoded.as_bytes(); // 33 bytes
 
     // 2. Reconstruct recipient public key from x-only (assume even Y)
@@ -50,7 +50,7 @@ pub fn encrypt(
 
     // 3. ECDH: shared = eph_priv * recipient_pub
     let shared_point = (ProjectivePoint::from(recipient_point) * eph_scalar).to_affine();
-    let shared_encoded = shared_point.to_encoded_point(false);
+    let shared_encoded = shared_point.to_sec1_point(false);
     let shared_x = &shared_encoded.as_bytes()[1..33]; // x-coordinate only
 
     // 4. Key derivation: aes_key = BLAKE2B-256(shared_x)
@@ -106,18 +106,17 @@ pub fn decrypt(
     let nonce_bytes = &ciphertext_wire[33..45];
 
     // 2. Reconstruct ephemeral public key
-    use k256::elliptic_curve::sec1::FromEncodedPoint;
-    use k256::EncodedPoint;
-    let eph_encoded =
-        EncodedPoint::from_bytes(eph_pub_bytes).map_err(|_| "bad ephemeral pubkey")?;
-    let eph_point: AffinePoint = Option::from(AffinePoint::from_encoded_point(&eph_encoded))
+    use k256::elliptic_curve::sec1::FromSec1Point;
+    use k256::Sec1Point;
+    let eph_encoded = Sec1Point::from_bytes(eph_pub_bytes).map_err(|_| "bad ephemeral pubkey")?;
+    let eph_point: AffinePoint = Option::from(AffinePoint::from_sec1_point(&eph_encoded))
         .ok_or("invalid ephemeral point")?;
 
     // 3. ECDH: shared = priv * eph_pub
     let sk = SecretKey::from_slice(private_key).map_err(|_| "bad private key")?;
     let priv_scalar: Scalar = *sk.to_nonzero_scalar();
     let shared_point = (ProjectivePoint::from(eph_point) * priv_scalar).to_affine();
-    let shared_encoded = shared_point.to_encoded_point(false);
+    let shared_encoded = shared_point.to_sec1_point(false);
     let shared_x = &shared_encoded.as_bytes()[1..33];
 
     // 4. Key derivation (same as encrypt)
@@ -149,10 +148,10 @@ fn lift_x(x_bytes: &[u8; 32]) -> Option<AffinePoint> {
     compressed[0] = 0x02;
     compressed[1..33].copy_from_slice(x_bytes);
 
-    use k256::elliptic_curve::sec1::FromEncodedPoint;
-    use k256::EncodedPoint;
-    let encoded = EncodedPoint::from_bytes(compressed).ok()?;
-    Option::from(AffinePoint::from_encoded_point(&encoded))
+    use k256::elliptic_curve::sec1::FromSec1Point;
+    use k256::Sec1Point;
+    let encoded = Sec1Point::from_bytes(compressed).ok()?;
+    Option::from(AffinePoint::from_sec1_point(&encoded))
 }
 
 #[cfg(test)]

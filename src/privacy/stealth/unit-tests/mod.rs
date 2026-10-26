@@ -63,7 +63,7 @@ fn raw_scanner_rejects_invalid_identity_lengths_and_script_bounds() {
 
 #[test]
 fn stealth_key_and_tweak_helpers_cover_roundtrip_and_validation() {
-    use k256::{elliptic_curve::sec1::ToEncodedPoint, SecretKey};
+    use k256::{elliptic_curve::sec1::ToSec1Point, SecretKey};
 
     let secret = SecretKey::from_slice(&[1u8; 32]).expect("valid secret key");
     let public = secret.public_key();
@@ -71,7 +71,7 @@ fn stealth_key_and_tweak_helpers_cover_roundtrip_and_validation() {
     // secret 0x0101..01: its public key's x coordinate.
     let expected = k256::ProjectivePoint::GENERATOR
         * super::keys::scalar_from_bytes(&[1u8; 32]).expect("valid scalar");
-    let encoded = expected.to_affine().to_encoded_point(true);
+    let encoded = expected.to_affine().to_sec1_point(true);
     assert_eq!(&xonly[..], &encoded.as_bytes()[1..]);
     let generator = SecretKey::from_slice(&{
         let mut one = [0u8; 32];
