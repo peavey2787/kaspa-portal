@@ -7,7 +7,7 @@
 
 use ark_bn254::{Bn254, Fr};
 use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
-use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
 use ark_std::rand::{rngs::StdRng, SeedableRng};
@@ -29,7 +29,7 @@ pub struct CrowdfundCircuit {
 
 impl ConstraintSynthesizer<Fr> for CrowdfundCircuit {
     fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
-        use ark_relations::r1cs::LinearCombination;
+        use ark_relations::gr1cs::{LinearCombination, Variable};
 
         let mut amount_vars = Vec::with_capacity(CROWDFUND_MAX_CONTRIBUTORS);
         let mut running_sum = Some(Fr::from(0u64));
@@ -50,10 +50,10 @@ impl ConstraintSynthesizer<Fr> for CrowdfundCircuit {
         for variable in amount_vars {
             sum_lc = sum_lc + variable;
         }
-        cs.enforce_constraint(
-            sum_lc,
-            LinearCombination::from(ark_relations::r1cs::Variable::One),
-            LinearCombination::from(sum_var),
+        cs.enforce_r1cs_constraint(
+            || sum_lc,
+            || LinearCombination::from(Variable::One),
+            || LinearCombination::from(sum_var),
         )?;
         Ok(())
     }
@@ -144,3 +144,7 @@ fn serialize_compressed<T: CanonicalSerialize>(value: &T) -> Result<Vec<u8>, Str
 fn serialize_field_element(value: &Fr) -> Result<Vec<u8>, String> {
     serialize_compressed(value)
 }
+
+#[cfg(test)]
+#[path = "unit-tests/proof.rs"]
+mod unit_tests;
