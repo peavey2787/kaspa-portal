@@ -887,3 +887,14 @@ fn toccata_multisig_fee_uses_final_signed_shape() {
         Ok(422_800),
     );
 }
+
+#[test]
+fn change_scan_covers_exactly_the_first_forty_addresses() {
+    let change = change_branch_addresses(&descriptor(), 0, MULTISIG_BRANCH_SCAN_DEPTH, "kaspa")
+        .expect("change branch");
+    let indexes = change
+        .iter()
+        .map(|(_, index, _)| *index)
+        .collect::<Vec<_>>();
+    assert_eq!(indexes, (0..40).collect::<Vec<_>>());
+}

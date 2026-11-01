@@ -136,3 +136,7 @@ fn same_output_body(
     ) && left.script_public_key.script[..left.script_public_key.script_len]
         == right.script_public_key.script[..right.script_public_key.script_len]
 }
+
+#[cfg(test)]
+#[path = "unit-tests/transaction_body.rs"]
+mod unit_tests;
