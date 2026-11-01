@@ -1,4 +1,6 @@
 mod inputs;
+#[cfg(doctest)]
+mod sink_contract;
 mod trailers;
 
 use super::io::Reader;

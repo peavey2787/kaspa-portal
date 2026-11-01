@@ -8,6 +8,8 @@
 use super::{compact, relay_fields::parse_multisig_redeem};
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
+#[cfg(doctest)]
+mod opaque_fields;
 mod plan;
 pub(super) mod witness;
 pub(crate) use plan::*;
