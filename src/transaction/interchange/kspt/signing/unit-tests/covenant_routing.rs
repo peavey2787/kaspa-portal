@@ -136,6 +136,31 @@ fn covenant_scanner_requires_strict_outer_loop_progress() {
 }
 
 #[test]
+fn a_path_with_two_active_keys_is_refused_because_one_signature_cannot_satisfy_it() {
+    use super::super::covenant::candidate_keys_for_input;
+    use super::{set_p2sh, transaction};
+
+    let mut script = Vec::new();
+    append_candidate(&mut script, 1, 0xad);
+    let mut tx = transaction();
+    set_p2sh(&mut tx, &{
+        let mut single = script.clone();
+        single[33] = 0xac;
+        single
+    });
+    tx.inputs[0].covenant_execution_present = true;
+    let single = candidate_keys_for_input(&tx, 0).expect("one active key");
+    assert_eq!(single.len, 1);
+
+    append_candidate(&mut script, 2, 0xac);
+    set_p2sh(&mut tx, &script);
+    assert_eq!(
+        candidate_keys_for_input(&tx, 0).err(),
+        Some(PsktError::InvalidModel)
+    );
+}
+
+#[test]
 fn kip22_spend_signs_with_the_key_behind_the_redeem_script() {
     use super::{set_p2sh, sign_transaction_multisig_with_entropy, transaction};
     use crate::{
