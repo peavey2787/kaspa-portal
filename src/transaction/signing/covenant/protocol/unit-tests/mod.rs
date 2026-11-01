@@ -1147,3 +1147,11 @@ fn request_encoding_fits_an_exact_buffer_and_reveal_needs_both_identifiers() {
         Err(ProtocolError::InvalidFields)
     );
 }
+
+#[test]
+fn wire_constants_match_the_format_devices_and_hosts_already_share() {
+    assert_eq!(&REQUEST_MAGIC, b"CVSG");
+    assert_eq!(&REVEAL_MAGIC, b"CVRV");
+    assert_eq!(&RESPONSE_MAGIC, b"CVSR");
+    assert_eq!(MAX_CONTEXT_LEN, 1_024);
+}

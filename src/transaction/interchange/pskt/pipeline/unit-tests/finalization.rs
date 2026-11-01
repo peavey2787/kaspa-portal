@@ -700,3 +700,69 @@ fn merkle_claim_document_with_direction(direction: u8) -> Value {
 fn pskb(document: Value) -> String {
     wrap_pskb(&document)
 }
+
+#[test]
+fn every_untyped_covenant_route_is_refused_by_name() {
+    const REFUSED: [&str; 25] = [
+        "escrowBranch",
+        "shipBranch",
+        "risc0OracleMb",
+        "oracleMbPassthrough",
+        "oracleMbHeartbeat",
+        "oracleMbConsumer",
+        "zkProof",
+        "zkPublicInputs",
+        "zkVk",
+        "risc0Seal",
+        "risc0Fields",
+        "risc0Bridge",
+        "groth16Bridge",
+        "commitPreimage",
+        "withdrawalSpk",
+        "rollupStateAdvance",
+        "rollupStateRefund",
+        "rollupProof",
+        "rollupPrefix",
+        "rollupSuffix",
+        "rollupDepositAdvance",
+        "rollupUnifiedAdvance",
+        "rollupForcedExit",
+        "depositHoldingCredit",
+        "depositHoldingRefund",
+    ];
+    let redeem = single_selector_covenant(0x31, 0x32);
+    for field in REFUSED {
+        let mut document = unsigned_document(Some(&redeem), 0x31);
+        document["inputs"][0]["covenantExecution"] =
+            json!({"suppliedMask": "1", "suppliedTrueMask": "1"});
+        document["inputs"][0]["proprietaries"] = json!({ field: "route" });
+        let signed = sign_first_input(document, &[0x31]);
+        let error = finalize_json(&pskb(signed)).expect_err(field);
+        assert!(
+            error.contains("no typed verified witness plan"),
+            "{field}: {error}"
+        );
+    }
+}
+
+#[test]
+fn every_typed_covenant_route_field_is_a_recognized_routing_field() {
+    use crate::transaction::interchange::pskt::schema::{
+        is_specialized_covenant_routing_field, is_supported_specialized_covenant_routing_field,
+    };
+    for field in [
+        "privateSwapClaim",
+        "oracleV1Claim",
+        "oracleV1Signature",
+        "commitPartA",
+        "commitPartB",
+        "merkleProof",
+        "merkleDestSpk",
+    ] {
+        assert!(is_specialized_covenant_routing_field(field), "{field}");
+        assert!(
+            is_supported_specialized_covenant_routing_field(field),
+            "{field}"
+        );
+    }
+}
