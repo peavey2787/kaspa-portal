@@ -1,5 +1,7 @@
 #[cfg(feature = "std")]
 pub(crate) mod covenant;
+#[cfg(feature = "std")]
+pub mod kip22;
 pub mod model;
 pub mod planning;
 #[cfg(feature = "std")]

@@ -1,6 +1,6 @@
 use alloc::{boxed::Box, vec::Vec};
 
-use crate::wallet::derivation::bip32;
+use crate::wallet::derivation::{bip32, kip22};
 
 const MAX_SEED_SLOTS: usize = 8;
 
@@ -17,6 +17,7 @@ pub(super) struct SigningContext {
     account_compressed: [Option<[u8; 33]>; MAX_SEED_SLOTS],
     address_tables: [Option<Box<[bip32::AddrPubkeyTable]>>; MAX_SEED_SLOTS],
     ms45_account_keys: [Option<bip32::ExtendedPrivKey>; MAX_SEED_SLOTS],
+    kip22_account_keys: Vec<Option<bip32::ExtendedPrivKey>>,
 }
 
 impl SigningContext {
@@ -28,6 +29,7 @@ impl SigningContext {
             account_compressed: [None, None, None, None, None, None, None, None],
             address_tables: [None, None, None, None, None, None, None, None],
             ms45_account_keys: [None, None, None, None, None, None, None, None],
+            kip22_account_keys: (0..num_seeds.min(MAX_SEED_SLOTS)).map(|_| None).collect(),
         }
     }
 
@@ -55,6 +57,9 @@ impl SigningContext {
             }
             if let Ok(account) = bip32::derive_multisig_account_key(seed, 0) {
                 context.ms45_account_keys[index] = Some(account);
+            }
+            if let Ok(account) = kip22::derive_account_key(seed, 0) {
+                context.kip22_account_keys[index] = Some(account);
             }
         }
         context
@@ -127,7 +132,25 @@ impl SigningContext {
         seed_index: usize,
         target_xonly: &[u8; 32],
     ) -> Option<SigningKeyMaterial> {
-        let account = self.account_keys.get(seed_index)?.as_ref()?;
+        Self::scanned_material(self.account_keys.get(seed_index)?.as_ref()?, target_xonly)
+    }
+
+    /// Find the KIP-22 key in account 0 behind a redeem script's public key.
+    pub(super) fn kip22_material(
+        &self,
+        seed_index: usize,
+        target_xonly: &[u8; 32],
+    ) -> Option<SigningKeyMaterial> {
+        Self::scanned_material(
+            self.kip22_account_keys.get(seed_index)?.as_ref()?,
+            target_xonly,
+        )
+    }
+
+    fn scanned_material(
+        account: &bip32::ExtendedPrivKey,
+        target_xonly: &[u8; 32],
+    ) -> Option<SigningKeyMaterial> {
         let (address_index, is_change) =
             bip32::find_address_index_for_pubkey(account, target_xonly)?;
         let key = if is_change {

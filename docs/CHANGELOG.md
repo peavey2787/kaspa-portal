@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+KIP-22 hides the public key until coins are spent.
+
+- `wallet::derivation::kip22` derives P2SH addresses over `<P> OP_CHECKSIG` at
+  `m/22'/111111'/account'/change/index`. `WalletApi::kip22_addresses` lists them
+  from an account kpub, and `TransactionApi::plan_kip22_payment` spends them with
+  change that always returns to a KIP-22 address. The signer finds the key behind
+  the redeem script. A testnet-10 spend confirmed the path against consensus.
+  KIP-22 is still a draft and publishes no test vectors. Keep the account kpub
+  private: it reveals every public key in the account.
+
 One implementation per primitive.
 
 - Dependencies carry no known advisory. `k256` 0.14 brings `crypto-bigint`

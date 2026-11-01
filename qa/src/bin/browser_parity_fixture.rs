@@ -15,6 +15,7 @@ use kaspa_portal::{
         vrf::VrfSecretKey,
     },
     transaction::{
+        builder::kip22::Kip22Coin,
         interchange::{
             kspt::{
                 is_fully_signed, sign_transaction_account_multi_addr_with_entropy, wire::Limits,
@@ -23,6 +24,7 @@ use kaspa_portal::{
         },
         model::SigHashType,
     },
+    wallet::derivation::kip22::Chain,
     wallet::key::xpub::{
         derive_account_raw_kpub_payload, derive_and_serialize_kpub,
         derive_and_serialize_multisig_kpub, derive_and_serialize_xprv, import_xprv_with_metadata,
@@ -156,6 +158,9 @@ fn main() {
     let extended = wallet_api
         .extend_addresses(&wallet, 3, 2)
         .expect("extend wallet");
+    let kip22_addresses = wallet_api
+        .kip22_addresses(&kpub, Chain::Receive, 0, 2)
+        .expect("KIP-22 addresses");
     let mnemonic12 = wallet_api.mnemonic_12_from_entropy(&[0x11; 16]);
     let mnemonic24 = wallet_api.mnemonic_24_from_entropy(&[0x22; 32]);
 
@@ -174,6 +179,24 @@ fn main() {
             vec![utxo.clone()],
         )
         .expect("plan transaction");
+    let kip22_coin = Kip22Coin {
+        utxo: UtxoEntry {
+            script_public_key: address_to_script_pubkey(&kip22_addresses[0].address)
+                .expect("KIP-22 script")
+                .to_vec(),
+            ..utxo.clone()
+        },
+        xonly: kip22_addresses[0].xonly,
+    };
+    let kip22_planned = tx
+        .plan_kip22_payment(
+            std::slice::from_ref(&kip22_coin),
+            &destination,
+            100_000_000,
+            300_000,
+            &kip22_addresses[1].xonly,
+        )
+        .expect("plan KIP-22 payment");
     let covenant_wallet = covenant_portal
         .wallet()
         .import_kpub(&kpub)
@@ -401,6 +424,7 @@ fn main() {
             "wallet": wallet,
             "rawWallet": raw_wallet,
             "extended": extended,
+            "kip22Addresses": kip22_addresses,
             "mnemonic12": {"indices": mnemonic12.indices},
             "mnemonic24": {"indices": mnemonic24.indices},
             "prefix": wallet_api.prefix(),
@@ -413,6 +437,9 @@ fn main() {
             "sourceScriptHex": hex::encode(source_script),
             "destinationScriptHex": hex::encode(destination_script),
             "planned": planned,
+            "kip22Coin": kip22_coin,
+            "kip22Planned": kip22_planned,
+            "kip22ChangeXonly": hex::encode(kip22_addresses[1].xonly),
             "payloadHex": hex::encode(payload),
             "withPayload": with_payload,
             "lane": lane,

@@ -234,7 +234,9 @@ fn covenant_material(
     if context.account_xonly(seed_index) == Some(*target) {
         context.account_material(seed_index)
     } else {
-        context.cached_address_material(seed_index, target)
+        context
+            .cached_address_material(seed_index, target)
+            .or_else(|| context.kip22_material(seed_index, target))
     }
 }
 

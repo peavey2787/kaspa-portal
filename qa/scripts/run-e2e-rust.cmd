@@ -64,6 +64,7 @@ if "%KASPA_PORTAL_E2E_SKIP_STANDARD_FUNDED%"=="1" (
 ) else (
     echo ==^> Rust E2E: funded ordinary workflows on %KASPA_PORTAL_E2E_STANDARD_NETWORK%
     call :run cargo test --manifest-path qa\Cargo.toml --test e2e-rust-funded-networks rust_funded_standard_network_transactions -- --ignored --nocapture --test-threads=1
+    call :run cargo test --manifest-path qa\Cargo.toml --test e2e-rust-funded-networks rust_funded_kip22_spend -- --ignored --nocapture --test-threads=1
     if errorlevel 1 exit /b 1
 )
 

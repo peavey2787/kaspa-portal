@@ -4,8 +4,9 @@ use crate::{
     wallet::{
         account::{
             balance::{self, BalanceInfo},
-            derivation::{self, WalletData},
+            derivation::{self, Kip22Address, WalletData},
         },
+        derivation::kip22::Chain,
         mnemonic::bip39,
     },
 };
@@ -39,6 +40,19 @@ impl WalletApi {
         change: u32,
     ) -> Result<WalletData> {
         derivation::extend_addresses(wallet, receive, change, &self.prefix).map_err(Error::Wallet)
+    }
+
+    /// KIP-22 addresses below the account kpub at m/22'/111111'/account'. Keep
+    /// that kpub private: it reveals every public key in the account.
+    pub fn kip22_addresses(
+        &self,
+        kpub: &str,
+        chain: Chain,
+        start: u32,
+        count: u32,
+    ) -> Result<Vec<Kip22Address>> {
+        derivation::derive_kip22_addresses(kpub, chain, start, count, &self.prefix)
+            .map_err(Error::Wallet)
     }
 
     pub async fn utxos(&self, wallet: &WalletData) -> Result<Vec<UtxoEntry>> {

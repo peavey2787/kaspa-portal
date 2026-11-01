@@ -45,6 +45,7 @@ if [[ "${KASPA_PORTAL_E2E_SKIP_STANDARD_FUNDED:-0}" == "1" ]]; then
 else
   echo "==> Rust E2E: funded ordinary workflows on $KASPA_PORTAL_E2E_STANDARD_NETWORK"
   cargo test --manifest-path qa/Cargo.toml --test e2e-rust-funded-networks rust_funded_standard_network_transactions -- --ignored --nocapture --test-threads=1
+  cargo test --manifest-path qa/Cargo.toml --test e2e-rust-funded-networks rust_funded_kip22_spend -- --ignored --nocapture --test-threads=1
 fi
 
 if [[ "${KASPA_PORTAL_E2E_SKIP_COVENANT_FUNDED:-0}" == "1" ]]; then

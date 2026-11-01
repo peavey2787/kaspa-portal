@@ -22,6 +22,13 @@ export async function wasm_offline_transaction(page, fixture, standardNetwork, c
       '300000',
       utxoJson,
     );
+    const kip22Planned = transaction.planKip22Payment(
+      JSON.stringify([fixture.transaction.kip22Coin]),
+      fixture.transaction.destination,
+      '100000000',
+      '300000',
+      Uint8Array.from(fixture.transaction.kip22ChangeXonly.match(/../g).map((x) => Number.parseInt(x, 16))),
+    );
     const withPayload = transaction.setPayload(planned, payload);
     const lane = transaction.setTxLane(planned, '00'.repeat(20), '7', 1, payload);
     const analysis = JSON.parse(transaction.analyzeWithFeeRate(fixture.transaction.analysisWire, '1'));
@@ -116,6 +123,7 @@ export async function wasm_offline_transaction(page, fixture, standardNetwork, c
     })));
 
     return {
+      kip22Planned,
       planned,
       withPayload,
       lane,
@@ -134,6 +142,7 @@ export async function wasm_offline_transaction(page, fixture, standardNetwork, c
   }, { fixture, standardNetwork, covenantNetwork, standardPrefix: addressPrefix(standardNetwork) });
 
   expect(result.planned).toBe(fixture.transaction.planned);
+  expect(result.kip22Planned).toBe(fixture.transaction.kip22Planned);
   expect(result.withPayload).toBe(fixture.transaction.withPayload);
   expect(result.lane).toBe(fixture.transaction.lane);
   expect(result.analysis).toEqual(fixture.transaction.analysis);

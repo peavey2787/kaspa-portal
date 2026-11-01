@@ -92,6 +92,7 @@ Native `NetworkApi` calls share one persistent WebSocket per Portal transport. N
 | `import_kpub` | `kpub: &str` | `Result<WalletData>` |
 | `import_kpub_raw` | `payload: &[u8]` | `Result<WalletData>` |
 | `extend_addresses` | `wallet: &WalletData`, `receive: u32`, `change: u32` | `Result<WalletData>` |
+| `kip22_addresses` | `kpub: &str`, `chain: Chain`, `start: u32`, `count: u32` | `Result<Vec<Kip22Address>>` |
 | `utxos` | `wallet: &WalletData` | `async Result<Vec<UtxoEntry>>` |
 | `balance` | `wallet: &WalletData` | `async Result<BalanceInfo>` |
 | `mnemonic_12_from_entropy` | `entropy: &[u8; 16]` | `Mnemonic12` |
@@ -114,6 +115,7 @@ Native `NetworkApi` calls share one persistent WebSocket per Portal transport. N
 | `plan_covenant` | `request: CovenantBuildRequest<'_>` | `async Result<String>` |
 | `plan_covenant_with_binding` | `request: CovenantBuildRequest<'_>` | `async Result<(String, Option<[u8; 32]>)>` |
 | `plan_from_utxos` | `wallet: &WalletData`, `destination: &str`, `amount: u64`, `fee: u64`, `utxos: Vec<UtxoEntry>` | `Result<String>` |
+| `plan_kip22_payment` | `coins: &[Kip22Coin]`, `destination: &str`, `amount: u64`, `fee: u64`, `change_xonly: &[u8; 32]` | `Result<String>` |
 | `set_payload` | `wire_hex: &str`, `payload: &[u8]` | `Result<String>` |
 | `set_tx_lane` | `wire_hex: &str`, `subnetwork_id_hex: &str`, `gas: u64`, `transaction_version: u16`, `payload: &[u8]` | `Result<String>` |
 | `analyze` | `wire_hex: &str` | `async Result<TransactionAnalysis>` |

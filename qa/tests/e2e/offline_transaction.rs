@@ -2,8 +2,9 @@ use kaspa_portal::{
     primitives::address::address_to_script_pubkey,
     transaction::{
         builder::{
-            GlobalThreadPolicy, GlobalThreadTopupRequest, GlobalThreadWithdrawalRequest,
-            PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan, SweepInputPolicy,
+            kip22::Kip22Coin, GlobalThreadPolicy, GlobalThreadTopupRequest,
+            GlobalThreadWithdrawalRequest, PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan,
+            SweepInputPolicy,
         },
         model::SigHashType,
     },
@@ -47,6 +48,36 @@ fn rust_offline_transaction() {
         .expect("review planned transaction");
     assert_eq!(reviewed.input_count, 1);
     assert!(reviewed.output_count >= 1);
+
+    let kip22_key = [0x42; 32];
+    let kip22_address =
+        kaspa_portal::wallet::derivation::kip22::address(&kip22_key, standard.address_prefix());
+    let kip22_coin = Kip22Coin {
+        utxo: kaspa_portal::chain::utxo::UtxoEntry {
+            script_public_key: address_to_script_pubkey(&kip22_address)
+                .expect("KIP-22 script")
+                .to_vec(),
+            ..utxo.clone()
+        },
+        xonly: kip22_key,
+    };
+    let kip22_planned = tx
+        .plan_kip22_payment(
+            std::slice::from_ref(&kip22_coin),
+            &destination,
+            100_000_000,
+            300_000,
+            &[0x43; 32],
+        )
+        .expect("plan KIP-22 payment");
+    let kip22_review = tx
+        .review(&kip22_planned, standard.address_prefix())
+        .expect("review KIP-22 payment");
+    assert_eq!(kip22_review.input_count, 1);
+    assert_eq!(kip22_review.output_count, 2);
+    assert!(tx
+        .plan_kip22_payment(&[kip22_coin], "not-an-address", 1, 1, &[0x43; 32])
+        .is_err());
 
     let payload = b"portal-e2e-payload";
     let with_payload = tx.set_payload(&planned, payload).expect("set payload");

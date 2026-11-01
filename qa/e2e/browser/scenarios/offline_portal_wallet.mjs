@@ -69,12 +69,14 @@ export async function wasm_offline_wallet(page, fixture, standardNetwork) {
     const imported = JSON.parse(wallet.importKpub(fixture.wallet.kpub));
     const rawImported = JSON.parse(wallet.importKpubRaw(Uint8Array.from(rawKpub)));
     const extended = JSON.parse(wallet.extendAddresses(JSON.stringify(imported), 3, 2));
+    const kip22Addresses = JSON.parse(wallet.kip22Addresses(fixture.wallet.kpub, false, 0, 2));
     const mnemonic12 = JSON.parse(wallet.mnemonic12FromEntropy(new Uint8Array(16).fill(0x11)));
     const mnemonic24 = JSON.parse(wallet.mnemonic24FromEntropy(new Uint8Array(32).fill(0x22)));
     return {
       imported,
       rawImported,
       extended,
+      kip22Addresses,
       mnemonic12,
       mnemonic24,
       prefix: wallet.prefix(),
@@ -84,6 +86,7 @@ export async function wasm_offline_wallet(page, fixture, standardNetwork) {
   expect(result.imported).toEqual(fixture.wallet.wallet);
   expect(result.rawImported).toEqual(fixture.wallet.rawWallet);
   expect(result.extended).toEqual(fixture.wallet.extended);
+  expect(result.kip22Addresses).toEqual(fixture.wallet.kip22Addresses);
   expect(result.mnemonic12.indices).toEqual(fixture.wallet.mnemonic12.indices);
   expect(result.mnemonic24.indices).toEqual(fixture.wallet.mnemonic24.indices);
   expect(result.prefix).toBe(fixture.wallet.prefix);

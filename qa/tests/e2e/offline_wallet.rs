@@ -1,4 +1,7 @@
-use kaspa_portal::KaspaPortal;
+use kaspa_portal::{
+    wallet::derivation::kip22::{self, Chain},
+    KaspaPortal,
+};
 
 use crate::support::standard_network;
 
@@ -28,6 +31,15 @@ fn rust_offline_wallet() {
     let raw_wallet = wallet_api.import_kpub_raw(&raw).expect("raw kpub import");
     assert_eq!(raw_wallet.kpub, wallet.kpub);
     assert_eq!(raw_wallet.receive_addresses, wallet.receive_addresses);
+
+    let kip22_addresses = wallet_api
+        .kip22_addresses(&kpub, Chain::Receive, 0, 2)
+        .expect("KIP-22 addresses");
+    assert_eq!(kip22_addresses[1].index, 1);
+    assert_eq!(
+        kip22_addresses[0].address,
+        kip22::address(&kip22_addresses[0].xonly, network.address_prefix())
+    );
 
     let extended = wallet_api
         .extend_addresses(&wallet, 3, 2)

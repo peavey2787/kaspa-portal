@@ -186,6 +186,30 @@ impl WasmTransaction {
             .map_err(js_error)
     }
 
+    #[wasm_bindgen(js_name = planKip22Payment)]
+    pub fn plan_kip22_payment(
+        &self,
+        coins_json: &str,
+        destination: &str,
+        amount_sompi: &str,
+        fee_sompi: &str,
+        change_xonly: &[u8],
+    ) -> Result<String, JsValue> {
+        let coins: Vec<crate::transaction::builder::kip22::Kip22Coin> = decode(coins_json)?;
+        let change_xonly: &[u8; 32] = change_xonly
+            .try_into()
+            .map_err(|_| JsValue::from_str("change key must be 32 bytes"))?;
+        self.inner
+            .plan_kip22_payment(
+                &coins,
+                destination,
+                decimal(amount_sompi, "amount")?,
+                decimal(fee_sompi, "fee")?,
+                change_xonly,
+            )
+            .map_err(js_error)
+    }
+
     #[wasm_bindgen(js_name = setPayload)]
     pub fn set_payload(&self, wire_hex: &str, payload: &[u8]) -> Result<String, JsValue> {
         self.inner.set_payload(wire_hex, payload).map_err(js_error)

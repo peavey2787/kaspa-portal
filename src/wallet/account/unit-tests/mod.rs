@@ -277,3 +277,27 @@ fn zero_address_extension_preserves_both_chains() {
     assert_eq!(unchanged.next_receive_index, wallet.next_receive_index);
     assert_eq!(unchanged.next_change_index, wallet.next_change_index);
 }
+
+#[test]
+fn kip22_watch_only_addresses_match_the_private_derivation() {
+    use crate::wallet::account::derivation::derive_kip22_addresses;
+    use crate::wallet::derivation::kip22::{self, Chain};
+    use crate::wallet::key::xpub::{serialize_account_kpub, KPUB_MAX_LEN};
+
+    let account = kip22::derive_account_key(&[0x31; 64], 0).unwrap();
+    let mut encoded = [0u8; KPUB_MAX_LEN];
+    let len = serialize_account_kpub(&account, [1, 2, 3, 4], &mut encoded).unwrap();
+    let kpub = core::str::from_utf8(&encoded[..len]).unwrap();
+
+    for chain in [Chain::Receive, Chain::Change] {
+        let derived = derive_kip22_addresses(kpub, chain, 5, 3, "kaspatest").unwrap();
+        assert_eq!(derived.len(), 3);
+        for entry in derived {
+            let key = kip22::derive_address_key(&account, chain, entry.index).unwrap();
+            let xonly = key.public_key_x_only().unwrap();
+            assert_eq!(entry.xonly, xonly);
+            assert_eq!(entry.address, kip22::address(&xonly, "kaspatest"));
+        }
+    }
+    assert!(derive_kip22_addresses(kpub, Chain::Receive, u32::MAX, 2, "kaspa").is_err());
+}

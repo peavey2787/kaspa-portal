@@ -512,6 +512,18 @@ rust_e2e = "rust_offline_wallet"
 wasm_e2e = "wasm_offline_wallet"
 
 [[capability]]
+id = "wallet.kip22_addresses"
+domain = "wallet"
+rust_symbol = "WalletApi::kip22_addresses"
+wasm_symbols = ["WasmWallet::kip22_addresses"]
+execution = "offline"
+funds_required = false
+resource_profile = "standard"
+e2e_status = "covered"
+rust_e2e = "rust_offline_wallet"
+wasm_e2e = "wasm_offline_wallet"
+
+[[capability]]
 id = "wallet.extend_addresses"
 domain = "wallet"
 rust_symbol = "WalletApi::extend_addresses"
@@ -690,6 +702,18 @@ resource_profile = "network"
 e2e_status = "covered"
 rust_e2e = "rust_funded_covenant_network_transactions"
 wasm_e2e = "wasm_funded_covenant_network_transactions"
+
+[[capability]]
+id = "transaction.plan_kip22_payment"
+domain = "transaction"
+rust_symbol = "TransactionApi::plan_kip22_payment"
+wasm_symbols = ["WasmTransaction::plan_kip22_payment"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_kip22_spend"
+wasm_e2e = "wasm_offline_transaction"
 
 [[capability]]
 id = "transaction.plan_from_utxos"

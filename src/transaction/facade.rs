@@ -122,6 +122,22 @@ impl TransactionApi {
             .map_err(Error::Transaction)
     }
 
+    /// Plan a payment from KIP-22 coins with change to the KIP-22 key `change_xonly`.
+    pub fn plan_kip22_payment(
+        &self,
+        coins: &[builder::kip22::Kip22Coin],
+        destination: &str,
+        amount: u64,
+        fee: u64,
+        change_xonly: &[u8; 32],
+    ) -> Result<String> {
+        crate::primitives::address::address_to_script_pubkey(destination)
+            .and_then(|script| {
+                builder::kip22::encode_payment(coins, &script, amount, fee, change_xonly)
+            })
+            .map_err(Error::Transaction)
+    }
+
     /// Replace the transaction payload on an existing PSKB wire.
     pub fn set_payload(&self, wire_hex: &str, payload: &[u8]) -> Result<String> {
         pskt::set_payload(wire_hex, payload).map_err(Error::Transaction)

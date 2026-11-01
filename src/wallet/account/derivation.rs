@@ -9,6 +9,7 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
 
+use crate::wallet::derivation::kip22::{self, Chain};
 use hmac::{Hmac, Mac};
 use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::PublicKey;
@@ -157,6 +158,40 @@ impl ExtPubKey {
         x.copy_from_slice(&compressed[1..33]);
         x
     }
+}
+
+/// A KIP-22 address and the public key its redeem script will reveal.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Kip22Address {
+    pub address: String,
+    pub xonly: [u8; 32],
+    pub index: u32,
+}
+
+/// Derive KIP-22 addresses from the account key at m/22'/111111'/account'.
+/// Anyone holding that key can compute every public key in the account, so it
+/// must never be sent to an indexer, relay or other third party.
+pub fn derive_kip22_addresses(
+    kpub_str: &str,
+    chain: Chain,
+    start: u32,
+    count: u32,
+    prefix: &str,
+) -> Result<Vec<Kip22Address>, String> {
+    let chain_key = ExtPubKey::from_kpub(kpub_str)?.derive_child(chain.index())?;
+    let end = start
+        .checked_add(count)
+        .ok_or("KIP-22 address range overflows")?;
+    (start..end)
+        .map(|index| {
+            let xonly = chain_key.derive_child(index)?.x_only_bytes();
+            Ok(Kip22Address {
+                address: kip22::address(&xonly, prefix),
+                xonly,
+                index,
+            })
+        })
+        .collect()
 }
 
 // ─── Import kpub ───

@@ -4,14 +4,15 @@ mod funded_support;
 
 use std::time::Duration;
 
-use kaspa_portal::primitives::address::KaspaNetwork;
+use kaspa_portal::primitives::address::{address_to_script_pubkey, KaspaNetwork};
 use kaspa_portal::{
     contract::script::p2sh::script_to_address,
     primitives::NetworkId,
     transaction::{
         builder::{
+            kip22::{encode_spend, Kip22Coin},
             CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding,
-            MultisigConsolidationRequest,
+            MultisigConsolidationRequest, PskbOutputPlan,
         },
         consensus::ConsensusTransaction,
         interchange::{
@@ -24,6 +25,7 @@ use kaspa_portal::{
         model::{SigHashType, Transaction},
     },
     wallet::{
+        derivation::kip22,
         key::xpub::{
             import_xprv_with_metadata, serialize_account_kpub, ImportedAccountXprv, KPUB_MAX_LEN,
         },
@@ -267,6 +269,138 @@ async fn assert_funded_balance(
         initial_balance.total_sompi,
         MIN_FUNDED_BALANCE_SOMPI
     );
+}
+
+/// The chain must accept a spend from a KIP-22 address, and the output must
+/// reveal nothing about the key until that spend.
+#[tokio::test]
+#[ignore = "Funded standard-network E2E: requires KASPA_PORTAL_E2E_XPRV with funds on the configured standard network"]
+async fn rust_funded_kip22_spend() {
+    const KIP22_SEED: [u8; 64] = [0x73; 64];
+    let network = standard_network();
+    let network_name = standard_network_name();
+    let portal = KaspaPortal::builder()
+        .network(network)
+        .endpoint(standard_endpoint())
+        .timeout_ms(15_000)
+        .max_retries(3)
+        .connect()
+        .await
+        .expect("connect funded E2E portal to public standard network");
+    let (imported, wallet) = funded_wallet(&portal);
+    assert_funded_balance(&portal, &wallet).await;
+
+    let account = kip22::derive_account_key(&KIP22_SEED, 0).expect("KIP-22 account");
+    let xonly = kip22::derive_address_key(&account, kip22::Chain::Receive, 0)
+        .expect("KIP-22 address key")
+        .public_key_x_only()
+        .expect("KIP-22 public key");
+    let address = kip22::address(&xonly, network.address_prefix());
+
+    let (funding_wire, _, _) = plan_signed_send_with_adaptive_fee(
+        &portal,
+        &wallet,
+        &imported,
+        &address,
+        SPEND_AMOUNT_SOMPI,
+        None,
+        &network_name,
+    )
+    .await;
+    let tx = portal.transaction();
+    let funding = tx.finalize(&funding_wire).expect("finalize KIP-22 funding");
+    let funding_txid = broadcast_consensus(&portal, &funding, &address).await;
+
+    let utxos = portal
+        .chain()
+        .expect("chain")
+        .utxos(&address)
+        .await
+        .expect("KIP-22 UTXOs");
+    let coin = utxos
+        .into_iter()
+        .find(|entry| entry.tx_id == funding_txid)
+        .expect("KIP-22 funding output");
+    assert!(!coin.script_public_key.windows(32).any(|part| part == xonly));
+    let coin = Kip22Coin { utxo: coin, xonly };
+
+    // Pay half away, then sweep the change: the change must be spendable too.
+    let account_key = kip22::derive_account_key(&KIP22_SEED, 0).expect("KIP-22 account");
+    let change_xonly = kip22::derive_address_key(&account_key, kip22::Chain::Change, 0)
+        .expect("KIP-22 change key")
+        .public_key_x_only()
+        .expect("KIP-22 change public key");
+    let change_address = kip22::address(&change_xonly, network.address_prefix());
+    let destination = wallet.receive_addresses[1].as_str();
+    let payment_txid = spend_kip22(
+        &portal,
+        &network_name,
+        &KIP22_SEED,
+        &change_address,
+        |fee| {
+            tx.plan_kip22_payment(
+                std::slice::from_ref(&coin),
+                destination,
+                coin.utxo.amount / 2,
+                fee,
+                &change_xonly,
+            )
+            .expect("KIP-22 payment")
+        },
+    )
+    .await;
+
+    let change = portal
+        .chain()
+        .expect("chain")
+        .utxos(&change_address)
+        .await
+        .expect("KIP-22 change UTXOs")
+        .into_iter()
+        .find(|entry| entry.tx_id == payment_txid)
+        .expect("KIP-22 change output");
+    let change = Kip22Coin {
+        utxo: change,
+        xonly: change_xonly,
+    };
+    let destination_script = address_to_script_pubkey(destination).expect("destination script");
+    spend_kip22(&portal, &network_name, &KIP22_SEED, destination, |fee| {
+        let output = PskbOutputPlan::plain(change.utxo.amount - fee, &destination_script);
+        encode_spend(std::slice::from_ref(&change), vec![output]).expect("KIP-22 sweep")
+    })
+    .await;
+}
+
+/// Sign and broadcast the wire `plan` builds, raising the fee until it suffices.
+async fn spend_kip22(
+    portal: &KaspaPortal,
+    network_name: &str,
+    seed: &[u8; 64],
+    watched_address: &str,
+    plan: impl Fn(u64) -> String,
+) -> String {
+    let tx = portal.transaction();
+    let mut fee = MULTISIG_PRIORITY_FEE_SOMPI;
+    for _ in 0..6 {
+        let signed = sign_and_merge_with(&plan(fee), network_name, |transaction| {
+            sign_transaction_multisig_with_entropy(
+                transaction,
+                &[(*seed, true)],
+                SigHashType::All,
+                None,
+                &[0x7cu8; 32],
+            )
+            .expect("sign KIP-22 spend")
+        });
+        let analysis = tx.analyze(&signed).await.expect("analyze KIP-22 spend");
+        assert!(analysis.mass_valid, "KIP-22 spend exceeds mass limits");
+        if analysis.fee_sufficient {
+            let finalized = tx.finalize(&signed).expect("finalize KIP-22 spend");
+            return broadcast_consensus(portal, &finalized, watched_address).await;
+        }
+        fee = next_adaptive_fee(fee, analysis.recommended_fee_sompi);
+    }
+    panic!("could not converge on a sufficient KIP-22 fee after 6 attempts");
 }
 
 #[tokio::test]

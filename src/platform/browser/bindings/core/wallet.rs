@@ -1,6 +1,8 @@
 use wasm_bindgen::prelude::*;
 
-use crate::wallet::{account::derivation::WalletData, mnemonic::bip39, WalletApi};
+use crate::wallet::{
+    account::derivation::WalletData, derivation::kip22::Chain, mnemonic::bip39, WalletApi,
+};
 
 use super::{decode, encode, js_error};
 
@@ -39,6 +41,27 @@ impl WasmWallet {
             &self
                 .inner
                 .extend_addresses(&wallet, receive, change)
+                .map_err(js_error)?,
+        )
+    }
+
+    #[wasm_bindgen(js_name = kip22Addresses)]
+    pub fn kip22_addresses(
+        &self,
+        kpub: &str,
+        change: bool,
+        start: u32,
+        count: u32,
+    ) -> Result<String, JsValue> {
+        let chain = if change {
+            Chain::Change
+        } else {
+            Chain::Receive
+        };
+        encode(
+            &self
+                .inner
+                .kip22_addresses(kpub, chain, start, count)
                 .map_err(js_error)?,
         )
     }

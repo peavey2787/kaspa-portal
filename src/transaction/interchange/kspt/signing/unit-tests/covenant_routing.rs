@@ -134,3 +134,51 @@ fn covenant_scanner_requires_strict_outer_loop_progress() {
     let candidates = scan_candidate_keys(&[0x00, 0x00]).expect("two-byte progress");
     assert_eq!(candidates.len, 0);
 }
+
+#[test]
+fn kip22_spend_signs_with_the_key_behind_the_redeem_script() {
+    use super::{set_p2sh, sign_transaction_multisig_with_entropy, transaction};
+    use crate::{
+        crypto::schnorr::{schnorr_verify, SchnorrSignature},
+        transaction::{model::SigHashType, sighash::calculate_sighash},
+        wallet::derivation::kip22::{self, Chain},
+    };
+
+    let seed = [9u8; 64];
+    let account = kip22::derive_account_key(&seed, 0).unwrap();
+    let key = kip22::derive_address_key(&account, Chain::Change, 30).unwrap();
+    let xonly = key.public_key_x_only().unwrap();
+
+    let mut tx = transaction();
+    set_p2sh(&mut tx, &kip22::redeem_script(&xonly));
+    tx.inputs[0].covenant_execution_present = true;
+    assert_eq!(
+        sign_transaction_multisig_with_entropy(
+            &mut tx,
+            &[(seed, true)],
+            SigHashType::All,
+            Some(0),
+            &[5u8; 32],
+        ),
+        Ok(1),
+    );
+    let message = calculate_sighash(&tx, 0, SigHashType::All);
+    let signature = SchnorrSignature {
+        bytes: tx.inputs[0].sigs[0].signature,
+    };
+    assert_eq!(schnorr_verify(&xonly, &message, &signature), Ok(()));
+
+    let mut foreign = transaction();
+    set_p2sh(&mut foreign, &kip22::redeem_script(&[0x44; 32]));
+    foreign.inputs[0].covenant_execution_present = true;
+    assert_eq!(
+        sign_transaction_multisig_with_entropy(
+            &mut foreign,
+            &[(seed, true)],
+            SigHashType::All,
+            Some(0),
+            &[5u8; 32],
+        ),
+        Err(PsktError::NoInputs),
+    );
+}
