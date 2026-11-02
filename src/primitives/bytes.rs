@@ -126,5 +126,5 @@ pub fn zeroize_u16(values: &mut [u16]) {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/bytes.rs"]
+#[path = "unit_tests/bytes.rs"]
 mod unit_tests;

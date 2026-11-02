@@ -294,5 +294,5 @@ pub fn resolve_covenant_branches(script: &[u8]) -> Result<BranchResolution, Bran
 }
 
 #[cfg(test)]
-#[path = "unit-tests/branch.rs"]
+#[path = "unit_tests/branch.rs"]
 mod unit_tests;

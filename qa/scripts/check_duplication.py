@@ -14,7 +14,7 @@ errors = []
 
 sources = []
 for path in SRC.rglob("*.rs"):
-    if "unit-tests" in path.parts or path.name == "wordlist.rs":
+    if "unit_tests" in path.parts or path.name == "wordlist.rs":
         continue
     text = path.read_text(errors="replace")
     # Remove comments and collapse whitespace for whole-file duplicate checks.

@@ -139,5 +139,5 @@ impl Default for PsktParsed {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/shared.rs"]
+#[path = "unit_tests/shared.rs"]
 mod unit_tests;

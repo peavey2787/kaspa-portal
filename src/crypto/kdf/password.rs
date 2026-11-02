@@ -400,5 +400,5 @@ fn derive_core_single_arg(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/password.rs"]
+#[path = "unit_tests/password.rs"]
 mod unit_tests;

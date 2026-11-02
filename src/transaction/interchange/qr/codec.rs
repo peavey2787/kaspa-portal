@@ -263,5 +263,5 @@ pub fn generate_svg_from_text(text: &str) -> Result<String, String> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/codec.rs"]
+#[path = "unit_tests/codec.rs"]
 mod unit_tests;

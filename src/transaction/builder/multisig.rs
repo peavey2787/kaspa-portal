@@ -388,5 +388,5 @@ fn multisig_change_output(outputs: &mut [PlannedOutput]) -> Option<&mut PlannedO
 pub const MULTISIG_BRANCH_SCAN_DEPTH: u32 = 40;
 
 #[cfg(test)]
-#[path = "multisig/unit-tests/mod.rs"]
+#[path = "multisig/unit_tests/mod.rs"]
 mod unit_tests;

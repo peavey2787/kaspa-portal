@@ -85,5 +85,5 @@ fn spk_pubkey(element: &Element<'_>) -> Option<[u8; 32]> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/terms.rs"]
+#[path = "unit_tests/terms.rs"]
 mod unit_tests;

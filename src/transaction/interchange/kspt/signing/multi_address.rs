@@ -392,5 +392,5 @@ pub fn sign_transaction_account_multi_addr_with_entropy(
 }
 
 #[cfg(test)]
-#[path = "multi_address/unit-tests/mod.rs"]
+#[path = "multi_address/unit_tests/mod.rs"]
 mod unit_tests;

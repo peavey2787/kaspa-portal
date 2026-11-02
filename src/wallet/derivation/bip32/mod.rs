@@ -50,5 +50,5 @@ use constants::SECP256K1_ORDER;
 use scalar::{is_less_than_order, is_zero, scalar_add_mod_n};
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 pub mod unit_tests;

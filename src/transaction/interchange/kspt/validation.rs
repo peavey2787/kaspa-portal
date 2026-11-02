@@ -176,5 +176,5 @@ pub(crate) fn validate_partial_signed(tx: &Transaction) -> Result<(), PsktError>
 }
 
 #[cfg(test)]
-#[path = "validation/unit-tests/mod.rs"]
+#[path = "validation/unit_tests/mod.rs"]
 mod unit_tests;

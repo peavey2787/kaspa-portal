@@ -388,5 +388,5 @@ pub fn trace_witness(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/execution.rs"]
+#[path = "unit_tests/execution.rs"]
 mod unit_tests;

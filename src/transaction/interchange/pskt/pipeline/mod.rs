@@ -177,5 +177,5 @@ pub fn verify_complete_pskt(
 pub(crate) mod test_support;
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

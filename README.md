@@ -202,7 +202,7 @@ IndexedDB persistence stores dehydrated/versioned plain data only, never Rust/WA
 
 ## QA
 
-Unit tests live next to important modules in literal `unit-tests/` directories. Cross-domain QA is under `qa/tests/`; fuzzing is under `qa/tests/fuzz/`; benchmarks are under `qa/benches/`.
+Unit tests live next to important modules in literal `unit_tests/` directories. Cross-domain QA is under `qa/tests/`; fuzzing is under `qa/tests/fuzz/`; benchmarks are under `qa/benches/`.
 
 For a normal local release QA run, use the only two repository-root scripts:
 

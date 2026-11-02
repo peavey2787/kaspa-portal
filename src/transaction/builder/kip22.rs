@@ -117,5 +117,5 @@ fn input_plan(coin: &Kip22Coin) -> Result<PskbInputPlan, String> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/kip22.rs"]
+#[path = "unit_tests/kip22.rs"]
 mod unit_tests;

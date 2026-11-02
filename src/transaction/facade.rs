@@ -271,5 +271,5 @@ fn verify_for_broadcast(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/facade.rs"]
+#[path = "unit_tests/facade.rs"]
 mod unit_tests;

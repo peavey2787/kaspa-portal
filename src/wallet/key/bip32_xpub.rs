@@ -82,5 +82,5 @@ fn is_account_key(payload: &[u8], version: [u8; 4]) -> bool {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/bip32_xpub.rs"]
+#[path = "unit_tests/bip32_xpub.rs"]
 mod unit_tests;

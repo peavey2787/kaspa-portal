@@ -94,5 +94,5 @@ fn envelope_payload(script: &[u8]) -> Option<&[u8]> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/krc20.rs"]
+#[path = "unit_tests/krc20.rs"]
 mod unit_tests;

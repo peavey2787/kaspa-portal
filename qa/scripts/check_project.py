@@ -385,20 +385,20 @@ for path in (ROOT/'src').rglob('*.rs'):
 # Keep production modules bounded and navigable. The BIP39 wordlist is static
 # protocol data rather than executable logic and is the sole size exception.
 for path in (ROOT/'src').rglob('*.rs'):
-    if 'unit-tests' in path.parts or path.name == 'wordlist.rs':
+    if 'unit_tests' in path.parts or path.name == 'wordlist.rs':
         continue
     line_count = sum(1 for _ in path.open(errors='replace'))
     if line_count > 500:
         fail(f'production source exceeds 500 lines; refactor for SRP: {path.relative_to(ROOT)} ({line_count})')
 for directory in (ROOT/'src').rglob('*'):
-    if not directory.is_dir() or 'unit-tests' in directory.parts:
+    if not directory.is_dir() or 'unit_tests' in directory.parts:
         continue
     direct_rust = [item for item in directory.iterdir() if item.is_file() and item.suffix == '.rs']
     if len(direct_rust) > 12:
         fail(f'source folder has more than 12 direct Rust files; regroup it: {directory.relative_to(ROOT)}')
 for directory in (ROOT/'src').rglob('*'):
-    if directory.is_dir() and directory.name == 'unit_tests':
-        fail(f'unit test directory must be named unit-tests: {directory.relative_to(ROOT)}')
+    if directory.is_dir() and directory.name == 'unit-tests':
+        fail(f'unit test directory must be named unit_tests: {directory.relative_to(ROOT)}')
 
 # Resolve ordinary Rust `mod name;` declarations in addition to explicit path
 # attributes. This catches migration mistakes even when Cargo is unavailable.
@@ -423,7 +423,7 @@ for path in (ROOT/'src').rglob('*.rs'):
         if not (path.parent/target).exists(): fail(f'missing #[path] target {target} from {path.relative_to(ROOT)}')
 
 # A unit-test source must not be compiled through both an aggregate
-# `unit-tests/mod.rs` and a leaf module's explicit `#[path]`. That topology
+# `unit_tests/mod.rs` and a leaf module's explicit `#[path]`. That topology
 # makes `super` resolve to different production namespaces and was a source of
 # large compile-only failure cascades during the 1.0 refactor.
 explicit_test_targets = {}
@@ -433,7 +433,7 @@ for path in (ROOT/'src').rglob('*.rs'):
         resolved = (path.parent/target).resolve()
         explicit_test_targets.setdefault(resolved, []).append(path)
 for aggregate, owners in list(explicit_test_targets.items()):
-    if aggregate.name != 'mod.rs' or aggregate.parent.name != 'unit-tests' or not aggregate.is_file():
+    if aggregate.name != 'mod.rs' or aggregate.parent.name != 'unit_tests' or not aggregate.is_file():
         continue
     aggregate_text = aggregate.read_text(errors='replace')
     aggregate_dir = aggregate.parent
@@ -548,7 +548,7 @@ if 'result.sweep.plan.outputs' in browser_transaction:
 # Stealth metadata is a pair of x-only keys, so payment derivation must survive
 # encode/decode without depending on the discarded original Y parity.
 stealth_metadata = (ROOT/'src/privacy/stealth/metadata.rs').read_text(errors='replace')
-stealth_tests = (ROOT/'src/privacy/stealth/unit-tests/mod.rs').read_text(errors='replace')
+stealth_tests = (ROOT/'src/privacy/stealth/unit_tests/mod.rs').read_text(errors='replace')
 parity_fixture = (ROOT/'qa/src/bin/browser_parity_fixture.rs').read_text(errors='replace')
 if 'scan_pubkey: pubkey_from_xonly(&scan_x)?' not in stealth_metadata or 'spend_pubkey: pubkey_from_xonly(&spend_x)?' not in stealth_metadata:
     fail('derived stealth metadata must canonicalize x-only scan/spend points before payment use')

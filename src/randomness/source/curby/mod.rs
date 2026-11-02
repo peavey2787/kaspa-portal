@@ -186,5 +186,5 @@ fn decode_value(value: &str) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

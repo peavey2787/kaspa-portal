@@ -5,5 +5,5 @@ pub mod derivation;
 pub use balance::BalanceInfo;
 pub use derivation::WalletData;
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

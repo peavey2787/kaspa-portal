@@ -12,7 +12,7 @@ MAX_FACADE_LINES = 360
 errors = []
 
 for path in SRC.rglob("*.rs"):
-    if "unit-tests" in path.parts or path.name == "wordlist.rs":
+    if "unit_tests" in path.parts or path.name == "wordlist.rs":
         continue
     lines = path.read_text(errors="replace").splitlines()
     if len(lines) > MAX_PRODUCTION_LINES:
@@ -21,7 +21,7 @@ for path in SRC.rglob("*.rs"):
         errors.append(f"facade exceeds {MAX_FACADE_LINES} lines: {path.relative_to(ROOT)} ({len(lines)})")
 
 for directory in SRC.rglob("*"):
-    if not directory.is_dir() or "unit-tests" in directory.parts:
+    if not directory.is_dir() or "unit_tests" in directory.parts:
         continue
     files = [p for p in directory.iterdir() if p.is_file() and p.suffix == ".rs"]
     if len(files) > MAX_DIRECT_RUST_FILES:
@@ -37,22 +37,22 @@ for source in SRC.rglob("*.rs"):
     for target in path_attr.findall(text):
         resolved = (source.parent / target).resolve()
         for parent in resolved.parents:
-            if parent.name == "unit-tests":
+            if parent.name == "unit_tests":
                 wired_test_dirs.add(parent)
                 break
 
 for directory in SRC.rglob("*"):
     if not directory.is_dir():
         continue
-    if directory.name == "unit_tests":
-        errors.append(f"unit test directory must be named unit-tests: {directory.relative_to(ROOT)}")
-    if directory.name == "unit-tests" and directory.resolve() not in wired_test_dirs:
-        errors.append(f"unit-tests directory is not wired by #[path]: {directory.relative_to(ROOT)}")
+    if directory.name == "unit-tests":
+        errors.append(f"unit test directory must be named unit_tests: {directory.relative_to(ROOT)}")
+    if directory.name == "unit_tests" and directory.resolve() not in wired_test_dirs:
+        errors.append(f"unit_tests directory is not wired by #[path]: {directory.relative_to(ROOT)}")
 
 # Production source must not suppress dead/unused/deprecated warnings locally.
 SUPPRESS = re.compile(r"#\s*!?\[\s*allow\s*\([^)]*\b(?:dead_code|unused|deprecated)\b", re.S)
 for path in SRC.rglob("*.rs"):
-    if "unit-tests" in path.parts:
+    if "unit_tests" in path.parts:
         continue
     if SUPPRESS.search(path.read_text(errors="replace")):
         errors.append(f"production lint suppression hides dead/unused/deprecated code: {path.relative_to(ROOT)}")

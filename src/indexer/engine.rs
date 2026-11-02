@@ -430,5 +430,5 @@ fn validate_transaction(config: &IndexerConfig, tx: &IndexedTransaction) -> Resu
 }
 
 #[cfg(test)]
-#[path = "unit-tests/engine.rs"]
+#[path = "unit_tests/engine.rs"]
 mod unit_tests;

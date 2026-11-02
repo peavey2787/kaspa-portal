@@ -38,5 +38,5 @@ pub fn wrap_v1_raw(data: &[u8], out: &mut [u8]) -> Option<usize> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/qr_payload.rs"]
+#[path = "unit_tests/qr_payload.rs"]
 mod unit_tests;

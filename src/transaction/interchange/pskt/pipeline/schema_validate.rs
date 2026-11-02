@@ -375,5 +375,5 @@ fn optional_object<'a>(
 }
 
 #[cfg(test)]
-#[path = "schema_validate/unit-tests/mod.rs"]
+#[path = "schema_validate/unit_tests/mod.rs"]
 mod unit_tests;

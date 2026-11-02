@@ -45,9 +45,9 @@ pub fn decode_account_key_text(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/account.rs"]
+#[path = "unit_tests/account.rs"]
 mod unit_tests;
 
 #[cfg(test)]
-#[path = "unit-tests/property.rs"]
+#[path = "unit_tests/property.rs"]
 mod property_tests;

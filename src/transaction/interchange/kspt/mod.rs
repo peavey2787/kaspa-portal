@@ -37,5 +37,5 @@ pub(crate) use validation::checked_redeem_bytes;
 pub use validation::{transaction_amounts, validate_transaction_for_review};
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 pub mod unit_tests;

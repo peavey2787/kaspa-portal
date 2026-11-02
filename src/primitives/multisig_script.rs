@@ -107,5 +107,5 @@ pub fn encode(threshold: u8, keys: &[[u8; 32]], out: &mut [u8]) -> Option<usize>
 }
 
 #[cfg(test)]
-#[path = "unit-tests/multisig_script.rs"]
+#[path = "unit_tests/multisig_script.rs"]
 mod unit_tests;

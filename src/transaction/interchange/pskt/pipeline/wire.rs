@@ -324,5 +324,5 @@ fn parse_derivation_index(hint: &Map<String, Value>) -> Result<u32, String> {
 }
 
 #[cfg(test)]
-#[path = "wire/unit-tests/mod.rs"]
+#[path = "wire/unit_tests/mod.rs"]
 mod unit_tests;

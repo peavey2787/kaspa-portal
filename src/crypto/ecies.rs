@@ -155,5 +155,5 @@ fn lift_x(x_bytes: &[u8; 32]) -> Option<AffinePoint> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/ecies.rs"]
+#[path = "unit_tests/ecies.rs"]
 mod unit_tests;

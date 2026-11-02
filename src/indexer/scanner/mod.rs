@@ -32,5 +32,5 @@ pub fn scan(transaction: &IndexedTransaction, matchers: &[Matcher]) -> Vec<Index
 }
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

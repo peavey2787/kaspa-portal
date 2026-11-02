@@ -4,5 +4,5 @@ pub mod decimal_opt_u64;
 pub mod decimal_u64;
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

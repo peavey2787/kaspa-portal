@@ -249,5 +249,5 @@ fn remove_matches_for_transactions(matches: &mut VecDeque<IndexedMatch>, ids: &[
 }
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

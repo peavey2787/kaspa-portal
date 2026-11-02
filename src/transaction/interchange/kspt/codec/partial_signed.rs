@@ -94,5 +94,5 @@ fn retry_compact_vec(
 }
 
 #[cfg(test)]
-#[path = "partial_signed/unit-tests/mod.rs"]
+#[path = "partial_signed/unit_tests/mod.rs"]
 mod unit_tests;

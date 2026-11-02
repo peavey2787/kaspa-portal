@@ -101,5 +101,5 @@ pub(crate) fn merkle_direction_u64(value: Option<&Value>) -> Option<u64> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/merkle_proof.rs"]
+#[path = "unit_tests/merkle_proof.rs"]
 mod unit_tests;

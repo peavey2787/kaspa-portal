@@ -11,5 +11,5 @@ pub use redeem_script::build_redeem_script;
 pub const MAX_MULTISIG_KEYS: usize = crate::primitives::multisig_script::MAX_SCRIPT_KEYS;
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

@@ -349,5 +349,5 @@ fn reject_duplicate_hd<const N: usize>(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/grammar.rs"]
+#[path = "unit_tests/grammar.rs"]
 mod unit_tests;

@@ -485,5 +485,5 @@ fn domain_hash(domain: &[u8], parts: &[&[u8]]) -> [u8; 32] {
 }
 
 #[cfg(test)]
-#[path = "private_swap/unit-tests/mod.rs"]
+#[path = "private_swap/unit_tests/mod.rs"]
 mod unit_tests;

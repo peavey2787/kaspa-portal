@@ -34,5 +34,5 @@ pub use source::{SighashInput, SighashOutput, SighashSource};
 use crate::transaction::model::*;
 
 #[cfg(test)]
-#[path = "unit-tests/sighash_tests.rs"]
+#[path = "unit_tests/sighash_tests.rs"]
 pub mod unit_tests;

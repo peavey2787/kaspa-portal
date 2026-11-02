@@ -358,5 +358,5 @@ fn fixed_checksigfromstack_pattern(commitment: &[u8; 32], pubkey_x: &[u8; 32]) -
 }
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

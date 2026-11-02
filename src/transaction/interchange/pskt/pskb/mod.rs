@@ -14,5 +14,5 @@ pub fn plain_output_value(amount: u64, script: &[u8]) -> serde_json::Value {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

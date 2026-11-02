@@ -146,5 +146,5 @@ fn serialize_field_element(value: &Fr) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/proof.rs"]
+#[path = "unit_tests/proof.rs"]
 mod unit_tests;

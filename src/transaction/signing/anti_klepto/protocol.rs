@@ -479,9 +479,9 @@ fn read_u32(input: &[u8]) -> Result<usize, WireError> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/anti_klepto_tests.rs"]
+#[path = "unit_tests/anti_klepto_tests.rs"]
 mod anti_klepto_tests;
 
 #[cfg(test)]
-#[path = "unit-tests/wire.rs"]
+#[path = "unit_tests/wire.rs"]
 mod wire_tests;

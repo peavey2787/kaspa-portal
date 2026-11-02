@@ -452,5 +452,5 @@ fn normalize_mass(mass: u64, reference_limit: u64, dimension_limit: u64) -> Resu
 }
 
 #[cfg(test)]
-#[path = "unit-tests/mass.rs"]
+#[path = "unit_tests/mass.rs"]
 mod unit_tests;

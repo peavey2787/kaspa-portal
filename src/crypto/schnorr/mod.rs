@@ -185,5 +185,5 @@ fn known_answer_matches(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/schnorr_tests.rs"]
+#[path = "unit_tests/schnorr_tests.rs"]
 mod unit_tests;

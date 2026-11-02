@@ -194,5 +194,5 @@ fn apply_extensions(
 }
 
 #[cfg(test)]
-#[path = "relay/unit-tests/mod.rs"]
+#[path = "relay/unit_tests/mod.rs"]
 mod unit_tests;

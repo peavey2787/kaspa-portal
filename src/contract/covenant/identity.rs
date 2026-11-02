@@ -147,5 +147,5 @@ pub fn verify_redeem_script(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/identity.rs"]
+#[path = "unit_tests/identity.rs"]
 mod unit_tests;

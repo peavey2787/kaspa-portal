@@ -9,5 +9,5 @@ pub(crate) use common::push_data_item;
 pub use common::push_redeem_script;
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

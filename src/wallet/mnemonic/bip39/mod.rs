@@ -16,5 +16,5 @@ pub use types::{Bip39Error, Mnemonic12, Mnemonic24, Seed};
 pub use words::{index_to_word, word_to_index};
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 pub mod unit_tests;

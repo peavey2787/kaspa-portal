@@ -121,5 +121,5 @@ fn extract_bits(source: &[u8], positions: &[usize]) -> Vec<u8> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

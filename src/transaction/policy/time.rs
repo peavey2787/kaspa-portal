@@ -425,5 +425,5 @@ fn days_before_month(year: u16, month: u8) -> u64 {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/time.rs"]
+#[path = "unit_tests/time.rs"]
 mod unit_tests;

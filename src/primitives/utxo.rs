@@ -21,5 +21,5 @@ pub struct UtxoEntry {
 }
 
 #[cfg(test)]
-#[path = "utxo/unit-tests/mod.rs"]
+#[path = "utxo/unit_tests/mod.rs"]
 mod unit_tests;

@@ -422,5 +422,5 @@ fn convert_bits(data: &[u8], from: u8, to: u8, pad: bool) -> Result<Vec<u8>, Str
 }
 
 #[cfg(test)]
-#[path = "unit-tests/address_tests.rs"]
+#[path = "unit_tests/address_tests.rs"]
 mod unit_tests;

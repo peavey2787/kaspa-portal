@@ -77,7 +77,7 @@ KSPT v1's payload length is a little-endian `u32`. Portal's application-payload 
 ## Testing
 
 ```text
-src/**/unit-tests/       focused module-level invariants
+src/**/unit_tests/       focused module-level invariants
 qa/tests/conformance/    standards/Kaspa test vectors
 qa/tests/integration/    cross-domain behavior
 qa/tests/security/       security invariants/attack cases
@@ -89,7 +89,7 @@ qa/tests/fuzz/           cargo-fuzz harness and targets
 qa/benches/              criterion benchmarks
 ```
 
-The filesystem directory is literally `unit-tests`; Rust parents attach it using `#[path = "unit-tests/..."]`.
+The filesystem directory is literally `unit_tests`; Rust parents attach it using `#[path = "unit_tests/..."]`.
 
 ## Indexer consistency
 

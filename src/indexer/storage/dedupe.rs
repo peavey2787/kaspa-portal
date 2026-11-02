@@ -45,5 +45,5 @@ impl RecentKeys {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/dedupe.rs"]
+#[path = "unit_tests/dedupe.rs"]
 mod unit_tests;

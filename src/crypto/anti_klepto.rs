@@ -304,5 +304,5 @@ impl From<SchnorrError> for AntiKleptoError {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/anti_klepto.rs"]
+#[path = "unit_tests/anti_klepto.rs"]
 mod anti_klepto_tests;

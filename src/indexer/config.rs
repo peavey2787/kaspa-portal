@@ -124,5 +124,5 @@ fn validate_limits(config: &IndexerConfig) -> Result<(), String> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/config.rs"]
+#[path = "unit_tests/config.rs"]
 mod unit_tests;

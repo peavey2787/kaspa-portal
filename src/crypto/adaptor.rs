@@ -368,5 +368,5 @@ fn points_equal(left: &ProjectivePoint, right: &ProjectivePoint) -> bool {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/adaptor.rs"]
+#[path = "unit_tests/adaptor.rs"]
 mod adaptor_tests;

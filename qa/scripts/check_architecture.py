@@ -45,7 +45,7 @@ for domain in sorted(DOMAINS):
         continue
     observed = set()
     for source in path.rglob("*.rs"):
-        if "unit-tests" in source.parts:
+        if "unit_tests" in source.parts:
             continue
         text = source.read_text(errors="replace")
         observed |= dependencies(text) - {domain}

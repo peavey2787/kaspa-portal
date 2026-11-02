@@ -29,9 +29,9 @@ pub fn authorize_frame_session(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/security.rs"]
+#[path = "unit_tests/security.rs"]
 mod unit_tests;
 
 #[cfg(test)]
-#[path = "unit-tests/security_sessions.rs"]
+#[path = "unit_tests/security_sessions.rs"]
 mod session_tests;

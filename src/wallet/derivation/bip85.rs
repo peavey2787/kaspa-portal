@@ -157,5 +157,5 @@ pub fn derive_mnemonic_24(seed: &[u8; 64], index: u32) -> Result<Mnemonic24, Bip
 }
 
 #[cfg(test)]
-#[path = "unit-tests/bip85.rs"]
+#[path = "unit_tests/bip85.rs"]
 pub mod unit_tests;

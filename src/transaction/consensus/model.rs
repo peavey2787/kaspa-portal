@@ -123,5 +123,5 @@ impl ConsensusTransaction {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/model.rs"]
+#[path = "unit_tests/model.rs"]
 mod unit_tests;

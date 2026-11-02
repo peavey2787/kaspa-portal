@@ -138,5 +138,5 @@ fn same_output_body(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/transaction_body.rs"]
+#[path = "unit_tests/transaction_body.rs"]
 mod unit_tests;

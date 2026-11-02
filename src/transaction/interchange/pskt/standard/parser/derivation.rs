@@ -66,5 +66,5 @@ fn parse_soft_decimal(component: &[u8]) -> Option<u32> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/derivation.rs"]
+#[path = "unit_tests/derivation.rs"]
 mod unit_tests;

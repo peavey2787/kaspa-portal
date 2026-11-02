@@ -44,7 +44,7 @@ examine_globs = [
   "src/network/wrpc/**/*.rs",
 ]
 exclude_globs = [
-  "**/unit-tests/**",
+  "**/unit_tests/**",
   "**/tests/**",
   "**/wordlist.rs",
 ]

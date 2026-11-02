@@ -91,5 +91,5 @@ pub type BlockPage = Page<IndexedBlock>;
 pub type MatchPage = Page<IndexedMatch>;
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

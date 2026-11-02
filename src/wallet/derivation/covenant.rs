@@ -348,5 +348,5 @@ fn constant_time_eq(left: &[u8; 32], right: &[u8; 32]) -> bool {
 }
 
 #[cfg(test)]
-#[path = "covenant/unit-tests/mod.rs"]
+#[path = "covenant/unit_tests/mod.rs"]
 mod unit_tests;

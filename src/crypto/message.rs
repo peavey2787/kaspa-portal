@@ -30,5 +30,5 @@ pub fn sign_message_with_entropy(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/message.rs"]
+#[path = "unit_tests/message.rs"]
 mod unit_tests;

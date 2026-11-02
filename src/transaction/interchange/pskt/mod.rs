@@ -24,5 +24,5 @@ pub use scripts::push_redeem_script;
 pub use wire::{append_output, detect_format_hex, set_payload, set_tx_lane};
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

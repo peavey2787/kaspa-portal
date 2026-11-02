@@ -59,5 +59,5 @@ pub use single_key::{
 pub use status::{is_fully_signed, signature_status};
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

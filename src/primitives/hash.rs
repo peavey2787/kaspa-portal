@@ -53,5 +53,5 @@ pub fn blake2b_256(data: &[u8]) -> Hash32 {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/hash.rs"]
+#[path = "unit_tests/hash.rs"]
 mod unit_tests;

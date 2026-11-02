@@ -40,5 +40,5 @@ use base58::base58check_decode;
 use base58::{base58_encode, base58check_encode, sha256d};
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 pub mod unit_tests;

@@ -103,5 +103,5 @@ pub fn find_owned_script(
 }
 
 #[cfg(test)]
-#[path = "unit-tests/kip22.rs"]
+#[path = "unit_tests/kip22.rs"]
 mod unit_tests;

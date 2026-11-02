@@ -55,5 +55,5 @@ pub fn spend_path(signature_script: &[u8], redeem_script: &[u8]) -> Option<Spend
 }
 
 #[cfg(test)]
-#[path = "unit-tests/spend_path.rs"]
+#[path = "unit_tests/spend_path.rs"]
 mod unit_tests;

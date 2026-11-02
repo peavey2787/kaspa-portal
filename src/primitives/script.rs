@@ -93,5 +93,5 @@ impl<'a> Iterator for Elements<'a> {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/script.rs"]
+#[path = "unit_tests/script.rs"]
 mod unit_tests;

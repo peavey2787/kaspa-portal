@@ -138,9 +138,9 @@ pub fn is_session_frame(data: &[u8]) -> bool {
 }
 
 #[cfg(test)]
-#[path = "unit-tests/frame.rs"]
+#[path = "unit_tests/frame.rs"]
 mod unit_tests;
 
 #[cfg(test)]
-#[path = "unit-tests/frame_boundaries.rs"]
+#[path = "unit_tests/frame_boundaries.rs"]
 mod boundary_tests;

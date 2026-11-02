@@ -163,5 +163,5 @@ fn validate_request(request: &BeaconRequest) -> core::result::Result<(), String>
 }
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;

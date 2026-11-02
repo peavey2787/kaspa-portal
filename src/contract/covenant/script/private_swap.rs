@@ -83,7 +83,7 @@ fn append_claim_fee_bound(script: &mut Vec<u8>) {
 }
 
 #[cfg(test)]
-#[path = "private_swap/unit-tests/mod.rs"]
+#[path = "private_swap/unit_tests/mod.rs"]
 mod unit_tests;
 
 /// The fields of a canonical Private Swap script.

@@ -241,5 +241,5 @@ fn covenant_material(
 }
 
 #[cfg(test)]
-#[path = "covenant/unit-tests/mod.rs"]
+#[path = "covenant/unit_tests/mod.rs"]
 mod unit_tests;

@@ -17,5 +17,5 @@ pub use payment::{generate_stealth_payment, StealthPayment};
 pub mod scanner;
 
 #[cfg(test)]
-#[path = "unit-tests/mod.rs"]
+#[path = "unit_tests/mod.rs"]
 mod unit_tests;
