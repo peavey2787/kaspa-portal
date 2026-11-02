@@ -12,15 +12,24 @@ use k256::schnorr::{Signature as K256Signature, VerifyingKey};
 use serde_json::{Map, Value};
 
 use super::compact::{Input, Signature, SpecializedRoute, SpecializedWitness};
+#[cfg(not(feature = "std"))]
+use crate::alloc_prelude::*;
 use crate::contract::script::opcode::{OP_0, OP_1};
 mod claims;
 mod merkle_proof;
 mod routes;
 mod templates;
+
 pub(crate) use claims::*;
 pub(crate) use merkle_proof::*;
 pub(crate) use routes::*;
 pub(crate) use templates::*;
+
+/// The selector truth bits a Merkle claim's inclusion proof implies.
+pub fn merkle_claim_truth(proof: &Value) -> Result<u16, String> {
+    let items = merkle_proof::parse_merkle_proof(Some(proof), 0)?;
+    Ok(claims::merkle_truth_from_proof(&items))
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RouteKind {

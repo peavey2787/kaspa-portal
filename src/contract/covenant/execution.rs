@@ -7,8 +7,10 @@
 //! exactly as [`super::branch::resolve_covenant_branches`] numbers them, so a
 //! position here names the same key occurrence there.
 //!
-//! An IF/NOTIF whose condition the script computed is not a witness selector:
-//! both of its arms must then be pure script logic with the same stack effect.
+//! An IF/NOTIF whose condition the script computed is not a witness selector.
+//! Arms of pure script logic must have the same stack effect. An arm holding a
+//! signature check is followed as the assignment names it: should the chain
+//! compute the other arm, the witness no longer fits and consensus refuses it.
 //! The taken path is refused whenever it would need any other witness data,
 //! reaches a signature check other than CHECKSIG/CHECKSIGVERIFY on a key pushed
 //! immediately before it, or uses an opcode whose stack effect is not modelled
@@ -54,7 +56,7 @@ pub enum ExecutionError {
     UnsupportedOpcode,
     /// The taken path consumes witness data other than selectors and signatures.
     WitnessDataRequired,
-    /// A computed branch's arms differ in stack effect or need witness items.
+    /// A computed branch's pure arms differ in stack effect.
     DataDependentBranch,
 }
 
@@ -208,22 +210,22 @@ impl Parser<'_> {
 /// Stack items an opcode pops and pushes, for opcodes whose effect is fixed.
 const fn stack_effect(opcode: u8) -> Option<(usize, usize)> {
     Some(match opcode {
-        0x61 => (0, 0),                                                  // NOP
-        0x69 | 0x75 | 0xb0 | 0xb1 => (1, 0),                             // VERIFY DROP CLTV CSV
-        0x6d => (2, 0),                                                  // 2DROP
-        0x6e => (2, 4),                                                  // 2DUP
-        0x76 | 0x82 => (1, 2),                                           // DUP SIZE
-        0x77 => (2, 1),                                                  // NIP
-        0x78 | 0x7d => (2, 3),                                           // OVER TUCK
-        0x7b => (3, 3),                                                  // ROT
-        0x7c => (2, 2),                                                  // SWAP
-        0x7f | 0xa5 => (3, 1),                                           // SUBSTR WITHIN
-        0x88 | 0x9d => (2, 0), // EQUALVERIFY NUMEQUALVERIFY
+        0x61 => (0, 0),                                                                // NOP
+        0x69 | 0x75 | 0xb0 | 0xb1 => (1, 0), // VERIFY DROP CLTV CSV
+        0x6d => (2, 0),                      // 2DROP
+        0x6e => (2, 4),                      // 2DUP
+        0x76 | 0x82 => (1, 2),               // DUP SIZE
+        0x77 => (2, 1),                      // NIP
+        0x78 | 0x7d => (2, 3),               // OVER TUCK
+        0x7b => (3, 3),                      // ROT
+        0x7c => (2, 2),                      // SWAP
+        0x7f | 0xa5 | 0xbc => (3, 1),        // SUBSTR WITHIN SCRIPT_SIG_SUBSTR
+        0x88 | 0x9d => (2, 0),               // EQUALVERIFY NUMEQUALVERIFY
         0x8b | 0x8c | 0x8f..=0x92 | 0xa8 | 0xaa => (1, 1), // unary math, SHA256, BLAKE2B
         0x7e | 0x87 | 0x93 | 0x94 | 0x9a..=0x9c | 0x9e..=0xa4 => (2, 1), // binary ops
-        0xb3 | 0xb4 | 0xb9 => (0, 1), // input/output count, input index
-        0xbe | 0xbf | 0xc2 | 0xc3 | 0xcf | 0xd2 => (1, 1), // per-index introspection
-        0xd3 => (2, 1),        // covenant output index
+        0xb3 | 0xb4 | 0xb9 => (0, 1),        // input/output count, input index
+        0xbe | 0xbf | 0xc2 | 0xc3 | 0xc9 | 0xcb | 0xcf | 0xd0 | 0xd2 | 0xd5 => (1, 1), // per-index introspection
+        0xd3 => (2, 1), // covenant output index
         _ => return None,
     })
 }
@@ -272,6 +274,16 @@ fn arms_effect(then: &[Node], otherwise: &[Node]) -> Result<(isize, isize), Exec
         return Err(ExecutionError::DataDependentBranch);
     }
     Ok((then_need.max(else_need) as isize, then_delta))
+}
+
+fn holds_key_check(nodes: &[Node]) -> bool {
+    nodes.iter().any(|node| match node {
+        Node::KeyCheck { .. } => true,
+        Node::Branch {
+            then, otherwise, ..
+        } => holds_key_check(then) || holds_key_check(otherwise),
+        Node::Push | Node::Op(_) => false,
+    })
 }
 
 struct Walk {
@@ -335,6 +347,10 @@ impl Walk {
             return self.run(if value != notif { then } else { otherwise });
         }
         self.pop(1)?;
+        if holds_key_check(then) || holds_key_check(otherwise) {
+            let value = self.supplied_true_mask & bit != 0;
+            return self.run(if value != notif { then } else { otherwise });
+        }
         let (need, delta) = arms_effect(then, otherwise)?;
         if (self.produced as isize) < need {
             return Err(ExecutionError::WitnessDataRequired);

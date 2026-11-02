@@ -91,7 +91,6 @@ impl GlobalParser<'_> {
             b"xpubs" => self.parse_preserved_object(tok, key_start),
             b"id" => self.parse_optional_id(tok, key_start),
             b"proprietaries" => self.parse_preserved_object(tok, key_start),
-            b"covenantBranch" => self.parse_covenant_branch(tok, key_start),
             _ => self.preserve_unknown(tok, key_start),
         }
     }
@@ -231,20 +230,6 @@ impl GlobalParser<'_> {
         match tok.next_token()? {
             Tok::Null => Ok(()),
             Tok::Str(_) => self.capture(key_start, tok.position()),
-            _ => Err(PskError::UnexpectedToken),
-        }
-    }
-
-    fn parse_covenant_branch(
-        &mut self,
-        tok: &mut Tokenizer<'_>,
-        key_start: usize,
-    ) -> Result<(), PskError> {
-        match tok.next_token()? {
-            Tok::Null => Ok(()),
-            Tok::Str(b"owner" | b"owner-time" | b"beneficiary" | b"savings") => {
-                self.capture(key_start, tok.position())
-            }
             _ => Err(PskError::UnexpectedToken),
         }
     }

@@ -35,12 +35,15 @@ fn input_value(input: &PskbInputPlan) -> Value {
         },
         "redeemScript": input.redeem_script.as_ref().map(hex::encode),
         "partialSigs": {},
-        "minimumSignatures": input.minimum_signatures,
         "bip32Derivations": {},
         "proprietaries": standard_map(&input.proprietaries),
         "finalScriptSig": Value::Null,
         "minTime": input.min_time.map(|value| value.to_string())
     });
+    // A keyless path has no signature count: the wire never carries zero.
+    if input.minimum_signatures > 0 {
+        value["minimumSignatures"] = json!(input.minimum_signatures);
+    }
     if let Some(execution) = input.covenant_execution {
         value["covenantExecution"] = json!({
             "suppliedMask": execution.supplied_mask.to_string(),

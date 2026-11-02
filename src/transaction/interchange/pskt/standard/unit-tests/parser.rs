@@ -613,27 +613,7 @@ fn tokenizer_number_string_and_keyword_boundaries_are_exact() {
 }
 
 #[test]
-fn covenant_branch_and_minimum_signature_fields_cover_canonical_boundaries() {
-    for branch in ["owner", "owner-time", "beneficiary", "savings"] {
-        let extra = format!(r#","covenantBranch":"{branch}""#);
-        parse_json(PSKT_MAGIC, &transaction_json(&extra, "", ""))
-            .expect("supported covenant branch");
-    }
-    parse_json(
-        PSKT_MAGIC,
-        &transaction_json(r#","covenantBranch":null"#, "", ""),
-    )
-    .expect("null covenant branch");
-    for invalid in [
-        r#","covenantBranch":"oracle-v1-claim""#,
-        r#","covenantBranch":1"#,
-    ] {
-        assert_eq!(
-            parse_json(PSKT_MAGIC, &transaction_json(invalid, "", "")).unwrap_err(),
-            PskError::UnexpectedToken,
-        );
-    }
-
+fn covenant_execution_and_minimum_signature_fields_cover_canonical_boundaries() {
     for execution in [
         r#","covenantExecution":null"#,
         r#","covenantExecution":{"suppliedMask":1,"suppliedTrueMask":0}"#,

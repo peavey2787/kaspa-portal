@@ -766,3 +766,19 @@ fn every_typed_covenant_route_field_is_a_recognized_routing_field() {
         );
     }
 }
+
+#[test]
+fn a_merkle_proof_implies_the_selectors_of_its_directions() {
+    let sibling = "11".repeat(32);
+    let proof = |directions: &[u8]| {
+        json!(directions
+            .iter()
+            .map(|direction| json!({"sibling": sibling, "direction": direction}))
+            .collect::<Vec<_>>())
+    };
+    assert_eq!(super::super::merkle_claim_truth(&proof(&[])), Ok(0));
+    assert_eq!(super::super::merkle_claim_truth(&proof(&[1])), Ok(0b010));
+    assert_eq!(super::super::merkle_claim_truth(&proof(&[0, 1])), Ok(0b100));
+    assert_eq!(super::super::merkle_claim_truth(&proof(&[1, 1])), Ok(0b110));
+    assert!(super::super::merkle_claim_truth(&json!("not a proof")).is_err());
+}

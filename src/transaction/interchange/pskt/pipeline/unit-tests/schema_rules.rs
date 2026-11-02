@@ -106,14 +106,7 @@ fn nulls_are_accepted_only_where_a_default_exists() {
 }
 
 #[test]
-fn global_routes_and_versions_are_checked() {
-    let mut owner = unsigned_document(None, 0x11);
-    owner["global"]["covenantBranch"] = json!("owner");
-    assert_eq!(validate(&owner), Ok(()));
-    rejected_with(
-        |document| document["global"]["covenantBranch"] = json!("thief"),
-        "unsupported global.covenantBranch",
-    );
+fn global_versions_are_checked() {
     rejected_with(
         |document| document["global"]["txVersion"] = json!(9),
         "unsupported transaction version: 9",

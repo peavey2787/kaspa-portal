@@ -78,6 +78,13 @@ impl BranchResolution {
         self.selector_mask
     }
 
+    /// The selector truth bits reaching the key at `position`, every other
+    /// selector false; a caller may add bits only outside `decision_mask`.
+    pub fn truth_reaching_key(&self, position: u8) -> Result<u16, BranchResolveError> {
+        let key = self.key_at(position)?;
+        Ok(key.if_mask & key.decision_mask)
+    }
+
     pub fn key_at(&self, position: u8) -> Result<BranchKey, BranchResolveError> {
         self.keys
             .get(usize::from(position))

@@ -315,11 +315,6 @@ fn strict_decode_covers_global_input_output_and_nested_schema_rejection_matrix()
             "global.txPayload must be even-length lowercase hexadecimal",
         ),
         ("subnetworkId", json!("00"), "subnetworkId must be 20 bytes"),
-        (
-            "covenantBranch",
-            json!("unsupported"),
-            "unsupported global.covenantBranch: unsupported",
-        ),
     ] {
         assert_strict_rejects(base.clone(), expected, |root| {
             root[0]["global"][field] = value;

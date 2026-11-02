@@ -29,9 +29,10 @@ use crate::{
 };
 
 pub(crate) use relay_fields::{find_pubkey_position, parse_multisig_redeem};
+pub use specialized::merkle_claim_truth;
 pub use verified::{
     VerifiedCovenantRoute, VerifiedInput, VerifiedOutput, VerifiedSignature, VerifiedTransaction,
-    VerifiedWitnessPlan,
+    VerifiedWitnessItem, VerifiedWitnessPlan,
 };
 pub(crate) use wire::{decode_lower_hex, parse_derivation, parse_spk, SIGNER_DERIVATION_FIELD};
 pub use wire::{MAX_PSKT_JSON_BYTES, MAX_PSKT_WIRE_HEX_CHARS};
@@ -53,15 +54,6 @@ pub fn merge_signed_kspt(
     limits: Limits,
 ) -> Result<String, String> {
     compact::validate_and_merge(original_pskt_hex, signed_kspt, network, limits)
-}
-
-/// Whether every input carries enough cryptographically valid signatures.
-/// The network a signer response's trailer binds it to, read with the same
-/// canonical parser the merge uses.
-pub fn signed_kspt_network(signed_kspt: &[u8], limits: Limits) -> Result<KaspaNetwork, String> {
-    let network = compact::parse(signed_kspt, limits)?.network;
-    KaspaNetwork::from_wire(network)
-        .ok_or_else(|| format!("signed KSPT names unsupported network {network}"))
 }
 
 /// Relay `pskt_hex` to compact KSPT, let `sign` add signatures to the parsed

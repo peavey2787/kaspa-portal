@@ -168,26 +168,3 @@ fn placeholder_signatures_and_unsupported_versions_never_reach_consensus_bytes()
     });
     crate::test_support::assert_err_text(&super::super::verify_for_broadcast(&pskb(&placeholder), SIGNER_TEST_LIMITS), "input[0]: P2PK partial-signature public key does not match a canonical P2PK scriptPublicKey");
 }
-
-#[test]
-fn signed_kspt_network_is_the_trailer_network() {
-    use crate::primitives::address::KaspaNetwork;
-
-    let wire = pskb(&unsigned_document(None, 0x11));
-    for network in [
-        KaspaNetwork::Mainnet,
-        KaspaNetwork::Testnet,
-        KaspaNetwork::Devnet,
-        KaspaNetwork::Simnet,
-    ] {
-        let kspt = super::super::encode_pskt(&wire, network, SIGNER_TEST_LIMITS).unwrap();
-        assert_eq!(
-            super::super::signed_kspt_network(&kspt, SIGNER_TEST_LIMITS),
-            Ok(network)
-        );
-    }
-    crate::test_support::assert_err_text(
-        &super::super::signed_kspt_network(b"KSPT", SIGNER_TEST_LIMITS),
-        "KSPT is truncated",
-    );
-}

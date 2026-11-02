@@ -283,7 +283,7 @@ fn typed_keyless_covenant_preserves_zero_signature_requirement() {
         &policy,
     );
     let document = decode_pskb_wire(&super::pskb::encode_wire(&plan).expect("encode"));
-    assert_eq!(document[0]["inputs"][0]["minimumSignatures"], 0);
+    assert!(document[0]["inputs"][0].get("minimumSignatures").is_none());
     assert_eq!(document[0]["global"]["fallbackLockTime"], "500");
     assert!(document[0]["global"].get("covenantBranch").is_none());
 }

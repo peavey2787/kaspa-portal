@@ -53,7 +53,6 @@ export async function wasm_offline_transaction(page, fixture, standardNetwork, c
       global: {
         txVersion: 0,
         fallbackLockTime: null,
-        covenantBranch: null,
         proprietaries: [],
         transactionPayload: null,
       },
@@ -84,7 +83,6 @@ export async function wasm_offline_transaction(page, fixture, standardNetwork, c
       JSON.stringify({
         txVersion: 0,
         fallbackLockTime: '12',
-        covenantBranch: 'e2e',
         proprietaries: [],
         transactionPayload: null,
       }),

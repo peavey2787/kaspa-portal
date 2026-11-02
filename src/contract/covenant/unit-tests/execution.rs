@@ -286,20 +286,21 @@ fn a_computed_branch_consumes_no_selector_while_its_bit_stays_assigned() {
 }
 
 #[test]
-fn computed_branch_arms_must_be_pure_and_agree_on_their_stack_effect() {
+fn keyless_computed_arms_must_agree_and_keyed_arms_are_followed_by_name() {
     // 1 IF 1 ELSE 1 1 ENDIF: the arms leave different depths.
     assert_eq!(
         trace_witness(&[0x51, OP_IF, 0x51, OP_ELSE, 0x51, 0x51, OP_ENDIF], 1, 0),
         Err(ExecutionError::DataDependentBranch)
     );
-    // A key check inside a computed arm would need a witness signature.
+    // An arm holding a key check is followed as the assignment names it.
     let mut keyed = Vec::from([0x51, OP_IF]);
     key(&mut keyed, 0x41, OP_CHECKSIG);
     keyed.extend_from_slice(&[OP_ELSE, 0x51, OP_ENDIF]);
     assert_eq!(
         trace_witness(&keyed, 1, 1),
-        Err(ExecutionError::DataDependentBranch)
+        Ok(Vec::from([Signature { position: 0 }]))
     );
+    assert_eq!(trace_witness(&keyed, 1, 0), Ok(Vec::new()));
     // An arm needing two script items when only one remains reaches the witness.
     assert_eq!(
         trace_witness(&[0x51, 0x51, OP_IF, 0x87, OP_ELSE, 0x87, OP_ENDIF], 1, 0),
@@ -450,4 +451,58 @@ fn nested_computed_branches_count_what_they_need_from_below_and_carry_their_effe
         trace_witness(&grows, 1, 0),
         Err(ExecutionError::WitnessDataRequired)
     );
+}
+
+#[test]
+fn vault_scripts_trace_their_single_owner_signature() {
+    for script in [
+        crate::contract::vault::script::build_tagged_vault_script(&[0x42; 32]),
+        crate::contract::vault::script::build_split_vault_script(&[0x42; 32]),
+    ] {
+        assert_eq!(
+            trace_witness(&script, 0, 0).expect("vault trace"),
+            alloc::vec![Signature { position: 0 }],
+        );
+    }
+}
+
+#[test]
+fn every_shipment_path_needs_exactly_the_party_it_names() {
+    const SELECTORS: u16 = 0b111_1111;
+    let [seller, deliverer, buyer, arbiter] = [[0x11; 32], [0x22; 32], [0x33; 32], [0x44; 32]];
+    let script = crate::contract::shipping_escrow::script::build_ship_escrow_script(
+        crate::contract::shipping_escrow::script::ShippingEscrowScriptRequest {
+            seller_pubkey: &seller,
+            deliverer_pubkey: &deliverer,
+            buyer_pubkey: &buyer,
+            arbiter_pubkey: &arbiter,
+            product_sompi: 400_000_000,
+            fee_sompi: 50_000_000,
+            cltv1_deadline: 1_000,
+            cltv2_deadline: 2_000,
+            salt: &[3; 8],
+        },
+    )
+    .expect("shipment script");
+    let branches = resolve_covenant_branches(&script).expect("shipment keys");
+    assert_eq!(branches.selector_mask(), SELECTORS);
+    for (truth, signer) in [
+        (0b000_0011, Some(deliverer)),
+        (0b000_0101, Some(arbiter)),
+        (0b000_0001, None),
+        (0b011_1000, Some(buyer)),
+        (0b101_1000, Some(arbiter)),
+        (0b001_1000, None),
+        (0b000_1000, Some(arbiter)),
+    ] {
+        let witness = trace_witness(&script, SELECTORS, truth).expect("shipment path");
+        let keys: Vec<[u8; 32]> = witness
+            .iter()
+            .filter_map(|item| match item {
+                Signature { position } => Some(branches.key_at(*position).expect("key").key),
+                Selector(_) => None,
+            })
+            .collect();
+        assert_eq!(keys, Vec::from_iter(signer), "selector truth {truth:#09b}");
+    }
 }

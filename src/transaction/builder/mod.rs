@@ -15,9 +15,10 @@ pub use covenant::{
 };
 #[cfg(feature = "std")]
 pub use pskb::{
-    CovenantInputPolicy, GlobalThreadPlanError, GlobalThreadPolicy, GlobalThreadTopupPlan,
-    GlobalThreadTopupRequest, GlobalThreadWithdrawalPlan, GlobalThreadWithdrawalRequest, PskbApi,
-    PskbGlobalPlan, PskbInputPlan, PskbOutputPlan, PskbPlan, SweepInputPolicy,
+    CovenantExecution, CovenantInputPolicy, GlobalThreadPlanError, GlobalThreadPolicy,
+    GlobalThreadTopupPlan, GlobalThreadTopupRequest, GlobalThreadWithdrawalPlan,
+    GlobalThreadWithdrawalRequest, PskbApi, PskbGlobalPlan, PskbInputPlan, PskbOutputPlan,
+    PskbPlan, SweepInputPolicy,
 };
 
 #[cfg(feature = "std")]

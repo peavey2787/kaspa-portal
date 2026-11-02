@@ -12,6 +12,18 @@ KIP-22 hides the public key until coins are spent.
   KIP-22 is still a draft and publishes no test vectors. Keep the account kpub
   private: it reveals every public key in the account.
 
+Covenant spends follow the path they name.
+
+- The covenant tracer follows computed branches that reach a key by name,
+  so a shipment or vault path yields exactly the witness for the party it
+  names. `merkle_claim_truth` gives the selector bits a Merkle proof implies.
+- The PSKB encoder writes `minimumSignatures` only when a path needs a
+  signature. Keyless timeouts no longer claim one.
+- The `global.covenantBranch` hint is gone from the schema and the standard
+  parser. `covenantExecution` is the only way to select a path. The finalizer
+  still refuses a document that carries the old field. `signed_kspt_network`
+  had no caller and is removed.
+
 One implementation per primitive.
 
 - Dependencies carry no known advisory. `k256` 0.14 brings `crypto-bigint`

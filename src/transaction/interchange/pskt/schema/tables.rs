@@ -119,12 +119,6 @@ pub const GLOBAL_FIELDS: &[FieldSpec] = &[
         ValueKind::HexString,
         DefaultRule::EmptyBytes,
     ),
-    product(
-        "covenantBranch",
-        NullRule::AllowedAsDefault,
-        ValueKind::String,
-        DefaultRule::None,
-    ),
 ];
 
 pub const INPUT_FIELDS: &[FieldSpec] = &[

@@ -20,6 +20,26 @@ fn binds_keys_to_nested_branch_paths() {
 }
 
 #[test]
+fn truth_reaching_a_key_sets_only_the_selectors_its_branch_decides() {
+    let (a, b, c) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+    let mut script = Vec::from([0x63, 0x20]);
+    script.extend_from_slice(&a);
+    script.extend_from_slice(&[0xad, 0x67, 0x63, 0x20]);
+    script.extend_from_slice(&b);
+    script.extend_from_slice(&[0xac, 0x67, 0x20]);
+    script.extend_from_slice(&c);
+    script.extend_from_slice(&[0xac, 0x68, 0x68]);
+    let resolved = resolve_covenant_branches(&script).expect("nested covenant");
+    assert_eq!(resolved.truth_reaching_key(0), Ok(0b01));
+    assert_eq!(resolved.truth_reaching_key(1), Ok(0b10));
+    assert_eq!(resolved.truth_reaching_key(2), Ok(0b00));
+    assert_eq!(
+        resolved.truth_reaching_key(3),
+        Err(BranchResolveError::PositionOutOfRange)
+    );
+}
+
+#[test]
 fn records_actual_op_notif_witness_truth_values() {
     let first_key = [3u8; 32];
     let second_key = [4u8; 32];
