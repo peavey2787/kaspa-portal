@@ -9,5 +9,5 @@ pub use cost::{
 #[cfg(feature = "std")]
 pub use proof::{
     crowdfund_generate_proof, crowdfund_trusted_setup, serialize_total, verify_proof,
-    CrowdfundCircuit, CROWDFUND_MAX_CONTRIBUTORS,
+    CrowdfundCircuit,
 };

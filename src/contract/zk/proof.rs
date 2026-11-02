@@ -5,14 +5,13 @@
 //! not trust this witness for fund safety; it independently enforces the real
 //! transaction input total, goal, destination, and fee on-chain.
 
+use crate::contract::crowdfund::CROWDFUND_MAX_CONTRIBUTORS;
 use ark_bn254::{Bn254, Fr};
 use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
 use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
 use ark_std::rand::{rngs::StdRng, SeedableRng};
-
-pub const CROWDFUND_MAX_CONTRIBUTORS: usize = 8;
 
 fn wasm_rng() -> Result<StdRng, String> {
     let mut seed = [0u8; 32];

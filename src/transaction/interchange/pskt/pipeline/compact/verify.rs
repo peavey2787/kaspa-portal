@@ -132,12 +132,12 @@ pub(crate) fn specialized_signature_count(
     input: &Input,
     input_index: usize,
 ) -> Result<usize, String> {
-    if input.signatures.len() != 1 {
+    if input.signatures.len() > 1 {
         return Err(format!(
-            "input[{input_index}] typed specialized covenant requires exactly one verified signature"
+            "input[{input_index}] typed specialized covenant carries more than one signature"
         ));
     }
-    Ok(1)
+    Ok(input.signatures.len())
 }
 
 pub(crate) fn generic_covenant_signature_count(

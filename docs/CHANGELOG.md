@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Typed covenant claims (whitelist, commit-reveal, oracle v1, private swap) pass PSKT summary before they hold a signature: the route is proved, the witness waits, and more than one signature is still refused.
+- `crowdfund_redeem_script` uses one guard per input and `CROWDFUND_MAX_TX_INPUTS` drops from 16 to 8, so the refund path resolves and the script fits `MAX_REDEEM_SIZE`. This changes every crowdfund address. `contract::zk::CROWDFUND_MAX_CONTRIBUTORS` is removed; use `contract::crowdfund::CROWDFUND_MAX_CONTRIBUTORS`.
+
 KIP-22 hides the public key until coins are spent.
 
 - `wallet::derivation::kip22` derives P2SH addresses over `<P> OP_CHECKSIG` at

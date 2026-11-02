@@ -513,7 +513,7 @@ fn signed_input_without_redeem_is_complete_only_for_canonical_p2pk() {
 }
 
 #[test]
-fn specialized_routes_carry_exactly_one_signature() {
+fn specialized_routes_carry_at_most_one_signature() {
     use super::compact::{specialized_signature_count, SpecializedRoute, SpecializedWitness};
 
     let with = |signatures| {
@@ -526,14 +526,11 @@ fn specialized_routes_carry_exactly_one_signature() {
         });
         specialized_signature_count(&input, 0)
     };
+    assert_eq!(with(Vec::new()), Ok(0));
     assert_eq!(with(vec![plan_signature(0, 1)]), Ok(1));
     crate::test_support::assert_err_text(
-        &with(Vec::new()),
-        "input[0] typed specialized covenant requires exactly one verified signature",
-    );
-    crate::test_support::assert_err_text(
         &with(vec![plan_signature(0, 1), plan_signature(1, 1)]),
-        "input[0] typed specialized covenant requires exactly one verified signature",
+        "input[0] typed specialized covenant carries more than one signature",
     );
 }
 

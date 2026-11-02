@@ -12,7 +12,9 @@ use crate::alloc_prelude::*;
 use crate::contract::script::{opcode::*, push_data, push_int, push_pubkey};
 
 pub const CROWDFUND_MAX_CONTRIBUTORS: usize = 8;
-pub const CROWDFUND_MAX_TX_INPUTS: u64 = 16;
+/// One input per contribution the proof covers. The script spends about sixty bytes
+/// and one branch per input, and a contributor's signer must still hold it to refund.
+pub const CROWDFUND_MAX_TX_INPUTS: u64 = CROWDFUND_MAX_CONTRIBUTORS as u64;
 pub const CROWDFUND_MAX_SWEEP_FEE_SOMPI: u64 = 500_000_000; // 5 KAS safety ceiling.
 pub const CROWDFUND_SIG_OP_COUNT: u8 = crate::contract::zk::GROTH16_SIG_OP_COUNT;
 const CAMPAIGN_TAIL_LEN: u64 = 35;
@@ -57,8 +59,8 @@ pub fn crowdfund_redeem_script(config: CrowdfundScript<'_>) -> Result<Vec<u8>, S
     push_data(&mut script, config.salt);
     script.push(OP_DROP);
 
-    // Contributor refund after timeout. Putting the refund key first in the IF body
-    // intentionally preserves the generic signer branch detector used by PSKB refunds.
+    // Contributor refund after timeout. A signer reaches this key through the branch
+    // resolver, whose limit is why the sweep arm spends one guard per input.
     script.push(OP_IF);
     push_pubkey(&mut script, config.contributor_pubkey);
     script.push(OP_CHECKSIGVERIFY);
@@ -68,8 +70,8 @@ pub fn crowdfund_redeem_script(config: CrowdfundScript<'_>) -> Result<Vec<u8>, S
     // Organizer sweep. No wallet/raw-hash signature exists on this branch.
     script.push(OP_ELSE);
     append_proof_verification(&mut script, config.verifying_key_hash);
-    append_campaign_isolation(&mut script, &campaign_id);
-    append_real_input_total(&mut script);
+    append_input_bounds(&mut script);
+    append_campaign_inputs_total(&mut script, &campaign_id);
     append_sweep_constraints(&mut script, config.goal_sompi, config.organizer_output_spk);
     script.push(OP_ENDIF);
 
@@ -110,40 +112,7 @@ fn append_proof_verification(script: &mut Vec<u8>, verifying_key_hash: &[u8; 32]
     script.push(OP_VERIFY);
 }
 
-fn append_campaign_isolation(script: &mut Vec<u8>, campaign_id: &[u8; 32]) {
-    // Every input in a crowdfunding sweep must reveal a redeem script whose fixed
-    // tail carries this exact campaign fingerprint. A transaction cannot therefore
-    // use genuine contribution UTXOs from campaign B to satisfy campaign A's goal:
-    // B's own covenant performs the reciprocal check and rejects A's fingerprint.
-    // Ordinary attacker-owned inputs can only add the attacker's own value, which is
-    // equivalent to self-contributing and cannot redirect any other campaign's funds.
-    for index in 0..CROWDFUND_MAX_TX_INPUTS {
-        script.push(OP_TX_INPUT_COUNT);
-        push_int(script, index + 1);
-        script.push(OP_GREATERTHANOREQUAL);
-        script.push(OP_IF);
-
-        push_int(script, index); // substring input index
-        push_int(script, index);
-        script.push(OP_TX_INPUT_SCRIPT_SIG_LEN);
-        script.push(OP_DUP);
-        push_int(script, CAMPAIGN_TAIL_LEN);
-        script.push(OP_GREATERTHANOREQUAL);
-        script.push(OP_VERIFY);
-        script.push(OP_DUP);
-        push_int(script, CAMPAIGN_ID_START_FROM_END);
-        script.push(OP_SUB); // start = sig_len - 34
-        script.push(OP_SWAP);
-        push_int(script, CAMPAIGN_ID_END_FROM_END);
-        script.push(OP_SUB); // end = sig_len - 2
-        script.push(OP_TX_INPUT_SCRIPT_SIG_SUBSTR);
-        push_data(script, campaign_id);
-        script.push(OP_EQUALVERIFY);
-        script.push(OP_ENDIF);
-    }
-}
-
-fn append_real_input_total(script: &mut Vec<u8>) {
+fn append_input_bounds(script: &mut Vec<u8>) {
     // Fail closed outside the bounded introspection range.
     script.push(OP_TX_INPUT_COUNT);
     push_int(script, 1);
@@ -153,20 +122,48 @@ fn append_real_input_total(script: &mut Vec<u8>) {
     push_int(script, CROWDFUND_MAX_TX_INPUTS);
     script.push(OP_LESSTHANOREQUAL);
     script.push(OP_VERIFY);
+}
 
-    // Sum every real transaction input. Each amount fetch is guarded by the actual
-    // input count so no out-of-range introspection opcode is evaluated.
+fn append_campaign_inputs_total(script: &mut Vec<u8>, campaign_id: &[u8; 32]) {
+    // Sum every real transaction input. Each introspection is guarded by the actual
+    // input count so no out-of-range opcode is evaluated.
     push_int(script, 0);
     for index in 0..CROWDFUND_MAX_TX_INPUTS {
         script.push(OP_TX_INPUT_COUNT);
         push_int(script, index + 1);
         script.push(OP_GREATERTHANOREQUAL);
         script.push(OP_IF);
+        append_campaign_isolation(script, index, campaign_id);
         push_int(script, index);
         script.push(OP_TX_INPUT_AMOUNT);
         script.push(OP_ADD);
         script.push(OP_ENDIF);
     }
+}
+
+fn append_campaign_isolation(script: &mut Vec<u8>, index: u64, campaign_id: &[u8; 32]) {
+    // Every input in a crowdfunding sweep must reveal a redeem script whose fixed
+    // tail carries this exact campaign fingerprint. A transaction cannot therefore
+    // use genuine contribution UTXOs from campaign B to satisfy campaign A's goal:
+    // B's own covenant performs the reciprocal check and rejects A's fingerprint.
+    // Ordinary attacker-owned inputs can only add the attacker's own value, which is
+    // equivalent to self-contributing and cannot redirect any other campaign's funds.
+    push_int(script, index); // substring input index
+    push_int(script, index);
+    script.push(OP_TX_INPUT_SCRIPT_SIG_LEN);
+    script.push(OP_DUP);
+    push_int(script, CAMPAIGN_TAIL_LEN);
+    script.push(OP_GREATERTHANOREQUAL);
+    script.push(OP_VERIFY);
+    script.push(OP_DUP);
+    push_int(script, CAMPAIGN_ID_START_FROM_END);
+    script.push(OP_SUB); // start = sig_len - 34
+    script.push(OP_SWAP);
+    push_int(script, CAMPAIGN_ID_END_FROM_END);
+    script.push(OP_SUB); // end = sig_len - 2
+    script.push(OP_TX_INPUT_SCRIPT_SIG_SUBSTR);
+    push_data(script, campaign_id);
+    script.push(OP_EQUALVERIFY);
 }
 
 fn append_sweep_constraints(script: &mut Vec<u8>, goal_sompi: u64, organizer_spk: &[u8]) {

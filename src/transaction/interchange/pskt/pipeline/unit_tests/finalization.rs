@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use super::super::test_support::{
     multisig, pskb as wrap_pskb, sign_first_input, unsigned_document, xonly,
 };
-use super::{finalize_json, pskt_verified_signature_counts, Network};
+use super::{finalize_json, pskt_verified_signature_counts, Network, SIGNER_TEST_LIMITS};
 use crate::contract::script::{push_data, push_int};
 use crate::primitives::hash::blake2b_256;
 
@@ -443,7 +443,29 @@ fn unsupported_and_zero_signature_covenant_routes_are_disabled_at_public_finaliz
 
 /// Finalize `document` and require exactly the claim witness
 /// `before, <signature || SIGHASH_ALL>, after, <redeem>`.
+/// Before its signature a claim is reviewed, counted and refused for broadcast, not rejected.
+fn assert_unsigned_claim_awaits_its_signature(document: &Value, label: &str) {
+    let mut unsigned = document.clone();
+    unsigned["inputs"][0]["partialSigs"] = json!({});
+    let wire = pskb(unsigned);
+    assert_eq!(
+        pskt_verified_signature_counts(&wire, Network::Mainnet),
+        Ok(vec![0]),
+        "{label} counts no signature"
+    );
+    assert_eq!(
+        super::super::is_complete(&wire, Network::Mainnet, SIGNER_TEST_LIMITS),
+        Ok(false),
+        "{label} is not ready"
+    );
+    crate::test_support::assert_err_text(
+        &finalize_json(&wire),
+        "PSKT is not cryptographically complete",
+    );
+}
+
 fn assert_specialized_success(document: &Value, label: &str, before: &[u8], after: &[u8]) {
+    assert_unsigned_claim_awaits_its_signature(document, label);
     let finalized = finalize_json(&pskb(document.clone()))
         .unwrap_or_else(|error| panic!("{label} public finalization failed: {}", error));
     let value: Value = serde_json::from_str(&finalized).expect("specialized finalized JSON");

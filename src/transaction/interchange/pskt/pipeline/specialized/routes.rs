@@ -1,8 +1,8 @@
 //! Detection and dispatch of specialized covenant witness routes.
 
 use super::{
-    bind_commit_reveal, bind_merkle, bind_oracle_v1, bind_private_swap, exactly_one_signature,
-    Input, Map, RouteKind, Signature, SpecializedRoute, SpecializedWitness, Value,
+    bind_commit_reveal, bind_merkle, bind_oracle_v1, bind_private_swap, claim_signature, Input,
+    Map, RouteKind, Signature, SpecializedRoute, SpecializedWitness, Value,
 };
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
@@ -154,7 +154,7 @@ pub(crate) fn bind_route(
 pub(crate) fn validate_route_binding(
     index: usize,
     input: &Input,
-) -> Result<(u16, u16, &Signature), String> {
+) -> Result<(u16, u16, Option<&Signature>), String> {
     if input.redeem.is_empty() {
         return Err(format!(
             "input[{index}] specialized covenant is missing redeemScript"
@@ -165,14 +165,16 @@ pub(crate) fn validate_route_binding(
     })?;
     let branches = crate::contract::covenant::branch::resolve_covenant_branches(&input.redeem)
         .map_err(|error| format!("input[{index}] invalid covenant branch structure: {error:?}"))?;
-    let signature = exactly_one_signature(index, &input.signatures)?;
-    let binding = branches
-        .key_at(signature.position)
-        .map_err(|_| format!("input[{index}] specialized signature is not branch-bound"))?;
-    if !binding.matches_selectors(mask, truth) {
-        return Err(format!(
-            "input[{index}] specialized signature does not belong to covenantExecution"
-        ));
+    let signature = claim_signature(index, &input.signatures)?;
+    if let Some(signature) = signature {
+        let binding = branches
+            .key_at(signature.position)
+            .map_err(|_| format!("input[{index}] specialized signature is not branch-bound"))?;
+        if !binding.matches_selectors(mask, truth) {
+            return Err(format!(
+                "input[{index}] specialized signature does not belong to covenantExecution"
+            ));
+        }
     }
     Ok((mask, truth, signature))
 }
@@ -184,7 +186,7 @@ pub(crate) fn dispatch_route(
     input: &Input,
     mask: u16,
     truth: u16,
-    signature: &Signature,
+    signature: Option<&Signature>,
 ) -> Result<(SpecializedRoute, Vec<u8>), String> {
     match route {
         RouteKind::PrivateSwap => bind_private_swap(index, fields, input, mask, truth, signature),

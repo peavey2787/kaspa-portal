@@ -447,3 +447,36 @@ fn commit_reveal_reveal_reads_the_preimage_and_checks_the_commitment() {
     let script = reveal_script(&redeem, 0x00);
     assert_eq!(read_commit_reveal_reveal(&script[..script.len() - 1]), None);
 }
+
+#[test]
+fn a_contributor_can_sign_a_crowdfund_refund_at_full_input_capacity() {
+    use crate::contract::covenant::{
+        branch::resolve_covenant_branches,
+        execution::{trace_witness, WitnessItem},
+    };
+
+    let contributor = [0x71; 32];
+    let script = crowdfund_redeem_script(CrowdfundScript {
+        contributor_pubkey: &contributor,
+        goal_sompi: 100_000_000,
+        locktime_daa: 654_321,
+        verifying_key_hash: &[0x72; 32],
+        organizer_output_spk: &[0x73; 34],
+        salt: &[0x74; 8],
+    })
+    .expect("crowdfunding script");
+
+    assert!(script.len() <= crate::transaction::model::MAX_REDEEM_SIZE);
+    let branches = resolve_covenant_branches(&script).expect("refund path resolves");
+    let position = branches
+        .unique_position_for_key(&contributor)
+        .expect("contributor key is reachable");
+    let binding = branches.key_at(position).expect("contributor key is bound");
+    assert_eq!(
+        trace_witness(&script, branches.selector_mask(), binding.if_mask),
+        Ok(vec![
+            WitnessItem::Selector(true),
+            WitnessItem::Signature { position }
+        ])
+    );
+}

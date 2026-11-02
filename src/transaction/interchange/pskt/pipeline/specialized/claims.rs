@@ -15,7 +15,7 @@ pub(crate) fn bind_private_swap(
     input: &Input,
     mask: u16,
     truth: u16,
-    signature: &Signature,
+    signature: Option<&Signature>,
 ) -> Result<(SpecializedRoute, Vec<u8>), String> {
     require_true(fields, "privateSwapClaim", index)?;
     recognize_private_swap(&input.redeem)
@@ -25,11 +25,18 @@ pub(crate) fn bind_private_swap(
             "input[{index}] private-swap claim requires covenantExecution 1/1"
         ));
     }
+    let script = witness_once_signed(signature, |signature| {
+        private_swap_claim_script(signature, &input.redeem)
+    })?;
+    Ok((SpecializedRoute::PrivateSwapClaim, script))
+}
+
+fn private_swap_claim_script(signature: &Signature, redeem: &[u8]) -> Result<Vec<u8>, String> {
     let mut script = Vec::new();
     push_signature(&mut script, signature)?;
     script.push(OP_1);
-    push_data(&mut script, &input.redeem)?;
-    Ok((SpecializedRoute::PrivateSwapClaim, script))
+    push_data(&mut script, redeem)?;
+    Ok(script)
 }
 
 pub(crate) fn bind_oracle_v1(
@@ -38,7 +45,7 @@ pub(crate) fn bind_oracle_v1(
     input: &Input,
     mask: u16,
     truth: u16,
-    signature: &Signature,
+    signature: Option<&Signature>,
 ) -> Result<(SpecializedRoute, Vec<u8>), String> {
     require_true(fields, "oracleV1Claim", index)?;
     let oracle_signature = required_hex(fields, "oracleV1Signature", Some(64), index)?;
@@ -46,7 +53,9 @@ pub(crate) fn bind_oracle_v1(
         .map_err(|error| format!("input[{index}] oracle-v1 template mismatch: {error}"))?;
     validate_oracle_execution(index, mask, truth)?;
     let oracle_signature = verify_oracle_attestation(index, &template, &oracle_signature)?;
-    let script = oracle_claim_script(&oracle_signature, signature, &input.redeem)?;
+    let script = witness_once_signed(signature, |signature| {
+        oracle_claim_script(&oracle_signature, signature, &input.redeem)
+    })?;
     Ok((SpecializedRoute::OracleV1Claim, script))
 }
 
@@ -93,13 +102,15 @@ pub(crate) fn bind_commit_reveal(
     input: &Input,
     mask: u16,
     truth: u16,
-    signature: &Signature,
+    signature: Option<&Signature>,
 ) -> Result<(SpecializedRoute, Vec<u8>), String> {
     let (part_a, part_b) = commit_reveal_parts(fields, index)?;
     let template = recognize_commit_reveal(&input.redeem)
         .map_err(|error| format!("input[{index}] commit-reveal template mismatch: {error}"))?;
     validate_commit_reveal_claim(index, mask, truth, &part_a, &part_b, &template)?;
-    let script = commit_reveal_claim_script(&part_a, &part_b, signature, &input.redeem)?;
+    let script = witness_once_signed(signature, |signature| {
+        commit_reveal_claim_script(&part_a, &part_b, signature, &input.redeem)
+    })?;
     Ok((SpecializedRoute::CommitRevealClaim, script))
 }
 
@@ -157,7 +168,7 @@ pub(crate) fn bind_merkle(
     input: &Input,
     mask: u16,
     truth: u16,
-    signature: &Signature,
+    signature: Option<&Signature>,
 ) -> Result<(SpecializedRoute, Vec<u8>), String> {
     let dest_spk = required_hex(fields, "merkleDestSpk", None, index)?;
     let proof = parse_merkle_proof(fields.get("merkleProof"), index)?;
@@ -165,7 +176,9 @@ pub(crate) fn bind_merkle(
         .map_err(|error| format!("input[{index}] merkle template mismatch: {error}"))?;
     validate_merkle_claim(index, &proof, &template, mask, truth)?;
     verify_merkle_root(index, &dest_spk, &proof, template.root)?;
-    let script = build_merkle_witness(&dest_spk, &proof, signature, &input.redeem)?;
+    let script = witness_once_signed(signature, |signature| {
+        build_merkle_witness(&dest_spk, &proof, signature, &input.redeem)
+    })?;
     Ok((SpecializedRoute::MerkleClaim, script))
 }
 
@@ -288,16 +301,26 @@ pub(crate) fn required_hex(
     Ok(decoded)
 }
 
-pub(crate) fn exactly_one_signature(
+/// A claim may wait for its one signature; it may never carry more.
+pub(crate) fn claim_signature(
     index: usize,
     signatures: &[Signature],
-) -> Result<&Signature, String> {
+) -> Result<Option<&Signature>, String> {
     match signatures {
-        [signature] => Ok(signature),
+        [] => Ok(None),
+        [signature] => Ok(Some(signature)),
         _ => Err(format!(
-            "input[{index}] typed specialized covenant requires exactly one verified transaction signature"
+            "input[{index}] typed specialized covenant carries more than one signature"
         )),
     }
+}
+
+/// A claim awaiting its signature has its route proved already; the witness follows it.
+fn witness_once_signed(
+    signature: Option<&Signature>,
+    build: impl FnOnce(&Signature) -> Result<Vec<u8>, String>,
+) -> Result<Vec<u8>, String> {
+    signature.map_or_else(|| Ok(Vec::new()), build)
 }
 
 fn push_signature(script: &mut Vec<u8>, signature: &Signature) -> Result<(), String> {
