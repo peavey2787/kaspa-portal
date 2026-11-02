@@ -105,6 +105,10 @@ if [[ "${KASPA_PORTAL_E2E_SKIP_STANDARD_FUNDED:-0}" == "1" && "${KASPA_PORTAL_E2
   echo "NOTE: both funded network roles were skipped at user request or by network safety policy."
 else
   echo "ALL SELECTED QA + E2E GATES: PASS"
-  [[ "${KASPA_PORTAL_E2E_SKIP_STANDARD_FUNDED:-0}" == "1" ]] && echo "NOTE: funded standard-network scenarios on $KASPA_PORTAL_E2E_STANDARD_NETWORK were skipped."
-  [[ "${KASPA_PORTAL_E2E_SKIP_COVENANT_FUNDED:-0}" == "1" ]] && echo "NOTE: funded covenant-network scenarios on $KASPA_PORTAL_E2E_COVENANT_NETWORK were skipped."
+  if [[ "${KASPA_PORTAL_E2E_SKIP_STANDARD_FUNDED:-0}" == "1" ]]; then
+    echo "NOTE: funded standard-network scenarios on $KASPA_PORTAL_E2E_STANDARD_NETWORK were skipped."
+  fi
+  if [[ "${KASPA_PORTAL_E2E_SKIP_COVENANT_FUNDED:-0}" == "1" ]]; then
+    echo "NOTE: funded covenant-network scenarios on $KASPA_PORTAL_E2E_COVENANT_NETWORK were skipped."
+  fi
 fi

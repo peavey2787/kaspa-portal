@@ -68,5 +68,9 @@ npx playwright test offline.spec.mjs live.spec.mjs funded.spec.mjs storage.spec.
 popd >/dev/null
 
 echo "ALL SELECTED BROWSER/WASM E2E GATES: PASS"
-[[ "${KASPA_PORTAL_E2E_SKIP_STANDARD_FUNDED:-0}" == "1" ]] && echo "NOTE: funded standard-network browser scenarios were skipped."
-[[ "${KASPA_PORTAL_E2E_SKIP_COVENANT_FUNDED:-0}" == "1" ]] && echo "NOTE: funded covenant-network browser scenarios were skipped."
+if [[ "${KASPA_PORTAL_E2E_SKIP_STANDARD_FUNDED:-0}" == "1" ]]; then
+  echo "NOTE: funded standard-network browser scenarios were skipped."
+fi
+if [[ "${KASPA_PORTAL_E2E_SKIP_COVENANT_FUNDED:-0}" == "1" ]]; then
+  echo "NOTE: funded covenant-network browser scenarios were skipped."
+fi
