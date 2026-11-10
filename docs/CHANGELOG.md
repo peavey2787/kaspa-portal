@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The password KDF v1 profile (`PasswordKdfParams::current`) drops from 8 MiB to 6 MiB of Argon2id memory; t=3 and p=1 are unchanged. On an M5Stack CoreS3 the 8 MiB of PSRAM is also the heap, so an 8 MiB workspace could never be allocated once the app held any memory, and every password-protected operation failed. v1 ciphertext written before this change no longer opens. The v2 host profile stays at 64 MiB.
 - Typed covenant claims (whitelist, commit-reveal, oracle v1, private swap) pass PSKT summary before they hold a signature: the route is proved, the witness waits, and more than one signature is still refused.
 - `crowdfund_redeem_script` uses one guard per input and `CROWDFUND_MAX_TX_INPUTS` drops from 16 to 8, so the refund path resolves and the script fits `MAX_REDEEM_SIZE`. This changes every crowdfund address. `contract::zk::CROWDFUND_MAX_CONTRIBUTORS` is removed; use `contract::crowdfund::CROWDFUND_MAX_CONTRIBUTORS`.
 

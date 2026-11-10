@@ -25,7 +25,9 @@ pub const WORKSPACE_BLOCK_BYTES: usize = core::mem::size_of::<PasswordKdfBlock>(
 pub const WORKSPACE_BLOCK_ALIGN: usize = core::mem::align_of::<PasswordKdfBlock>();
 
 // Fixed v1 policy. Runtime allocation failure never downgrades these parameters.
-pub const V1_MEMORY_KIB: u32 = 8_192;
+// 6 MiB fits an embedded signer whose 8 MiB PSRAM is also its heap: an 8 MiB
+// workspace could never be allocated once the application held any memory.
+pub const V1_MEMORY_KIB: u32 = 6_144;
 pub const V1_TIME_COST: u32 = 3;
 pub const V1_PARALLELISM: u32 = 1;
 
@@ -64,7 +66,7 @@ pub struct PasswordKdfParams {
 }
 
 impl PasswordKdfParams {
-    /// The v1 profile every embedded signer can derive (8 MiB).
+    /// The v1 profile every embedded signer can derive (6 MiB).
     pub const fn current() -> Self {
         Self {
             profile_version: PROFILE_VERSION_1,
