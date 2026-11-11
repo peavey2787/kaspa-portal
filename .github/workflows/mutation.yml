@@ -33,6 +33,7 @@ jobs:
         with:
           name: mutation-shard-${{ matrix.shard }}
           path: target/qa/mutation/mutants.out/outcomes.json
+          if-no-files-found: error
 
   gate:
     needs: shard
@@ -45,4 +46,4 @@ jobs:
           pattern: mutation-shard-*
           path: outcomes
       - name: Enforce mutation gate
-        run: python3 qa/scripts/check_mutation.py check outcomes/*/outcomes.json
+        run: python3 qa/scripts/check_mutation.py check --shards 16 outcomes/*/outcomes.json

@@ -58,6 +58,12 @@ Narrowing integer conversions are checked.
   exact address instead of the prefix and length. Its checksum check decodes
   through the address decoder and rejects a corrupted checksum, instead of
   using its own copy of the bech32 alphabet.
+- Tests push each mass in `TransactionAnalysis` over its limit in turn, so each
+  of `compute_mass_valid()`, `transient_mass_valid()` and
+  `storage_mass_valid()` is pinned to its own dimension.
+- The CI mutation gate needs outcomes from all 16 shards and rejects an
+  outcome file listed twice. Before, a shard that crashed or failed to upload
+  its outcomes dropped its mutants from the gate without failing it.
 
 - The password KDF v1 profile (`PasswordKdfParams::current`) drops from 8 MiB to 6 MiB of Argon2id memory; t=3 and p=1 are unchanged. On an M5Stack CoreS3 the 8 MiB of PSRAM is also the heap, so an 8 MiB workspace could never be allocated once the app held any memory, and every password-protected operation failed. v1 ciphertext written before this change no longer opens. The v2 host profile stays at 64 MiB.
 - Typed covenant claims (whitelist, commit-reveal, oracle v1, private swap) pass PSKT summary before they hold a signature: the route is proved, the witness waits, and more than one signature is still refused.

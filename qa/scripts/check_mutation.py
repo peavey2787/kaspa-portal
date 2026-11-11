@@ -2,12 +2,15 @@
 """Mutation gate for Kaspa Portal's security-critical code.
 
   run   [--shard K/N]       run cargo-mutants over `.cargo/mutants.toml`
-  check OUTCOMES.json ...   aggregate shard outcomes and enforce the gate
+  check [--shards N] OUTCOMES.json ...
+                            aggregate shard outcomes and enforce the gate
 
 The gate: every viable mutant must be caught (100%), none may time out, and an
 uncaught mutant is accepted only through a reviewed entry in
 `qa/mutation/equivalent_mutants.json` whose `source_sha256` still matches the
-mutated file, so an approval lapses as soon as that code changes.
+mutated file, so an approval lapses as soon as that code changes. With
+`--shards N` the gate also needs exactly N distinct outcome files, so a shard
+that crashed or failed to upload cannot silently drop its mutants.
 """
 from __future__ import annotations
 
@@ -55,10 +58,18 @@ def load_equivalents() -> dict[tuple[str, str, str], dict]:
     return {(e["file"], e["function"], e["replacement"]): e for e in entries}
 
 
-def check(paths: list[Path]) -> int:
+def shard_errors(paths: list[Path], shards: int | None) -> list[str]:
+    distinct = len({path.resolve() for path in paths})
+    errors = [] if distinct == len(paths) else ["an outcome file is listed more than once"]
+    if shards is not None and distinct != shards:
+        errors.append(f"expected outcomes from {shards} shards, found {distinct}")
+    return errors
+
+
+def check(paths: list[Path], shards: int | None = None) -> int:
     equivalents = load_equivalents()
     counts = {"caught": 0, "missed": 0, "timeout": 0, "unviable": 0, "equivalent": 0}
-    errors: list[str] = []
+    errors: list[str] = shard_errors(paths, shards)
     used: set[tuple[str, str, str]] = set()
     for path in paths:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -118,11 +129,12 @@ def main() -> int:
     run_parser.add_argument("--shard")
     run_parser.add_argument("--output", type=Path, default=ROOT / "target/qa/mutation")
     check_parser = commands.add_parser("check")
+    check_parser.add_argument("--shards", type=int)
     check_parser.add_argument("outcomes", type=Path, nargs="+")
     args = parser.parse_args()
     if args.command == "run":
         return run(args.shard, args.output)
-    return check(args.outcomes)
+    return check(args.outcomes, args.shards)
 
 
 if __name__ == "__main__":
