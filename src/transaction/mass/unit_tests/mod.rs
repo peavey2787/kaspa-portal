@@ -87,6 +87,32 @@ fn each_mass_dimension_alone_makes_the_transaction_invalid() {
     assert!(analysis.compute_mass_valid() && analysis.transient_mass_valid());
     assert!(!analysis.storage_mass_valid());
     assert!(!analysis.mass_valid());
+
+    // Each verdict reports its own dimension: one mass over its limit fails only that verdict.
+    let within = analyze_verified(&verified(10_000), 0).expect("analysis");
+    let verdicts = |analysis: &super::TransactionAnalysis| {
+        [
+            analysis.compute_mass_valid(),
+            analysis.transient_mass_valid(),
+            analysis.storage_mass_valid(),
+            analysis.mass_valid(),
+        ]
+    };
+    let over_compute = super::TransactionAnalysis {
+        compute_mass: MAX_COMPUTE_MASS + 1,
+        ..within.clone()
+    };
+    assert_eq!(verdicts(&over_compute), [false, true, true, false]);
+    let over_transient = super::TransactionAnalysis {
+        transient_mass: MAX_TRANSIENT_MASS + 1,
+        ..within.clone()
+    };
+    assert_eq!(verdicts(&over_transient), [true, false, true, false]);
+    let over_storage = super::TransactionAnalysis {
+        storage_mass: MAX_STORAGE_MASS + 1,
+        ..within
+    };
+    assert_eq!(verdicts(&over_storage), [true, true, false, false]);
 }
 
 #[test]
