@@ -53,6 +53,11 @@ Narrowing integer conversions are checked.
   - Float conversions go through `primitives::numeric`, which states its
     saturation rule.
 - Release builds keep overflow checks.
+- `self_test::address::run_address_tests` returns `(u32, u32)` like every
+  other power-on self-test. Its mnemonic-to-address check now compares the
+  exact address instead of the prefix and length. Its checksum check decodes
+  through the address decoder and rejects a corrupted checksum, instead of
+  using its own copy of the bech32 alphabet.
 
 - The password KDF v1 profile (`PasswordKdfParams::current`) drops from 8 MiB to 6 MiB of Argon2id memory; t=3 and p=1 are unchanged. On an M5Stack CoreS3 the 8 MiB of PSRAM is also the heap, so an 8 MiB workspace could never be allocated once the app held any memory, and every password-protected operation failed. v1 ciphertext written before this change no longer opens. The v2 host profile stays at 64 MiB.
 - Typed covenant claims (whitelist, commit-reveal, oracle v1, private swap) pass PSKT summary before they hold a signature: the route is proved, the witness waits, and more than one signature is still refused.

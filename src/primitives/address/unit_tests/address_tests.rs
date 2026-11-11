@@ -6,8 +6,7 @@ use crate::self_test::address::run_address_tests;
 
 #[test]
 fn address_vectors_pass() {
-    let (passed, total) = run_address_tests();
-    assert_eq!(passed, total);
+    assert_eq!(run_address_tests(), (6, 6));
 }
 
 #[test]
