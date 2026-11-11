@@ -9,7 +9,10 @@ use crate::{
 };
 
 use super::super::{error::PsktError, validation::validate_base_transaction};
-use super::signature_state::set_single_signature;
+use super::{
+    sign_input_with_optional_entropy, signature_state::set_single_signature,
+    stealth::stealth_spend_key,
+};
 
 fn sign_standard_input(
     tx: &mut Transaction,
@@ -55,11 +58,11 @@ fn derive_standard_input_key(
     checkpoint: &mut (impl FnMut() + ?Sized),
 ) -> Result<Option<bip32::ExtendedPrivKey>, PsktError> {
     let input = &tx.inputs[input_index];
-    if input.has_derivation_hint {
+    if let Some(hint) = input.derivation_hint {
         return derive_hinted_input_key(
             account_key,
-            input.derivation_branch,
-            input.derivation_index,
+            hint.branch,
+            hint.index,
             target_public_key,
             checkpoint,
         );
@@ -117,49 +120,28 @@ fn sign_stealth_input(
     sighash_type: SigHashType,
     signing_entropy: Option<&[u8; 32]>,
 ) -> Result<bool, PsktError> {
-    use k256::elliptic_curve::{ops::Add, sec1::ToSec1Point, ScalarValue};
-    use k256::{ProjectivePoint, Scalar};
-
-    let account_primitive =
-        ScalarValue::<k256::Secp256k1>::from_slice(account_key.private_key_bytes())
-            .map_err(|_| PsktError::DerivationFailed)?;
-    let account_scalar = {
-        let scalar = Scalar::from(account_primitive);
-        let point = (ProjectivePoint::GENERATOR * scalar).to_affine();
-        let encoded = point.to_sec1_point(true);
-        if encoded.as_bytes()[0] == 0x03 {
-            -scalar
-        } else {
-            scalar
-        }
-    };
-    let tweak = ScalarValue::<k256::Secp256k1>::from_slice(&tx.stealth_tweak)
-        .map_err(|_| PsktError::DerivationFailed)?;
-    let combined_scalar = account_scalar.add(&Scalar::from(tweak));
-    let combined_point = (ProjectivePoint::GENERATOR * combined_scalar).to_affine();
-    let combined_public_key = combined_point.to_sec1_point(true);
-    if &combined_public_key.as_bytes()[1..33] != target_public_key {
+    let Some(tweak) = tx.stealth_tweak else {
         return Ok(false);
-    }
-
-    let mut private_key = [0u8; 32];
-    private_key.copy_from_slice(&combined_scalar.to_bytes());
-    let signature_result = match signing_entropy {
-        Some(entropy) => {
-            sighash::sign_input_with_entropy(tx, input_index, &private_key, sighash_type, entropy)
-        }
-        None => sighash::sign_input(tx, input_index, &private_key, sighash_type),
     };
-    zeroize_bytes(&mut private_key);
-    let signature = signature_result.map_err(|_| PsktError::SigningFailed)?;
-    let mut compressed_public_key = [0u8; 33];
-    compressed_public_key.copy_from_slice(combined_public_key.as_bytes());
+    let Some(mut key) =
+        stealth_spend_key(account_key.private_key_bytes(), &tweak, target_public_key)?
+    else {
+        return Ok(false);
+    };
+    let signature = sign_input_with_optional_entropy(
+        tx,
+        input_index,
+        &key.private_key,
+        sighash_type,
+        signing_entropy,
+    );
+    zeroize_bytes(&mut key.private_key);
     set_single_signature(
         &mut tx.inputs[input_index],
-        signature.bytes,
+        signature?,
         sighash_type.to_byte(),
         0,
-        compressed_public_key,
+        key.compressed_public_key,
     );
     Ok(true)
 }
@@ -251,36 +233,14 @@ fn continue_account_signing(
     if signed {
         return Ok(true);
     }
-    sign_stealth_if_present(
+    sign_stealth_input(
         tx,
         input_index,
         account_key,
         target,
         sighash_type,
-        signing_entropy,
+        Some(signing_entropy),
     )
-}
-
-fn sign_stealth_if_present(
-    tx: &mut Transaction,
-    input_index: usize,
-    account_key: &bip32::ExtendedPrivKey,
-    target: &[u8; 32],
-    sighash_type: SigHashType,
-    signing_entropy: &[u8; 32],
-) -> Result<bool, PsktError> {
-    if tx.has_stealth_tweak {
-        sign_stealth_input(
-            tx,
-            input_index,
-            account_key,
-            target,
-            sighash_type,
-            Some(signing_entropy),
-        )
-    } else {
-        Ok(false)
-    }
 }
 
 /// Sign P2PK inputs whose derived address keys belong to one account key.
@@ -322,17 +282,14 @@ fn sign_account_input(
     )? {
         return Ok(true);
     }
-    if tx.has_stealth_tweak {
-        return sign_stealth_input(
-            tx,
-            input_index,
-            account_key,
-            &target,
-            sighash_type,
-            signing_entropy,
-        );
-    }
-    Ok(false)
+    sign_stealth_input(
+        tx,
+        input_index,
+        account_key,
+        &target,
+        sighash_type,
+        signing_entropy,
+    )
 }
 
 fn p2pk_target(tx: &Transaction, input_index: usize) -> Option<[u8; 32]> {

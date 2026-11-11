@@ -12,10 +12,13 @@ use crate::{
     wallet::derivation::bip32,
 };
 
-use super::super::context::{SigningContext, SigningKeyMaterial};
+use super::super::{
+    context::{SigningContext, SigningKeyMaterial},
+    stealth::stealth_spend_key,
+};
 
 pub fn initial_signature_counts(tx: &Transaction) -> alloc::vec::Vec<u8> {
-    tx.inputs().iter().map(|input| input.sig_count).collect()
+    tx.inputs().iter().map(|input| input.sigs.count()).collect()
 }
 
 pub fn finalize_raw_key_signatures(
@@ -122,10 +125,11 @@ pub fn finalize_account_set_signatures_with_checkpoint(
             if let Some(material) = context.matching_material_with_checkpoint(&target, checkpoint) {
                 return Some(material);
             }
-            if tx.has_stealth_tweak {
+            if let Some(tweak) = tx.stealth_tweak {
                 for seed_index in 0..context.seed_count() {
                     checkpoint();
-                    if let Some(material) = stealth_material(&context, seed_index, tx, &target) {
+                    if let Some(material) = stealth_material(&context, seed_index, &tweak, &target)
+                    {
                         checkpoint();
                         return Some(material);
                     }
@@ -180,25 +184,14 @@ where
     F: FnMut(&Transaction, &[u8; 33]) -> Option<SigningKeyMaterial>,
 {
     let start = usize::from(initial_count);
-    let end = usize::from(tx.inputs[input_index].sig_count);
-    validate_signature_range(tx, input_index, start, end)?;
+    let end = tx.inputs[input_index].sigs.len();
+    if start > end {
+        return Err(PsktError::InvalidSignatureState);
+    }
     for slot in start..end {
         finalize_signature_slot(tx, input_index, slot, session_id, host_secret, resolve)?;
     }
     Ok(end - start)
-}
-
-fn validate_signature_range(
-    tx: &Transaction,
-    input_index: usize,
-    start: usize,
-    end: usize,
-) -> Result<(), PsktError> {
-    tx.inputs[input_index]
-        .sigs
-        .get(start..end)
-        .map(|_| ())
-        .ok_or(PsktError::InvalidSignatureState)
 }
 
 fn finalize_signature_slot<F>(
@@ -212,8 +205,8 @@ fn finalize_signature_slot<F>(
 where
     F: FnMut(&Transaction, &[u8; 33]) -> Option<SigningKeyMaterial>,
 {
-    let sig = tx.inputs[input_index].sigs[slot].clone();
-    if !sig.present || sig.pubkey_compressed[0] == 0 {
+    let sig = tx.inputs[input_index].sigs[slot];
+    if sig.pubkey_compressed[0] == 0 {
         return Err(PsktError::InvalidSignatureState);
     }
     let Some(mut material) = resolve(tx, &sig.pubkey_compressed) else {
@@ -265,7 +258,7 @@ fn finalize_with_material(
         material.session_id,
         material.host_secret,
         u32::try_from(input_index).map_err(|_| PsktError::TooManyInputs)?,
-        slot as u8,
+        u8::try_from(slot).map_err(|_| PsktError::TooManySignatures)?,
     )
     .map_err(finalization_error)?;
     tx.inputs[input_index].sigs[slot].signature = final_signature.bytes;
@@ -282,40 +275,11 @@ fn finalization_error(error: crypto::AntiKleptoError) -> PsktError {
 fn stealth_material(
     context: &SigningContext,
     seed_index: usize,
-    tx: &Transaction,
+    tweak: &[u8; 32],
     target_xonly: &[u8; 32],
 ) -> Option<SigningKeyMaterial> {
-    use k256::elliptic_curve::{ops::Add, sec1::ToSec1Point, ScalarValue};
-    use k256::{ProjectivePoint, Scalar};
-
-    let account = context.account_material(seed_index)?;
-    let account_primitive =
-        ScalarValue::<k256::Secp256k1>::from_slice(&account.private_key).ok()?;
-    let account_scalar = {
-        let scalar = Scalar::from(account_primitive);
-        let encoded = (ProjectivePoint::GENERATOR * scalar)
-            .to_affine()
-            .to_sec1_point(true);
-        if encoded.as_bytes()[0] == 0x03 {
-            -scalar
-        } else {
-            scalar
-        }
-    };
-    let tweak = ScalarValue::<k256::Secp256k1>::from_slice(&tx.stealth_tweak).ok()?;
-    let combined = account_scalar.add(&Scalar::from(tweak));
-    let point = (ProjectivePoint::GENERATOR * combined)
-        .to_affine()
-        .to_sec1_point(true);
-    if &point.as_bytes()[1..33] != target_xonly {
-        return None;
-    }
-    let mut private_key = [0u8; 32];
-    private_key.copy_from_slice(&combined.to_bytes());
-    let mut compressed_public_key = [0u8; 33];
-    compressed_public_key.copy_from_slice(point.as_bytes());
-    Some(SigningKeyMaterial {
-        private_key,
-        compressed_public_key,
-    })
+    let mut account = context.account_material(seed_index)?;
+    let material = stealth_spend_key(&account.private_key, tweak, target_xonly);
+    zeroize_bytes(&mut account.private_key);
+    material.ok().flatten()
 }

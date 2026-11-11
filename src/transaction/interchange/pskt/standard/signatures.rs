@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use crate::alloc_prelude::*;
 use crate::transaction::model::{
-    IncomingPartialSig, Transaction, TransactionInput, MAX_SIGS_PER_INPUT,
+    IncomingPartialSig, SignatureSlots, Transaction, TransactionInput,
 };
 
 use super::PskError;
@@ -16,7 +16,7 @@ use super::PskError;
 /// Merging rules:
 ///   - Existing entries in `incoming_partial_sigs` (from a PSKT that
 ///     arrived partially signed) are preserved.
-///   - Each new entry from `sigs[]` with `present=true` and a non-zero
+///   - Each new entry from `sigs[]` with a non-zero
 ///     `pubkey_compressed` is inserted — unless a matching pubkey
 ///     already exists. An identical signature is idempotent; different bytes
 ///     for the same public key are a hard conflict and abort the merge.
@@ -30,18 +30,17 @@ use super::PskError;
 /// Does not mutate `sigs[]` — KSPT emission on the same tx still works
 /// if the caller picks that path instead. Designed to be idempotent:
 /// calling this twice is a no-op on the second call.
-type PartialSigs = ([IncomingPartialSig; MAX_SIGS_PER_INPUT], u8);
-
 /// The input's incoming partial signatures with its new `sigs[]` merged in.
-fn merged_partial_sigs(input: &TransactionInput) -> Result<PartialSigs, PskError> {
-    let mut merged = input.incoming_partial_sigs;
-    let original = usize::from(input.incoming_partial_sigs_count);
-    let mut count = original;
-    for slot in input.sigs.iter().take(usize::from(input.sig_count)) {
-        if !slot.present || slot.pubkey_compressed == [0u8; 33] {
+fn merged_partial_sigs(
+    input: &TransactionInput,
+) -> Result<SignatureSlots<IncomingPartialSig>, PskError> {
+    let mut merged = input.incoming_partial_sigs.clone();
+    let original = merged.len();
+    for slot in input.sigs.iter() {
+        if slot.pubkey_compressed == [0u8; 33] {
             continue;
         }
-        match merged[..count]
+        match merged
             .iter()
             .find(|entry| entry.pubkey == slot.pubkey_compressed)
         {
@@ -51,17 +50,17 @@ fn merged_partial_sigs(input: &TransactionInput) -> Result<PartialSigs, PskError
             Some(_) => continue,
             None => {}
         }
-        *merged.get_mut(count).ok_or(PskError::TooManyPartialSigs)? = IncomingPartialSig {
+        if !merged.push(IncomingPartialSig {
             pubkey: slot.pubkey_compressed,
             signature: slot.signature,
-            present: true,
-        };
-        count += 1;
+        }) {
+            return Err(PskError::TooManyPartialSigs);
+        }
     }
-    if count != original {
-        merged[..count].sort_unstable_by_key(|entry| entry.pubkey);
+    if merged.len() != original {
+        merged.sort_unstable_by_key(|entry| entry.pubkey);
     }
-    Ok((merged, count as u8))
+    Ok(merged)
 }
 
 pub fn move_ksp_sigs_to_pskt(tx: &mut Transaction) -> Result<(), PskError> {
@@ -71,9 +70,8 @@ pub fn move_ksp_sigs_to_pskt(tx: &mut Transaction) -> Result<(), PskError> {
         .iter()
         .map(merged_partial_sigs)
         .collect::<Result<Vec<_>, _>>()?;
-    for (input, (sigs, count)) in tx.inputs.iter_mut().zip(merged) {
+    for (input, sigs) in tx.inputs.iter_mut().zip(merged) {
         input.incoming_partial_sigs = sigs;
-        input.incoming_partial_sigs_count = count;
     }
     Ok(())
 }

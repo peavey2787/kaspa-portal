@@ -276,28 +276,9 @@ pub fn extend_addresses(
     let xpub = ExtPubKey::from_kpub(&wallet.kpub)?;
 
     let mut receive_addresses = wallet.receive_addresses.clone();
-    if extra_receive > 0 {
-        let receive_chain = xpub.derive_child(0)?;
-        let start = receive_addresses.len() as u32;
-        for i in start..start + extra_receive {
-            let child = receive_chain.derive_child(i)?;
-            let addr =
-                crate::primitives::address::encode_p2pk_address(&child.x_only_bytes(), prefix);
-            receive_addresses.push(addr);
-        }
-    }
-
+    append_chain_addresses(&xpub, 0, &mut receive_addresses, extra_receive, prefix)?;
     let mut change_addresses = wallet.change_addresses.clone();
-    if extra_change > 0 {
-        let change_chain = xpub.derive_child(1)?;
-        let start = change_addresses.len() as u32;
-        for i in start..start + extra_change {
-            let child = change_chain.derive_child(i)?;
-            let addr =
-                crate::primitives::address::encode_p2pk_address(&child.x_only_bytes(), prefix);
-            change_addresses.push(addr);
-        }
-    }
+    append_chain_addresses(&xpub, 1, &mut change_addresses, extra_change, prefix)?;
 
     Ok(WalletData {
         kpub: wallet.kpub.clone(),
@@ -306,4 +287,27 @@ pub fn extend_addresses(
         next_receive_index: wallet.next_receive_index,
         next_change_index: wallet.next_change_index,
     })
+}
+
+/// Append `extra` addresses of `chain`, continuing after those already held.
+fn append_chain_addresses(
+    xpub: &ExtPubKey,
+    chain: u32,
+    addresses: &mut Vec<String>,
+    extra: u32,
+    prefix: &str,
+) -> Result<(), String> {
+    let chain_key = xpub.derive_child(chain)?;
+    let end = u32::try_from(addresses.len())
+        .ok()
+        .and_then(|start| start.checked_add(extra).map(|end| start..end))
+        .ok_or_else(|| "Address index exceeds the BIP32 range".to_string())?;
+    for index in end {
+        let child = chain_key.derive_child(index)?;
+        addresses.push(crate::primitives::address::encode_p2pk_address(
+            &child.x_only_bytes(),
+            prefix,
+        ));
+    }
+    Ok(())
 }

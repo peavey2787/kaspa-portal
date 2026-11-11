@@ -79,3 +79,9 @@ path = "tests/e2e/rust_funded_networks.rs"
 [[test]]
 name = "e2e-network-fault-injection"
 path = "tests/resource/network_faults.rs"
+
+[lints.clippy]
+cast_possible_truncation = "deny"
+fn_params_excessive_bools = "deny"
+struct_excessive_bools = "deny"
+undocumented_unsafe_blocks = "deny"

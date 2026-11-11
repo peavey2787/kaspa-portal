@@ -54,7 +54,8 @@ pub fn run(iteration: usize) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let wallet_api = portal.wallet();
     let mut encoded = [0u8; KPUB_MAX_LEN];
-    let seed = [u8::try_from(iteration & 0xff).unwrap_or(0x41); 64];
+    let iteration_byte = iteration.to_le_bytes()[0];
+    let seed = [iteration_byte; 64];
     let len = derive_and_serialize_kpub(&seed, &mut encoded).map_err(|error| error.to_string())?;
     let kpub = std::str::from_utf8(&encoded[..len]).map_err(|error| error.to_string())?;
     let wallet = wallet_api
@@ -64,7 +65,7 @@ pub fn run(iteration: usize) -> Result<(), String> {
     let destination = wallet.receive_addresses[1].clone();
     let source_script = address_to_script_pubkey(&source)?;
     let utxo = UtxoEntry {
-        tx_id: format!("{:02x}", (iteration & 0xff) as u8).repeat(32),
+        tx_id: format!("{iteration_byte:02x}").repeat(32),
         index: 0,
         amount: 500_000_000,
         script_public_key: source_script,

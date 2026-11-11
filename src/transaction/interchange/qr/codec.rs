@@ -33,7 +33,7 @@ pub struct QrFrame {
 pub fn generate_frames(kspt_hex: &str) -> Result<Vec<QrFrame>, String> {
     let data = hex::decode(kspt_hex).map_err(|e| format!("Invalid hex: {}", e))?;
     let payloads = frame_payloads(&data)?;
-    let total_frames = payloads.len() as u8;
+    let total_frames = frame_count(payloads.len())?;
     payloads
         .iter()
         .zip(0u8..)
@@ -45,6 +45,11 @@ pub fn generate_frames(kspt_hex: &str) -> Result<Vec<QrFrame>, String> {
             })
         })
         .collect()
+}
+
+/// A frame count as its one-byte header field.
+fn frame_count(count: usize) -> Result<u8, String> {
+    u8::try_from(count).map_err(|_| format!("Too many frames: {count}"))
 }
 
 /// The QR payload of every frame: the data itself when it fits one code,
@@ -67,7 +72,7 @@ pub(crate) fn frame_payloads(data: &[u8]) -> Result<Vec<Vec<u8>>, String> {
     }
     let identifier = crate::transaction::interchange::qr::frame::session_id(data);
     let fragments: Vec<&[u8]> = data.chunks(data.len().div_ceil(total_frames)).collect();
-    let total = fragments.len() as u8;
+    let total = frame_count(fragments.len())?;
     fragments
         .into_iter()
         .zip(0u8..)

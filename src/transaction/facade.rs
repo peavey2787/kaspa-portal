@@ -2,6 +2,7 @@ use crate::{
     chain::utxo::UtxoEntry,
     error::{Error, Result},
     network::client::NetworkClient,
+    primitives::numeric::ceil_to_u64,
     transaction::{
         builder,
         consensus::ConsensusTransaction,
@@ -165,7 +166,7 @@ impl TransactionApi {
             Some(client) => crate::network::queries::fees::get(client)
                 .await
                 .ok()
-                .and_then(|estimate| finite_fee_rate(estimate.normal_sompi_per_gram))
+                .and_then(|estimate| ceil_to_u64(estimate.normal_sompi_per_gram))
                 .unwrap_or(crate::transaction::mass::MIN_STANDARD_FEE_RATE_SOMPI_PER_GRAM),
             None => crate::transaction::mass::MIN_STANDARD_FEE_RATE_SOMPI_PER_GRAM,
         };
@@ -255,13 +256,6 @@ impl TransactionApi {
 fn parse_compact_transaction(wire: &[u8]) -> Result<Transaction> {
     kspt::decode_compact_kspt(wire)
         .map_err(|error| Error::Transaction(format!("KSPT parse failed: {error:?}")))
-}
-
-fn finite_fee_rate(value: f64) -> Option<u64> {
-    if !value.is_finite() || value <= 0.0 || value > u64::MAX as f64 {
-        return None;
-    }
-    Some(value.ceil() as u64)
 }
 
 fn verify_for_broadcast(

@@ -13,7 +13,7 @@ mod validation;
 
 pub use validation::expected_known_binding;
 use validation::{
-    array16, array32, parse_binding, parse_kind, parse_scheme, request_total_len,
+    array16, array32, length_field, parse_binding, parse_kind, parse_scheme, request_total_len,
     valid_review_context, validate_fields, validate_lengths, validate_request_prefix,
     validate_response, RequestValidationFields,
 };
@@ -196,8 +196,8 @@ pub fn encode_request(
     out[56..88].copy_from_slice(&request.key_id);
     out[88..120].copy_from_slice(&request.binding_token);
     out[120..152].copy_from_slice(&request.commitment);
-    out[152..154].copy_from_slice(&(request.script.len() as u16).to_be_bytes());
-    out[154..156].copy_from_slice(&(request.context.len() as u16).to_be_bytes());
+    out[152..154].copy_from_slice(&length_field(request.script.len())?);
+    out[154..156].copy_from_slice(&length_field(request.context.len())?);
     let mut pos = REQUEST_HEADER_LEN;
     out[pos..pos + request.script.len()].copy_from_slice(request.script);
     pos += request.script.len();

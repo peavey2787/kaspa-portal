@@ -89,10 +89,10 @@ impl UtcDateTime {
         Ok(Self {
             year,
             month,
-            day: days as u8 + 1,
-            hour: (seconds / 3_600) as u8,
-            minute: ((seconds % 3_600) / 60) as u8,
-            second: (seconds % 60) as u8,
+            day: clock_field(days + 1)?,
+            hour: clock_field(seconds / 3_600)?,
+            minute: clock_field((seconds % 3_600) / 60)?,
+            second: clock_field(seconds % 60)?,
         })
     }
 
@@ -278,10 +278,10 @@ pub fn parse_utc_yyyymmddhhmm(input: &[u8]) -> Result<UtcDateTime, PolicyError> 
         return Err(PolicyError::InvalidFormat);
     }
     let year = decimal(&input[0..4])?;
-    let month = decimal(&input[4..6])? as u8;
-    let day = decimal(&input[6..8])? as u8;
-    let hour = decimal(&input[8..10])? as u8;
-    let minute = decimal(&input[10..12])? as u8;
+    let month = decimal_u8(&input[4..6])?;
+    let day = decimal_u8(&input[6..8])?;
+    let hour = decimal_u8(&input[8..10])?;
+    let minute = decimal_u8(&input[10..12])?;
     let value = UtcDateTime::new(year, month, day, hour, minute, 0);
     value.validate()?;
     Ok(value)
@@ -295,7 +295,8 @@ pub fn parse_weekly_windows(
     let (mut windows, count) = parse_window_list(input)?;
     windows[..count].sort_unstable_by_key(|window| (window.weekday, window.start_minute));
     reject_adjacent_overlaps(&windows, count)?;
-    Ok((windows, count as u8))
+    let count = u8::try_from(count).map_err(|_| PolicyError::TooManyWindows)?;
+    Ok((windows, count))
 }
 
 fn parse_window_list(
@@ -374,7 +375,7 @@ fn parse_weekday(input: &[u8]) -> Result<u8, PolicyError> {
     WEEKDAY_NAMES
         .iter()
         .position(|name| input.eq_ignore_ascii_case(name))
-        .map(|index| index as u8)
+        .and_then(|index| u8::try_from(index).ok())
         .ok_or(PolicyError::InvalidFormat)
 }
 
@@ -393,6 +394,15 @@ fn decimal(input: &[u8]) -> Result<u16, PolicyError> {
             Err(PolicyError::InvalidFormat)
         }
     })
+}
+
+fn decimal_u8(input: &[u8]) -> Result<u8, PolicyError> {
+    u8::try_from(decimal(input)?).map_err(|_| PolicyError::InvalidFormat)
+}
+
+/// A calendar or clock field computed from Unix seconds.
+fn clock_field(value: u64) -> Result<u8, PolicyError> {
+    u8::try_from(value).map_err(|_| PolicyError::DateOutOfRange)
 }
 
 const fn is_leap_year(year: u16) -> bool {

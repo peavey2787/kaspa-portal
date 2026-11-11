@@ -41,16 +41,41 @@ pub struct BeaconResult {
     pub proof: BeaconProof,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// The outcome of re-deriving a beacon from its proof. Only [`verify_result`]
+/// builds one, so a caller holding it knows the checks really ran.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct BeaconVerification {
-    pub valid: bool,
-    pub output: [u8; 32],
-    pub uses_curby: bool,
-    /// True only when the evidence explicitly records independent CURBy
-    /// protocol verification. A successful raw HTTPS API response alone does
-    /// not establish this property.
-    pub curby_source_verified: bool,
-    pub kaspa_evidence_finalized: bool,
+    valid: bool,
+    output: [u8; 32],
+    /// How the CURBy evidence was checked, or `None` when the beacon used none.
+    /// `ExternallyVerified` only when the evidence records independent CURBy
+    /// protocol verification; a raw HTTPS API response does not establish it.
+    curby: Option<CurbyVerification>,
+    kaspa_evidence_finalized: bool,
+}
+
+impl BeaconVerification {
+    /// The proof re-derives exactly the claimed output.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.valid
+    }
+
+    /// The output the proof re-derives.
+    #[must_use]
+    pub fn output(&self) -> &[u8; 32] {
+        &self.output
+    }
+
+    #[must_use]
+    pub fn curby(&self) -> Option<CurbyVerification> {
+        self.curby
+    }
+
+    #[must_use]
+    pub fn kaspa_evidence_finalized(&self) -> bool {
+        self.kaspa_evidence_finalized
+    }
 }
 
 #[derive(Clone)]
@@ -135,13 +160,7 @@ pub fn verify_result(result: &BeaconResult) -> core::result::Result<BeaconVerifi
     Ok(BeaconVerification {
         valid,
         output: rebuilt.output,
-        uses_curby: result.proof.curby.is_some(),
-        curby_source_verified: result
-            .proof
-            .curby
-            .as_ref()
-            .map(|value| matches!(value.verification, CurbyVerification::ExternallyVerified))
-            .unwrap_or(false),
+        curby: result.proof.curby.as_ref().map(|value| value.verification),
         kaspa_evidence_finalized: result.proof.kaspa.iter().all(|value| value.finalized),
     })
 }

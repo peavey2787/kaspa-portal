@@ -1,6 +1,6 @@
 use crate::{
     transaction::{
-        model::{SigHashType, Transaction},
+        model::{InputSig, SigHashType, Transaction},
         sighash,
     },
     wallet::derivation::bip32::compressed_pubkey_from_raw_key,
@@ -8,6 +8,15 @@ use crate::{
 
 use super::super::{is_fully_signed, signature_status};
 use super::common::{set_p2sh_script, transaction};
+
+fn sighash_all_signature(signature: [u8; 64], pubkey_pos: u8) -> InputSig {
+    InputSig {
+        signature,
+        sighash_type: SigHashType::All.to_byte(),
+        pubkey_pos,
+        pubkey_compressed: [0u8; 33],
+    }
+}
 
 fn bind_p2pk_and_sign(tx: &mut Transaction, private_key: [u8; 32]) {
     let compressed = compressed_pubkey_from_raw_key(&private_key).expect("valid private key");
@@ -19,12 +28,10 @@ fn bind_p2pk_and_sign(tx: &mut Transaction, private_key: [u8; 32]) {
     let signature =
         sighash::sign_input(tx, 0, &private_key, SigHashType::All).expect("valid P2PK signature");
     let input = &mut tx.inputs[0];
-    input.sigs[0].signature = signature.bytes;
-    input.sigs[0].sighash_type = SigHashType::All.to_byte();
-    input.sigs[0].pubkey_pos = 0;
-    input.sigs[0].present = true;
-    input.sigs[0].pubkey_compressed = compressed;
-    input.sig_count = 1;
+    input.sigs.replace_with(InputSig {
+        pubkey_compressed: compressed,
+        ..sighash_all_signature(signature.bytes, 0)
+    });
     input.sighash_type = SigHashType::All.to_byte();
 }
 
@@ -47,15 +54,14 @@ fn bind_two_of_two(tx: &mut Transaction, first: [u8; 32], second: [u8; 32], p2sh
         script.script_len = redeem.len();
     }
 
-    for (slot, private_key) in [first, second].iter().enumerate() {
-        let signature = sighash::sign_input(tx, 0, private_key, SigHashType::All)
+    tx.inputs[0].sigs.clear();
+    for (position, private_key) in [(0, first), (1, second)] {
+        let signature = sighash::sign_input(tx, 0, &private_key, SigHashType::All)
             .expect("valid multisig signature");
-        tx.inputs[0].sigs[slot].signature = signature.bytes;
-        tx.inputs[0].sigs[slot].sighash_type = SigHashType::All.to_byte();
-        tx.inputs[0].sigs[slot].pubkey_pos = slot as u8;
-        tx.inputs[0].sigs[slot].present = true;
+        assert!(tx.inputs[0]
+            .sigs
+            .push(sighash_all_signature(signature.bytes, position)));
     }
-    tx.inputs[0].sig_count = 2;
     tx.inputs[0].sighash_type = SigHashType::All.to_byte();
 }
 
@@ -69,11 +75,9 @@ fn empty_transaction_is_not_fully_signed() {
 #[test]
 fn fake_signature_bytes_never_satisfy_completion() {
     let mut tx = transaction();
-    tx.inputs[0].sigs[0].signature = [0x55; 64];
-    tx.inputs[0].sigs[0].sighash_type = SigHashType::All.to_byte();
-    tx.inputs[0].sigs[0].pubkey_pos = 0;
-    tx.inputs[0].sigs[0].present = true;
-    tx.inputs[0].sig_count = 1;
+    tx.inputs[0]
+        .sigs
+        .replace_with(sighash_all_signature([0x55; 64], 0));
     tx.inputs[0].sighash_type = SigHashType::All.to_byte();
     assert_eq!(signature_status(&tx), (0, 1));
     assert!(!is_fully_signed(&tx));
@@ -121,25 +125,32 @@ fn generic_covenant_completion_requires_and_honors_execution_evidence() {
     set_p2sh_script(&mut tx, &redeem);
     let signature = sighash::sign_input(&tx, 0, &[0x16; 32], SigHashType::All)
         .expect("valid covenant-bound signature");
-    tx.inputs[0].sigs[0].signature = signature.bytes;
-    tx.inputs[0].sigs[0].sighash_type = SigHashType::All.to_byte();
-    tx.inputs[0].sigs[0].pubkey_pos = 0;
-    tx.inputs[0].sigs[0].present = true;
-    tx.inputs[0].sig_count = 1;
+    tx.inputs[0]
+        .sigs
+        .replace_with(sighash_all_signature(signature.bytes, 0));
     tx.inputs[0].sighash_type = SigHashType::All.to_byte();
     assert_eq!(signature_status(&tx), (0, 1));
     assert!(!is_fully_signed(&tx));
 
     // A branch-free covenant key is active under the empty selector assignment.
-    tx.inputs[0].covenant_execution_present = true;
-    tx.inputs[0].covenant_execution_mask = 0;
-    tx.inputs[0].covenant_execution_true_mask = 0;
+    tx.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0,
+        supplied_true_mask: 0,
+    });
     assert_eq!(signature_status(&tx), (1, 1));
     assert!(is_fully_signed(&tx));
 
     // Malformed selector evidence (truth bit not supplied) cannot complete.
-    tx.inputs[0].covenant_execution_mask = 0;
-    tx.inputs[0].covenant_execution_true_mask = 1;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_mask = 0;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_true_mask = 1;
     assert_eq!(signature_status(&tx), (0, 1));
     assert!(!is_fully_signed(&tx));
 }

@@ -1,9 +1,10 @@
-use crate::transaction::model::{TransactionInput, MAX_SIGS_PER_INPUT};
+use crate::transaction::model::{InputSig, TransactionInput};
 
 pub(super) fn has_pubkey_position(input: &TransactionInput, pubkey_position: u8) -> bool {
-    input.sigs[..input.sig_count.min(MAX_SIGS_PER_INPUT as u8) as usize]
+    input
+        .sigs
         .iter()
-        .any(|slot| slot.present && slot.pubkey_pos == pubkey_position)
+        .any(|slot| slot.pubkey_pos == pubkey_position)
 }
 
 pub(super) fn set_single_signature(
@@ -13,15 +14,12 @@ pub(super) fn set_single_signature(
     pubkey_position: u8,
     compressed_public_key: [u8; 33],
 ) {
-    input.sigs[0].signature = signature;
-    input.sigs[0].sighash_type = sighash_type;
-    input.sigs[0].pubkey_pos = pubkey_position;
-    input.sigs[0].present = true;
-    input.sigs[0].pubkey_compressed = compressed_public_key;
-    for slot in &mut input.sigs[1..] {
-        slot.present = false;
-    }
-    input.sig_count = 1;
+    input.sigs.replace_with(InputSig {
+        signature,
+        sighash_type,
+        pubkey_pos: pubkey_position,
+        pubkey_compressed: compressed_public_key,
+    });
     input.sighash_type = sighash_type;
 }
 
@@ -35,21 +33,14 @@ pub(super) fn append_signature(
     if has_pubkey_position(input, pubkey_position) {
         return false;
     }
-    let slot_index = input.sig_count as usize;
-    if slot_index >= MAX_SIGS_PER_INPUT {
+    if !input.sigs.is_empty() && input.sighash_type != sighash_type {
         return false;
     }
-    if slot_index == 0 {
-        input.sighash_type = sighash_type;
-    } else if input.sighash_type != sighash_type {
-        return false;
-    }
-    let slot = &mut input.sigs[slot_index];
-    slot.signature = signature;
-    slot.sighash_type = sighash_type;
-    slot.pubkey_pos = pubkey_position;
-    slot.present = true;
-    slot.pubkey_compressed = compressed_public_key;
-    input.sig_count += 1;
-    true
+    input.sighash_type = sighash_type;
+    input.sigs.push(InputSig {
+        signature,
+        sighash_type,
+        pubkey_pos: pubkey_position,
+        pubkey_compressed: compressed_public_key,
+    })
 }

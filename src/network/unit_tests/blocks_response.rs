@@ -7,13 +7,13 @@ use crate::network::{
 /// A `GetBlocks` success payload exactly as `client.call` returns it.
 fn response(hashes: &[[u8; 32]], rpc_blocks: &[Vec<u8>]) -> Vec<u8> {
     let mut blocks = WireWriter::new();
-    blocks.write_u32(rpc_blocks.len() as u32);
+    blocks.write_u32(u32::try_from(rpc_blocks.len()).unwrap());
     for block in rpc_blocks {
         blocks.write_bytes(block).expect("RpcBlock payload");
     }
     let mut inner = WireWriter::new();
     inner.write_u16(1); // GetBlocksResponse serializer version
-    inner.write_u32(hashes.len() as u32);
+    inner.write_u32(u32::try_from(hashes.len()).unwrap());
     for hash in hashes {
         inner.write_raw(hash);
     }

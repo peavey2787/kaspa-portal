@@ -7,8 +7,8 @@ pub fn push_int(script: &mut Vec<u8>, value: u64) {
         script.push(opcode::OP_0);
         return;
     }
-    if value <= 16 {
-        script.push(0x50 + value as u8);
+    if let Ok(small @ ..=16) = u8::try_from(value) {
+        script.push(0x50 + small);
         return;
     }
 

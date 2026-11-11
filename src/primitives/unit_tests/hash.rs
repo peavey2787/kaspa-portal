@@ -45,7 +45,7 @@ fn blake2b_known_answer_vectors_cover_keys_and_streaming_boundaries() {
 
     assert_eq!(blake2b_256(b""), PLAIN_EMPTY);
     assert_eq!(blake2b_256(b"abc"), PLAIN_ABC);
-    let all_bytes = core::array::from_fn::<u8, 256, _>(|index| index as u8);
+    let all_bytes = core::array::from_fn::<u8, 256, _>(|index| u8::try_from(index).unwrap());
     assert_eq!(blake2b_256(&all_bytes), PLAIN_256);
 
     fn keyed(parts: &[&[u8]]) -> [u8; 32] {

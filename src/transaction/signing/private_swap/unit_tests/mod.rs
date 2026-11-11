@@ -2,6 +2,7 @@ use alloc::vec::Vec;
 
 use super::*;
 use super::{parse_private_swap_script, PrivateSwapError};
+use crate::transaction::model::EmptySlot;
 use crate::{
     primitives::{address::KaspaNetwork, opcode::*},
     transaction::model::Transaction,
@@ -18,7 +19,7 @@ fn push_int(script: &mut Vec<u8>, value: u64) {
         return;
     }
     if value <= 16 {
-        script.push(0x50 + value as u8);
+        script.push(0x50 + u8::try_from(value).unwrap());
         return;
     }
     let mut bytes = value.to_le_bytes().to_vec();
@@ -171,14 +172,18 @@ fn claim_sighash_enforces_transaction_role_destination_and_fee_policy() {
     );
 
     let (mut already_signed, _) = claim_transaction();
-    already_signed.inputs[0].sig_count = 1;
+    assert!(already_signed.inputs[0]
+        .sigs
+        .push(crate::transaction::model::InputSig::EMPTY));
     assert_eq!(
         private_swap_claim_sighash(&already_signed, &claimer),
         Err(PrivateSwapError::InvalidTransaction)
     );
 
     let (mut incoming_signed, _) = claim_transaction();
-    incoming_signed.inputs[0].incoming_partial_sigs_count = 1;
+    assert!(incoming_signed.inputs[0]
+        .incoming_partial_sigs
+        .push(crate::transaction::model::IncomingPartialSig::EMPTY));
     assert_eq!(
         private_swap_claim_sighash(&incoming_signed, &claimer),
         Err(PrivateSwapError::InvalidTransaction)

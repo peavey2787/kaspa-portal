@@ -129,7 +129,7 @@ fn dispatch_top_level_field(
         return result;
     }
     // Every schema field is dispatched above, so this key is unknown.
-    dispatch_unknown_top_level_field(tok, parsed, key_start)
+    preserve_unknown_top_level(tok, parsed, key_start)
 }
 
 fn dispatch_known_top_level_field(
@@ -144,18 +144,6 @@ fn dispatch_known_top_level_field(
         b"inputs" => Some(parse_inputs_array(tok, tx, parsed)),
         b"outputs" => Some(parse_outputs_array(tok, tx, parsed)),
         _ => None,
-    }
-}
-
-fn dispatch_unknown_top_level_field(
-    tok: &mut Tokenizer<'_>,
-    parsed: &mut PsktParsed,
-    key_start: usize,
-) -> Result<(), PskError> {
-    if crate::transaction::interchange::pskt::schema::EXTENSION_GRAMMAR.preserve_unknown_fields {
-        preserve_unknown_top_level(tok, parsed, key_start)
-    } else {
-        Err(PskError::UnexpectedToken)
     }
 }
 
@@ -187,10 +175,11 @@ fn validate_top_level_object(
     {
         return Err(PskError::CountMismatch);
     }
-    if tx.outputs[..tx.num_outputs]
-        .iter()
-        .any(|output| output.has_covenant && output.covenant_auth_input as usize >= tx.num_inputs)
-    {
+    if tx.outputs[..tx.num_outputs].iter().any(|output| {
+        output
+            .covenant
+            .is_some_and(|covenant| usize::from(covenant.authorizing_input) >= tx.num_inputs)
+    }) {
         return Err(PskError::InvalidCovenantBinding);
     }
     validate_monetary_shape(tx)

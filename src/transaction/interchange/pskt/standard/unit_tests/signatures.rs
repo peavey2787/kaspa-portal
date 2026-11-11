@@ -1,7 +1,15 @@
 use crate::transaction::{
     interchange::pskt::standard::{move_ksp_sigs_to_pskt, pskt_signature_status, PskError},
-    model::{Transaction, MAX_SIGS_PER_INPUT},
+    model::{EmptySlot, IncomingPartialSig, InputSig, Transaction, MAX_SIGS_PER_INPUT},
 };
+
+fn ksp_signature(pubkey_compressed: [u8; 33], signature: [u8; 64]) -> InputSig {
+    InputSig {
+        signature,
+        pubkey_compressed,
+        ..InputSig::EMPTY
+    }
+}
 
 fn p2pk_transaction() -> Transaction {
     let mut transaction = Transaction::try_new().expect("transaction test allocation");
@@ -19,50 +27,47 @@ fn pskt_signature_merge_preserves_existing_entries_deduplicates_and_sorts() {
     let mut transaction = p2pk_transaction();
     let input = &mut transaction.inputs[0];
 
-    input.incoming_partial_sigs[0].present = true;
-    input.incoming_partial_sigs[0].pubkey = [0x03; 33];
-    input.incoming_partial_sigs[0].signature = [0x33; 64];
-    input.incoming_partial_sigs_count = 1;
-
-    input.sig_count = 5;
-    input.sigs[0].present = false;
-    input.sigs[1].present = true;
-    input.sigs[1].pubkey_compressed = [0u8; 33];
-    input.sigs[2].present = true;
-    input.sigs[2].pubkey_compressed = [0x03; 33];
-    input.sigs[2].signature = [0x33; 64];
-    input.sigs[3].present = true;
-    input.sigs[3].pubkey_compressed = [0x02; 33];
-    input.sigs[3].signature = [0x22; 64];
-    input.sigs[4].present = true;
-    input.sigs[4].pubkey_compressed = [0x04; 33];
-    input.sigs[4].signature = [0x44; 64];
+    input
+        .incoming_partial_sigs
+        .replace_with(IncomingPartialSig {
+            pubkey: [0x03; 33],
+            signature: [0x33; 64],
+        });
+    for (pubkey, signature) in [
+        ([0u8; 33], [0u8; 64]),
+        ([0x03; 33], [0x33; 64]),
+        ([0x02; 33], [0x22; 64]),
+        ([0x04; 33], [0x44; 64]),
+    ] {
+        assert!(input.sigs.push(ksp_signature(pubkey, signature)));
+    }
 
     move_ksp_sigs_to_pskt(&mut transaction).expect("merge signatures");
 
     let input = &transaction.inputs[0];
-    assert_eq!(input.incoming_partial_sigs_count, 3);
+    assert_eq!(input.incoming_partial_sigs.len(), 3);
     assert_eq!(input.incoming_partial_sigs[0].pubkey, [0x02; 33]);
     assert_eq!(input.incoming_partial_sigs[1].pubkey, [0x03; 33]);
     assert_eq!(input.incoming_partial_sigs[2].pubkey, [0x04; 33]);
     assert_eq!(input.incoming_partial_sigs[1].signature, [0x33; 64]);
 
     move_ksp_sigs_to_pskt(&mut transaction).expect("merge signatures");
-    assert_eq!(transaction.inputs[0].incoming_partial_sigs_count, 3);
+    assert_eq!(transaction.inputs[0].incoming_partial_sigs.len(), 3);
 }
 
 #[test]
 fn pskt_signature_merge_rejects_conflicting_existing_signature() {
     let mut transaction = p2pk_transaction();
     let input = &mut transaction.inputs[0];
-    input.incoming_partial_sigs_count = 1;
-    input.incoming_partial_sigs[0].present = true;
-    input.incoming_partial_sigs[0].pubkey = [0x03; 33];
-    input.incoming_partial_sigs[0].signature = [0x11; 64];
-    input.sig_count = 1;
-    input.sigs[0].present = true;
-    input.sigs[0].pubkey_compressed = [0x03; 33];
-    input.sigs[0].signature = [0x22; 64];
+    input
+        .incoming_partial_sigs
+        .replace_with(IncomingPartialSig {
+            pubkey: [0x03; 33],
+            signature: [0x11; 64],
+        });
+    input
+        .sigs
+        .replace_with(ksp_signature([0x03; 33], [0x22; 64]));
 
     assert_eq!(
         move_ksp_sigs_to_pskt(&mut transaction),
@@ -78,22 +83,25 @@ fn pskt_signature_merge_rejects_conflicting_existing_signature() {
 fn pskt_signature_merge_stops_at_fixed_capacity() {
     let mut transaction = p2pk_transaction();
     let input = &mut transaction.inputs[0];
-    input.incoming_partial_sigs_count = MAX_SIGS_PER_INPUT as u8;
-    for index in 0..MAX_SIGS_PER_INPUT {
-        input.incoming_partial_sigs[index].present = true;
-        input.incoming_partial_sigs[index].pubkey = [index as u8 + 1; 33];
+    for marker in 1..=0xff_u8 {
+        if !input.incoming_partial_sigs.push(IncomingPartialSig {
+            pubkey: [marker; 33],
+            ..IncomingPartialSig::EMPTY
+        }) {
+            break;
+        }
     }
-    input.sig_count = 1;
-    input.sigs[0].present = true;
-    input.sigs[0].pubkey_compressed = [0xff; 33];
+    input
+        .sigs
+        .replace_with(ksp_signature([0xff; 33], [0u8; 64]));
 
     assert_eq!(
         move_ksp_sigs_to_pskt(&mut transaction),
         Err(PskError::TooManyPartialSigs)
     );
     assert_eq!(
-        transaction.inputs[0].incoming_partial_sigs_count,
-        MAX_SIGS_PER_INPUT as u8
+        transaction.inputs[0].incoming_partial_sigs.len(),
+        MAX_SIGS_PER_INPUT
     );
 }
 
@@ -111,10 +119,12 @@ fn pskt_signature_status_counts_only_valid_bound_signatures() {
     p2pk.inputs[0].sighash_type = SigHashType::All.to_byte();
     let signature =
         sighash::sign_input(&p2pk, 0, &private_key, SigHashType::All).expect("valid signature");
-    p2pk.inputs[0].incoming_partial_sigs[0].present = true;
-    p2pk.inputs[0].incoming_partial_sigs[0].pubkey = compressed;
-    p2pk.inputs[0].incoming_partial_sigs[0].signature = signature.bytes;
-    p2pk.inputs[0].incoming_partial_sigs_count = 1;
+    p2pk.inputs[0]
+        .incoming_partial_sigs
+        .replace_with(IncomingPartialSig {
+            pubkey: compressed,
+            signature: signature.bytes,
+        });
     assert_eq!(pskt_signature_status(&p2pk), (1, 1));
 
     p2pk.inputs[0].incoming_partial_sigs[0].signature[0] ^= 1;

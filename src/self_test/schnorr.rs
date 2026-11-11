@@ -142,21 +142,10 @@ fn test_sign_with_bip32_key() -> bool {
 /// Runs all Schnorr tests.
 /// Returns (passed, total).
 pub fn run_schnorr_tests() -> (u32, u32) {
-    let mut passed = 0u32;
-    let total = 4u32;
-
-    if test_sign_verify_roundtrip() {
-        passed += 1;
-    }
-    if test_deterministic_signature() {
-        passed += 1;
-    }
-    if test_invalid_signature_fails() {
-        passed += 1;
-    }
-    if test_sign_with_bip32_key() {
-        passed += 1;
-    }
-
-    (passed, total)
+    super::tally(&[
+        test_sign_verify_roundtrip(),
+        test_deterministic_signature(),
+        test_invalid_signature_fails(),
+        test_sign_with_bip32_key(),
+    ])
 }

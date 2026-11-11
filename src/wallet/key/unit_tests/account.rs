@@ -46,7 +46,7 @@ fn base58check_encode(payload: &[u8]) -> Vec<u8> {
         let mut remainder = 0u32;
         for value in &mut number[start..] {
             let accumulator = (remainder << 8) | u32::from(*value);
-            *value = (accumulator / 58) as u8;
+            *value = u8::try_from(accumulator / 58).unwrap();
             remainder = accumulator % 58;
         }
         digits.push(BASE58_ALPHABET[remainder as usize]);

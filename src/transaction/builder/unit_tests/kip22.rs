@@ -71,7 +71,7 @@ fn finalized_spend_pushes_the_signature_then_the_redeem_script() {
     assert_eq!(script.len(), 1 + 65 + 1 + kip22::REDEEM_SCRIPT_LEN);
     assert_eq!(script[0], 65);
     assert_eq!(script[65], 1);
-    assert_eq!(script[66], kip22::REDEEM_SCRIPT_LEN as u8);
+    assert_eq!(script[66], u8::try_from(kip22::REDEEM_SCRIPT_LEN).unwrap());
     assert_eq!(&script[67..], &kip22::redeem_script(&xonly));
 }
 

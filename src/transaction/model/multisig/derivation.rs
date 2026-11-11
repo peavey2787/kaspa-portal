@@ -6,8 +6,7 @@ use crate::wallet::{
 };
 
 use super::super::constants::MAX_MULTISIG_KEYS;
-use super::super::multisig_validation::valid_config;
-use super::MultisigConfig;
+use super::{validation::valid_config, MultisigConfig, MultisigFamily};
 
 pub(super) fn serialized_parts(parts: &KpubParts) -> [u8; 74] {
     let mut out = [0u8; 74];
@@ -29,15 +28,12 @@ pub(super) fn push_byte(buf: &mut [u8], pos: &mut usize, byte: u8) {
 pub(super) fn derive_multisig_children(
     config: &MultisigConfig,
 ) -> Option<[[u8; 32]; MAX_MULTISIG_KEYS]> {
-    let cosigner = if config.v45 {
-        u32::from(config.cosigner_index)
-    } else {
-        0
-    };
-    let chain = if config.v45 {
-        u32::from(config.chain)
-    } else {
-        0
+    let (cosigner, chain) = match config.family {
+        MultisigFamily::Hd45 {
+            cosigner_index,
+            chain,
+        } => (u32::from(cosigner_index), u32::from(chain)),
+        MultisigFamily::Legacy44 => (0, 0),
     };
     derive_children_at(config, cosigner, chain, config.addr_index)
 }
@@ -49,18 +45,18 @@ pub(super) fn derive_children_at(
     index: u32,
 ) -> Option<[[u8; 32]; MAX_MULTISIG_KEYS]> {
     let mut children = [[0u8; 32]; MAX_MULTISIG_KEYS];
-    for (slot, child) in children.iter_mut().enumerate().take(config.n as usize) {
+    for (slot, child) in children.iter_mut().enumerate().take(usize::from(config.n)) {
         let parent = ExtendedPubKey {
             pubkey: config.cosigner_pubkeys[slot],
             chain_code: config.cosigner_chain_codes[slot],
             depth: config.cosigner_depth[slot].max(3),
         };
-        let family = if config.v45 {
+        let family_key = if config.family.is_hd45() {
             derive_child_pub(&parent, cosigner).ok()?
         } else {
             parent
         };
-        let chain_key = derive_child_pub(&family, chain).ok()?;
+        let chain_key = derive_child_pub(&family_key, chain).ok()?;
         let address = derive_child_pub(&chain_key, index).ok()?;
         *child = address.x_only();
     }

@@ -148,7 +148,10 @@ fn a_path_with_two_active_keys_is_refused_because_one_signature_cannot_satisfy_i
         single[33] = 0xac;
         single
     });
-    tx.inputs[0].covenant_execution_present = true;
+    tx.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0,
+        supplied_true_mask: 0,
+    });
     let single = candidate_keys_for_input(&tx, 0).expect("one active key");
     assert_eq!(single.len, 1);
 
@@ -176,7 +179,10 @@ fn kip22_spend_signs_with_the_key_behind_the_redeem_script() {
 
     let mut tx = transaction();
     set_p2sh(&mut tx, &kip22::redeem_script(&xonly));
-    tx.inputs[0].covenant_execution_present = true;
+    tx.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0,
+        supplied_true_mask: 0,
+    });
     assert_eq!(
         sign_transaction_multisig_with_entropy(
             &mut tx,
@@ -195,7 +201,10 @@ fn kip22_spend_signs_with_the_key_behind_the_redeem_script() {
 
     let mut foreign = transaction();
     set_p2sh(&mut foreign, &kip22::redeem_script(&[0x44; 32]));
-    foreign.inputs[0].covenant_execution_present = true;
+    foreign.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0,
+        supplied_true_mask: 0,
+    });
     assert_eq!(
         sign_transaction_multisig_with_entropy(
             &mut foreign,

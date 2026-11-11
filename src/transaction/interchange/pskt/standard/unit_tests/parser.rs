@@ -380,7 +380,7 @@ fn partial_signatures_cover_empty_valid_and_invalid_entries() {
         &transaction_json("", &structurally_valid_but_unverified, ""),
     )
     .expect("structurally valid partial signature parses as untrusted data");
-    assert_eq!(tx.inputs[0].incoming_partial_sigs_count, 1);
+    assert_eq!(tx.inputs[0].incoming_partial_sigs.len(), 1);
     assert_eq!(
         crate::transaction::interchange::pskt::standard::pskt_signature_status(&tx),
         (0, 1),
@@ -388,7 +388,7 @@ fn partial_signatures_cover_empty_valid_and_invalid_entries() {
     );
 
     let empty = parse_json(PSKT_MAGIC, &transaction_json("", ",\"partialSigs\":{}", "")).unwrap();
-    assert_eq!(empty.0.inputs[0].incoming_partial_sigs_count, 0);
+    assert_eq!(empty.0.inputs[0].incoming_partial_sigs.len(), 0);
 
     let duplicate = format!(
         ",\"partialSigs\":{{\"{pubkey}\":{{\"schnorr\":\"{signature}\"}},\"{pubkey}\":{{\"schnorr\":\"{signature}\"}}}}"
@@ -904,9 +904,9 @@ fn covenant_binding_accepts_dynamic_authorizer_and_requires_both_members() {
 
     let (tx, _, _) = parse_json(PSKT_MAGIC, document.as_bytes())
         .expect("maximum real covenant authorizing input");
-    assert!(tx.outputs[0].has_covenant);
-    assert_eq!(tx.outputs[0].covenant_auth_input as usize, max_authorizer);
-    assert_eq!(tx.outputs[0].covenant_id, [0x11; 32]);
+    let covenant = tx.outputs[0].covenant.expect("covenant binding");
+    assert_eq!(usize::from(covenant.authorizing_input), max_authorizer);
+    assert_eq!(covenant.id, [0x11; 32]);
 
     let nonexistent = document.replace(
         &format!(r#""authorizingInput":{max_authorizer}"#),
@@ -999,12 +999,11 @@ fn bip32_derivation_path_populates_untrusted_ms45_hint_end_to_end() {
         .expect("PSKT with 45' derivation hint");
     assert_eq!(
         tx.inputs[0].ms45_hint,
-        crate::transaction::model::Ms45Hint {
-            present: true,
+        Some(crate::transaction::model::Ms45Derivation {
             cosigner: 2,
             chain: 1,
             index: 17
-        },
+        }),
     );
 
     let invalid = format!(
@@ -1012,10 +1011,7 @@ fn bip32_derivation_path_populates_untrusted_ms45_hint_end_to_end() {
     );
     let (tx, _, _) = parse_json(PSKT_MAGIC, &transaction_json("", &invalid, ""))
         .expect("PSKT keeps invalid hint non-authoritative");
-    assert_eq!(
-        tx.inputs[0].ms45_hint,
-        crate::transaction::model::Ms45Hint::none()
-    );
+    assert_eq!(tx.inputs[0].ms45_hint, None);
 }
 
 #[test]
@@ -1026,10 +1022,14 @@ fn output_bip32_derivation_extracts_ms45_hint_when_no_hint_is_present_yet() {
     );
     let (tx, _, _) =
         parse_json(PSKT_MAGIC, &transaction_json("", "", &extra)).expect("output derivation");
-    assert!(tx.outputs[0].ms45_hint.present);
-    assert_eq!(tx.outputs[0].ms45_hint.cosigner, 2);
-    assert_eq!(tx.outputs[0].ms45_hint.chain, 1);
-    assert_eq!(tx.outputs[0].ms45_hint.index, 17);
+    assert_eq!(
+        tx.outputs[0].ms45_hint,
+        Some(crate::transaction::model::Ms45Derivation {
+            cosigner: 2,
+            chain: 1,
+            index: 17
+        }),
+    );
 }
 
 #[test]
@@ -1264,7 +1264,7 @@ fn per_input_key_maps_hold_at_most_the_signature_capacity() {
     let mut parsed = PsktParsed::empty();
     let two = encode_wire(PSKT_MAGIC, &transaction_json("", &signatures(2), ""));
     let _ = parse_pskt(&two, &mut scratch, &mut tx, &mut parsed);
-    assert_eq!(tx.inputs[0].incoming_partial_sigs_count, 2);
+    assert_eq!(tx.inputs[0].incoming_partial_sigs.len(), 2);
     assert_eq!(
         parse_json(
             PSKT_MAGIC,

@@ -241,7 +241,7 @@ fn canonical_decoder_rejects_signature_and_script_boundaries() {
     const SIGNATURE_SIGHASH_OFFSET: usize = 114;
 
     let mut wire = encode_vec(&OneInputSource::new()).expect("one-input vector");
-    wire[SIGNATURE_COUNT_OFFSET] = (MAX_SIGNATURE_RECORDS as u8) + 1;
+    wire[SIGNATURE_COUNT_OFFSET] = u8::try_from(MAX_SIGNATURE_RECORDS).unwrap() + 1;
     assert_wire_error(&wire, WireError::TooManySignatures);
 
     let mut wire = encode_vec(&OneInputSource::new()).expect("one-input vector");
@@ -256,7 +256,7 @@ fn canonical_decoder_rejects_signature_and_script_boundaries() {
     let script_prefix = OUTPUT_SCRIPT_PREFIX_OFFSET;
     assert_eq!(wire[script_prefix], EXTENDED_SCRIPT_LENGTH);
     wire[script_prefix + 1..script_prefix + 3]
-        .copy_from_slice(&((MAX_SCRIPT_SIZE + 1) as u16).to_le_bytes());
+        .copy_from_slice(&u16::try_from(MAX_SCRIPT_SIZE + 1).unwrap().to_le_bytes());
     assert_wire_error(&wire, WireError::ScriptTooLong);
 }
 
@@ -283,7 +283,7 @@ fn canonical_decoder_rejects_a_long_form_length_for_a_short_script() {
     let mut wire = encode_vec(&VectorSource::minimal(short)).expect("short script vector");
     assert_eq!(usize::from(wire[OUTPUT_SCRIPT_PREFIX_OFFSET]), short);
     let mut long_form = vec![EXTENDED_SCRIPT_LENGTH];
-    long_form.extend_from_slice(&(short as u16).to_le_bytes());
+    long_form.extend_from_slice(&u16::try_from(short).unwrap().to_le_bytes());
     wire.splice(
         OUTPUT_SCRIPT_PREFIX_OFFSET..=OUTPUT_SCRIPT_PREFIX_OFFSET,
         long_form,
@@ -389,7 +389,7 @@ impl EncodeSource for TwoInputSource {
     }
     fn input(&self, index: usize) -> Input<'_> {
         Input {
-            previous_index: index as u32,
+            previous_index: u32::try_from(index).unwrap(),
             ..self.0.input(index)
         }
     }
@@ -414,7 +414,7 @@ impl EncodeSource for TwoInputSource {
     fn input_derivation(&self, index: usize) -> Option<Derivation> {
         Some(Derivation {
             branch: 0,
-            index: index as u32,
+            index: u32::try_from(index).unwrap(),
         })
     }
     fn output_derivation(&self, _index: usize) -> Option<Derivation> {
@@ -487,9 +487,9 @@ fn sig_op_count_offset(wire: &[u8]) -> usize {
 fn input_sig_op_count_is_bounded_by_the_signature_capacity() {
     let mut wire = one_input_with_trailers(&[NETWORK_MARKER, 1]);
     let offset = sig_op_count_offset(&wire);
-    wire[offset] = MAX_SIGNATURE_RECORDS as u8;
+    wire[offset] = u8::try_from(MAX_SIGNATURE_RECORDS).unwrap();
     assert!(decode(&wire, &mut CaptureSink::default()).is_ok());
-    wire[offset] = MAX_SIGNATURE_RECORDS as u8 + 1;
+    wire[offset] = u8::try_from(MAX_SIGNATURE_RECORDS).unwrap() + 1;
     assert_wire_error(&wire, WireError::TooManySignatures);
 }
 
@@ -504,7 +504,7 @@ fn declared_inputs_may_exactly_fill_the_remaining_bytes() {
     while !(wire.len() - inputs_start).is_multiple_of(59) {
         wire.push(0);
     }
-    let count = ((wire.len() - inputs_start) / 59) as u32;
+    let count = u32::try_from((wire.len() - inputs_start) / 59).unwrap();
     wire[8..12].copy_from_slice(&count.to_le_bytes());
     let result = decode(&wire, &mut CaptureSink::default());
     crate::test_support::assert_err(&result, "Wire(BufferTooShort)");

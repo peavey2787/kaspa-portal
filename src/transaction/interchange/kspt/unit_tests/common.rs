@@ -1,4 +1,4 @@
-use crate::transaction::model::Transaction;
+use crate::transaction::model::{InputSig, Transaction};
 
 pub(super) fn transaction() -> Transaction {
     let mut tx = Transaction::try_new().expect("transaction test allocation");
@@ -41,13 +41,30 @@ pub(super) fn set_p2sh_script(tx: &mut Transaction, redeem: &[u8]) {
     tx.store_redeem(0, redeem).expect("fixture redeem fits");
 }
 
+/// Fill the first input's signature storage, one signature per key position.
+pub(super) fn fill_signature_capacity(tx: &mut Transaction) {
+    let input = &mut tx.inputs[0];
+    input.sighash_type = 1;
+    input.sigs.clear();
+    for position in 0..u8::MAX {
+        if !input.sigs.push(InputSig {
+            signature: [position + 1; 64],
+            sighash_type: 1,
+            pubkey_pos: position,
+            pubkey_compressed: [0u8; 33],
+        }) {
+            break;
+        }
+    }
+}
+
 pub(super) fn add_single_signature(tx: &mut Transaction, pubkey_position: u8, signature: [u8; 64]) {
     let input = &mut tx.inputs[0];
-    input.sigs[0].signature = signature;
-    input.sigs[0].sighash_type = 0x01;
-    input.sigs[0].pubkey_pos = pubkey_position;
-    input.sigs[0].present = true;
-    input.sigs[0].pubkey_compressed = [0x02; 33];
-    input.sig_count = 1;
+    input.sigs.replace_with(InputSig {
+        signature,
+        sighash_type: 0x01,
+        pubkey_pos: pubkey_position,
+        pubkey_compressed: [0x02; 33],
+    });
     input.sighash_type = 0x01;
 }

@@ -13,7 +13,7 @@ fn deterministic_bytes(seed: u32, output: &mut [u8]) {
         state ^= state << 13;
         state ^= state >> 17;
         state ^= state << 5;
-        *byte = state as u8;
+        *byte = state.to_le_bytes()[0];
     }
 }
 
@@ -47,7 +47,7 @@ fn canonical_account_keys_round_trip_for_generated_payloads() {
 fn qr_frames_round_trip_across_boundaries_and_reject_corruption() {
     for length in 2..=96usize {
         let mut payload = [0u8; 96];
-        deterministic_bytes(length as u32, &mut payload[..length]);
+        deterministic_bytes(u32::try_from(length).unwrap(), &mut payload[..length]);
         let identifier = session_id(&payload[..length]);
         let split = length / 2;
 
@@ -91,7 +91,10 @@ fn qr_frames_round_trip_across_boundaries_and_reject_corruption() {
 fn lowercase_hex_round_trip_holds_for_generated_lengths() {
     for length in 0..=128usize {
         let mut raw = [0u8; 128];
-        deterministic_bytes(length as u32 ^ 0xa5a5_5a5a, &mut raw[..length]);
+        deterministic_bytes(
+            u32::try_from(length).unwrap() ^ 0xa5a5_5a5a,
+            &mut raw[..length],
+        );
         let mut text = [0u8; 256];
         let written = encode_lower_hex(&raw[..length], &mut text).expect("hex output fits");
         let mut recovered = [0u8; 128];

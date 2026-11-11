@@ -14,7 +14,7 @@ fn covenant_binding_is_strict_and_is_emitted() {
         format!(",\"covenantBinding\":{{\"authorizingInput\":0,\"covenantId\":\"{COVENANT_ID}\"}}");
     let json = transaction_json("", "", &binding);
     let (tx, parsed, scratch) = parse_json(PSKT_MAGIC, &json).expect("parse");
-    assert!(tx.outputs[0].has_covenant);
+    assert!(tx.outputs[0].covenant.is_some());
 
     let emitted =
         serialize_json(&tx, &parsed, &scratch, TxInputFormat::PsktPskb).expect("serialize");
@@ -91,8 +91,10 @@ fn explicit_null_covenant_binding_is_preserved() {
 fn serializer_rejects_a_programmatic_covenant_with_no_authorizing_input() {
     let json = transaction_json("", "", "");
     let (mut tx, parsed, scratch) = parse_json(PSKT_MAGIC, &json).expect("parse");
-    tx.outputs[0].has_covenant = true;
-    tx.outputs[0].covenant_auth_input = 1;
+    tx.outputs[0].covenant = Some(crate::transaction::model::Covenant {
+        authorizing_input: 1,
+        id: [0u8; 32],
+    });
 
     let mut wire = vec![0u8; 8192];
     assert_eq!(

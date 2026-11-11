@@ -5,6 +5,10 @@
 //! rules, transaction/sighash versions, extension policy, and restricted JSON
 //! syntax validator.  Environment-specific parsers are only responsible for
 //! materializing values into their own semantic models.
+//!
+//! Extension policy: a field the tables do not name is preserved byte for byte
+//! and may hold any canonical JSON value. Duplicate keys are rejected at every
+//! depth, and strings must be printable ASCII with no escapes.
 
 pub const PSKT_VERSION: u64 = 0;
 pub const MAX_SUPPORTED_TX_VERSION: u16 = 1;
@@ -172,21 +176,6 @@ pub fn required_fields_present(scope: Scope, seen: u64) -> bool {
 pub fn null_rule(scope: Scope, name: &[u8]) -> NullRule {
     field_spec(scope, name).map_or(NullRule::Forbidden, |spec| spec.null_rule)
 }
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ExtensionGrammar {
-    pub preserve_unknown_fields: bool,
-    pub reject_duplicate_keys_at_every_depth: bool,
-    pub printable_ascii_unescaped_strings_only: bool,
-    pub arbitrary_canonical_json_values: bool,
-}
-
-pub const EXTENSION_GRAMMAR: ExtensionGrammar = ExtensionGrammar {
-    preserve_unknown_fields: true,
-    reject_duplicate_keys_at_every_depth: true,
-    printable_ascii_unescaped_strings_only: true,
-    arbitrary_canonical_json_values: true,
-};
 
 /// Legacy Companion fields that used to select or parameterize covenant witness
 /// branches independently of `covenantExecution`. Consumer finalization rejects

@@ -1,6 +1,7 @@
 use crate::{
     chain::utxo::UtxoEntry,
     network::client::NetworkClient,
+    primitives::numeric::ceil_to_u64,
     transaction::builder::{
         model::{PlannedOutput, UnsignedTransactionPlan},
         planning::{amounts, plan_consolidation, plan_payment},
@@ -60,7 +61,7 @@ pub async fn create_send_with_payload(
     let fee_rate = crate::network::queries::fees::get(client)
         .await
         .ok()
-        .and_then(|estimate| finite_fee_rate(estimate.normal_sompi_per_gram))
+        .and_then(|estimate| ceil_to_u64(estimate.normal_sompi_per_gram))
         .unwrap_or(DEFAULT_PLANNER_FEE_RATE);
     create_send_with_payload_from_utxos(
         wallet,
@@ -380,11 +381,4 @@ fn required_mass_fee_for_scripts(
         .checked_mul(effective_fee_rate)
         .ok_or_else(|| "Estimated storage fee exceeds supported range".to_string())?;
     Ok(non_contextual_fee.max(storage_fee).max(minimum_fee))
-}
-
-fn finite_fee_rate(value: f64) -> Option<u64> {
-    if !value.is_finite() || value <= 0.0 || value > u64::MAX as f64 {
-        return None;
-    }
-    Some(value.ceil() as u64)
 }

@@ -21,7 +21,7 @@ fn sign_p2pk_input(
     sighash_type: SigHashType,
     signing_entropy: Option<&[u8; 32]>,
 ) -> Result<usize, PsktError> {
-    if tx.inputs[input_index].sig_count != 0 {
+    if !tx.inputs[input_index].sigs.is_empty() {
         return Ok(0);
     }
     let script = &tx.inputs[input_index].utxo_entry.script_public_key.script;
@@ -59,22 +59,16 @@ fn sign_p2pk_input(
 fn account_positions(context: &SigningContext, multisig: &MultisigInfo) -> [Option<u8>; 8] {
     let mut positions = [None, None, None, None, None, None, None, None];
     for (seed_index, position) in positions.iter_mut().enumerate().take(context.seed_count()) {
-        let Some(account_xonly) = context.account_xonly(seed_index) else {
-            continue;
-        };
-        for pubkey_position in 0..multisig.n as usize {
-            if account_xonly == multisig.pubkeys[pubkey_position] {
-                *position = Some(pubkey_position as u8);
-                break;
-            }
-        }
+        *position = context
+            .account_xonly(seed_index)
+            .and_then(|account_xonly| multisig.position_of(&account_xonly));
     }
     positions
 }
 
 struct MultisigPosition<'a> {
     positions: &'a [Option<u8>; 8],
-    pubkey_position: usize,
+    pubkey_position: u8,
 }
 
 fn sign_multisig_input(
@@ -85,8 +79,7 @@ fn sign_multisig_input(
     sighash_type: SigHashType,
     signing_entropy: Option<&[u8; 32]>,
 ) -> Result<usize, PsktError> {
-    let hint = tx.inputs[input_index].ms45_hint;
-    if hint.present {
+    if let Some(hint) = tx.inputs[input_index].ms45_hint {
         return super::ms45::sign_input(
             tx,
             input_index,
@@ -99,7 +92,7 @@ fn sign_multisig_input(
     }
     let positions = account_positions(context, multisig);
     let mut added = 0usize;
-    for pubkey_position in 0..multisig.n as usize {
+    for pubkey_position in 0..multisig.n {
         added += sign_multisig_position(
             tx,
             input_index,
@@ -125,12 +118,11 @@ fn sign_multisig_position(
     signing_entropy: Option<&[u8; 32]>,
     target_position: MultisigPosition<'_>,
 ) -> Result<usize, PsktError> {
-    let pubkey_position = target_position.pubkey_position;
-    let position = pubkey_position as u8;
+    let position = target_position.pubkey_position;
     if has_pubkey_position(&tx.inputs[input_index], position) {
         return Ok(0);
     }
-    let target = &multisig.pubkeys[pubkey_position];
+    let target = &multisig.pubkeys[usize::from(position)];
     for seed_index in 0..context.seed_count() {
         let Some(mut material) = multisig_material(
             context,

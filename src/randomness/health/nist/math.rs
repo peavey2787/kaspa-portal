@@ -1,3 +1,8 @@
+/// `2^exponent`; exponents past `i32::MAX` saturate to infinity.
+pub fn power_of_two(exponent: usize) -> f64 {
+    2f64.powi(i32::try_from(exponent).unwrap_or(i32::MAX))
+}
+
 pub fn erfc(value: f64) -> f64 {
     let z = value.abs();
     let t = 1.0 / (1.0 + 0.5 * z);

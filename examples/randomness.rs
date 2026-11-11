@@ -23,7 +23,7 @@ fn main() -> Result<()> {
         curby: None,
         extractor: ExtractorConfig::default(),
     })?;
-    assert!(beacon.verify(&result)?.valid);
+    assert!(beacon.verify(&result)?.is_valid());
     println!(
         "vrf={} beacon={}",
         hex::encode(verified.0),

@@ -1,7 +1,7 @@
 //! Input signatures, derivations, and schema bookkeeping.
 
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
-use crate::transaction::model::{TransactionInput, MAX_SIGS_PER_INPUT};
+use crate::transaction::model::{IncomingPartialSig, TransactionInput, MAX_SIGS_PER_INPUT};
 
 use super::super::super::{
     hex_decode_strict, preservation::capture_unknown, PskError, Tok, Tokenizer,
@@ -74,18 +74,17 @@ fn consume_empty_partial_sigs(tok: &mut Tokenizer<'_>) -> Result<bool, PskError>
 fn parse_partial_sig_slot(
     tok: &mut Tokenizer<'_>,
     input: &mut TransactionInput,
-    count: usize,
 ) -> Result<(), PskError> {
-    if count >= MAX_SIGS_PER_INPUT {
-        return Err(PskError::TooManyPartialSigs);
-    }
     let pubkey = parse_partial_sig_pubkey(tok)?;
     let signature = parse_schnorr_signature(tok)?;
-    let slot = &mut input.incoming_partial_sigs[count];
-    slot.pubkey = pubkey;
-    slot.signature = signature;
-    slot.present = true;
-    Ok(())
+    if input
+        .incoming_partial_sigs
+        .push(IncomingPartialSig { pubkey, signature })
+    {
+        Ok(())
+    } else {
+        Err(PskError::TooManyPartialSigs)
+    }
 }
 
 pub(super) fn parse_partial_sigs(
@@ -93,19 +92,16 @@ pub(super) fn parse_partial_sigs(
     input: &mut TransactionInput,
 ) -> Result<(), PskError> {
     expect(tok, Tok::LBrace)?;
+    input.incoming_partial_sigs.clear();
     if consume_empty_partial_sigs(tok)? {
-        input.incoming_partial_sigs_count = 0;
         return Ok(());
     }
-    let mut count = 0usize;
     loop {
-        parse_partial_sig_slot(tok, input, count)?;
-        count += 1;
+        parse_partial_sig_slot(tok, input)?;
         if !object_continues(tok)? {
             break;
         }
     }
-    input.incoming_partial_sigs_count = count as u8;
     Ok(())
 }
 
@@ -144,11 +140,8 @@ fn install_first_ms45_hint(
     value_start: usize,
     value_end: usize,
 ) {
-    if input.ms45_hint.present {
-        return;
-    }
-    if let Some(hint) = extract_ms45_hint(source, value_start, value_end) {
-        input.ms45_hint = hint;
+    if input.ms45_hint.is_none() {
+        input.ms45_hint = extract_ms45_hint(source, value_start, value_end);
     }
 }
 

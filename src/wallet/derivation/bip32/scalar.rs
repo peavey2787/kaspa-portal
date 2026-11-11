@@ -30,9 +30,9 @@ pub(crate) fn scalar_add_mod_n(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
     let mut sum = [0u8; 32];
     let mut carry = 0u16;
     for index in (0..32).rev() {
-        let word = left[index] as u16 + right[index] as u16 + carry;
-        sum[index] = word as u8;
-        carry = word >> 8;
+        let [low, high] = (u16::from(left[index]) + u16::from(right[index]) + carry).to_le_bytes();
+        sum[index] = low;
+        carry = u16::from(high);
     }
 
     let (reduced, borrow) = subtract(&sum, &SECP256K1_ORDER);
@@ -50,10 +50,10 @@ fn subtract(left: &[u8; 32], right: &[u8; 32]) -> ([u8; 32], u16) {
     let mut output = [0u8; 32];
     let mut borrow = 0u16;
     for index in (0..32).rev() {
-        let minuend = left[index] as u16;
-        let subtrahend = right[index] as u16 + borrow;
+        let minuend = u16::from(left[index]);
+        let subtrahend = u16::from(right[index]) + borrow;
         let difference = minuend.wrapping_sub(subtrahend);
-        output[index] = difference as u8;
+        output[index] = difference.to_le_bytes()[0];
         borrow = (difference >> 15) & 1;
     }
     (output, borrow)

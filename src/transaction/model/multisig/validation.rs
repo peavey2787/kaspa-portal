@@ -2,7 +2,7 @@
 
 use crate::wallet::key::xpub::KpubParts;
 
-use super::{constants::MAX_MULTISIG_KEYS, MultisigConfig};
+use super::{super::constants::MAX_MULTISIG_KEYS, MultisigConfig};
 
 pub(super) fn valid_config(m: u8, n: u8) -> bool {
     m != 0 && n != 0 && m <= n && n as usize <= MAX_MULTISIG_KEYS

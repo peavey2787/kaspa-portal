@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use super::{resolve_execution_branches, MAX_COVENANT_KEYS};
+use super::{resolve_execution_branches, CovenantExecution, MAX_COVENANT_KEYS};
 use crate::contract::covenant::branch::resolve_covenant_branches;
 
 /// `IF <k0> CHECKSIG ELSE IF <k1> CHECKSIG ELSE ... <kn> CHECKSIG ENDIF...`
@@ -11,7 +11,7 @@ fn branch_chain(keys: usize) -> Vec<u8> {
             script.push(0x63);
         }
         script.push(0x20);
-        script.extend_from_slice(&[key as u8 + 1; 32]);
+        script.extend_from_slice(&[u8::try_from(key).unwrap() + 1; 32]);
         script.push(0xac);
         if key + 1 < keys {
             script.push(0x67);
@@ -29,7 +29,14 @@ fn execution_resolution_admits_exactly_the_candidate_key_capacity() {
             .expect("structurally valid chain")
             .selector_mask();
         assert_eq!(
-            resolve_execution_branches(&script, mask, 0).is_ok(),
+            resolve_execution_branches(
+                &script,
+                CovenantExecution {
+                    supplied_mask: mask,
+                    supplied_true_mask: 0,
+                },
+            )
+            .is_ok(),
             admitted,
             "{keys} keys"
         );

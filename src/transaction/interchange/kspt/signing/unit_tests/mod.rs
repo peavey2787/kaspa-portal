@@ -238,7 +238,7 @@ fn multisig_signer_covers_p2pk_multisig_and_covenant_routes() {
         sign_transaction_multisig_with_entropy(&mut p2pk, &seeds, SigHashType::All, None, &entropy,),
         Ok(1),
     );
-    assert_eq!(p2pk.inputs[0].sig_count, 1);
+    assert_eq!(p2pk.inputs[0].sigs.len(), 1);
 
     let mut multisig_redeem = [0u8; 36];
     multisig_redeem[0] = 0x51;
@@ -258,7 +258,7 @@ fn multisig_signer_covers_p2pk_multisig_and_covenant_routes() {
         ),
         Ok(1),
     );
-    assert_eq!(multisig.inputs[0].sig_count, 1);
+    assert_eq!(multisig.inputs[0].sigs.len(), 1);
 
     let mut covenant_redeem = [0u8; 34];
     covenant_redeem[0] = 0x20;
@@ -266,9 +266,10 @@ fn multisig_signer_covers_p2pk_multisig_and_covenant_routes() {
     covenant_redeem[33] = 0xac;
     let mut covenant = transaction();
     set_p2sh(&mut covenant, &covenant_redeem);
-    covenant.inputs[0].covenant_execution_present = true;
-    covenant.inputs[0].covenant_execution_mask = 0;
-    covenant.inputs[0].covenant_execution_true_mask = 0;
+    covenant.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0,
+        supplied_true_mask: 0,
+    });
     assert_eq!(
         sign_transaction_multisig_with_entropy(
             &mut covenant,
@@ -279,15 +280,16 @@ fn multisig_signer_covers_p2pk_multisig_and_covenant_routes() {
         ),
         Ok(1),
     );
-    assert_eq!(covenant.inputs[0].sig_count, 1);
+    assert_eq!(covenant.inputs[0].sigs.len(), 1);
     assert_ne!(covenant.inputs[0].sigs[0].signature, [0u8; 64]);
     assert_ne!(covenant.inputs[0].sigs[0].signature, [1u8; 64]);
 
     let mut filtered = transaction();
     set_p2sh(&mut filtered, &covenant_redeem);
-    filtered.inputs[0].covenant_execution_present = true;
-    filtered.inputs[0].covenant_execution_mask = 0;
-    filtered.inputs[0].covenant_execution_true_mask = 0;
+    filtered.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0,
+        supplied_true_mask: 0,
+    });
     assert_eq!(
         sign_transaction_multisig_with_entropy(
             &mut filtered,
@@ -337,9 +339,10 @@ fn covenant_signing_requires_complete_execution_proof_and_signs_only_the_active_
 
     let mut owner = transaction();
     set_p2sh(&mut owner, &redeem);
-    owner.inputs[0].covenant_execution_present = true;
-    owner.inputs[0].covenant_execution_mask = 1;
-    owner.inputs[0].covenant_execution_true_mask = 1;
+    owner.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 1,
+        supplied_true_mask: 1,
+    });
     assert_eq!(
         sign_transaction_multisig_with_entropy(
             &mut owner,
@@ -354,9 +357,10 @@ fn covenant_signing_requires_complete_execution_proof_and_signs_only_the_active_
 
     let mut beneficiary = transaction();
     set_p2sh(&mut beneficiary, &redeem);
-    beneficiary.inputs[0].covenant_execution_present = true;
-    beneficiary.inputs[0].covenant_execution_mask = 1;
-    beneficiary.inputs[0].covenant_execution_true_mask = 0;
+    beneficiary.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 1,
+        supplied_true_mask: 0,
+    });
     assert_eq!(
         sign_transaction_multisig_with_entropy(
             &mut beneficiary,
@@ -373,9 +377,10 @@ fn covenant_signing_requires_complete_execution_proof_and_signs_only_the_active_
     let mut nested = redeem.clone();
     nested.splice(35..35, [0x63, 0x51, 0x68]);
     set_p2sh(&mut incomplete, &nested);
-    incomplete.inputs[0].covenant_execution_present = true;
-    incomplete.inputs[0].covenant_execution_mask = 1;
-    incomplete.inputs[0].covenant_execution_true_mask = 1;
+    incomplete.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 1,
+        supplied_true_mask: 1,
+    });
     assert_eq!(
         sign_transaction_multisig_with_entropy(
             &mut incomplete,
@@ -390,9 +395,11 @@ fn covenant_signing_requires_complete_execution_proof_and_signs_only_the_active_
 
     let mut richer_topology = transaction();
     set_p2sh(&mut richer_topology, &nested);
-    richer_topology.inputs[0].covenant_execution_present = true;
-    richer_topology.inputs[0].covenant_execution_mask = 3;
-    richer_topology.inputs[0].covenant_execution_true_mask = 3;
+    richer_topology.inputs[0].covenant_execution =
+        Some(crate::transaction::model::CovenantExecution {
+            supplied_mask: 3,
+            supplied_true_mask: 3,
+        });
     assert_eq!(
         sign_transaction_multisig_with_entropy(
             &mut richer_topology, &seeds, SigHashType::All, None, &entropy,
@@ -400,7 +407,7 @@ fn covenant_signing_requires_complete_execution_proof_and_signs_only_the_active_
         Ok(1),
         "a complete richer selector assignment with exactly one active signer may be signed for a typed specialized host plan",
     );
-    assert_eq!(richer_topology.inputs[0].sig_count, 1);
+    assert_eq!(richer_topology.inputs[0].sigs.len(), 1);
 }
 
 #[test]
@@ -427,7 +434,7 @@ fn single_key_public_entry_points_cover_response_and_in_place_signing() {
         sign_transaction_in_place(&mut in_place, &private_key, SigHashType::All),
         Ok(1)
     );
-    assert_eq!(in_place.inputs[0].sig_count, 1);
+    assert_eq!(in_place.inputs[0].sigs.len(), 1);
 
     let mut in_place_entropy = transaction();
     assert_eq!(
@@ -439,7 +446,7 @@ fn single_key_public_entry_points_cover_response_and_in_place_signing() {
         ),
         Ok(1)
     );
-    assert_eq!(in_place_entropy.inputs[0].sig_count, 1);
+    assert_eq!(in_place_entropy.inputs[0].sigs.len(), 1);
 
     let mut empty = Transaction::try_new().expect("transaction test allocation");
     assert_eq!(
@@ -519,7 +526,7 @@ fn covenant_scanner_distinguishes_unchecked_delayed_and_capacity_limited_keys() 
 fn first_appended_signature_initializes_input_sighash_state() {
     let mut input = transaction().inputs[0].clone();
     input.sighash_type = 0;
-    assert_eq!(input.sig_count, 0);
+    assert_eq!(input.sigs.len(), 0);
     assert!(append_signature(
         &mut input,
         [0x6a; 64],
@@ -527,7 +534,7 @@ fn first_appended_signature_initializes_input_sighash_state() {
         2,
         [0x03; 33],
     ));
-    assert_eq!(input.sig_count, 1);
+    assert_eq!(input.sigs.len(), 1);
     assert_eq!(input.sighash_type, SigHashType::Single.to_byte());
     assert_eq!(input.sigs[0].sighash_type, SigHashType::Single.to_byte());
 }
@@ -553,7 +560,7 @@ fn signature_state_rejects_duplicates_and_capacity_overflow() {
         ));
     }
     assert_eq!(
-        input.sig_count as usize,
+        input.sigs.len(),
         crate::transaction::model::MAX_SIGS_PER_INPUT
     );
     assert!(!append_signature(
@@ -657,7 +664,7 @@ fn already_signed_covenant_input_short_circuits_without_resigning() {
         ),
         Err(PsktError::NoInputs),
     );
-    assert_eq!(tx.inputs[0].sig_count, 1);
+    assert_eq!(tx.inputs[0].sigs.len(), 1);
     assert_eq!(tx.inputs[0].sigs[0].signature, [0x55; 64]);
 }
 
@@ -891,11 +898,9 @@ fn anti_klepto_transaction_round_trip_verifies_and_rejects_mutations() {
     reject_body_mutation!("payload length", |tx: &mut Transaction| {
         tx.payload = alloc::vec![0x91];
     });
-    reject_body_mutation!("stealth presence", |tx: &mut Transaction| tx
-        .has_stealth_tweak =
-        true);
-    reject_body_mutation!("stealth tweak", |tx: &mut Transaction| tx.stealth_tweak
-        [0] ^= 1);
+    reject_body_mutation!("stealth presence", |tx: &mut Transaction| {
+        tx.stealth_tweak = Some([0u8; 32]);
+    });
     reject_body_mutation!("outpoint txid", |tx: &mut Transaction| tx.inputs[0]
         .previous_outpoint
         .transaction_id[0] ^=
@@ -941,32 +946,26 @@ fn anti_klepto_transaction_round_trip_verifies_and_rejects_mutations() {
     .script_public_key
     .script[1] ^=
         1);
-    reject_body_mutation!("covenant presence", |tx: &mut Transaction| tx.outputs[0]
-        .has_covenant =
-        true);
-    reject_body_mutation!("covenant authorizer", |tx: &mut Transaction| tx.outputs
-        [0]
-    .covenant_auth_input =
-        1);
-    reject_body_mutation!("covenant id", |tx: &mut Transaction| tx.outputs[0]
-        .covenant_id[0] ^=
-        1);
+    reject_body_mutation!("covenant presence", |tx: &mut Transaction| {
+        tx.outputs[0].covenant = Some(crate::transaction::model::Covenant {
+            authorizing_input: 0,
+            id: [0u8; 32],
+        });
+    });
     reject_body_mutation!("derivation presence", |tx: &mut Transaction| {
-        tx.outputs[0].has_derivation_hint = true;
-    });
-    reject_body_mutation!("derivation branch", |tx: &mut Transaction| {
-        tx.outputs[0].derivation_branch = 1;
-    });
-    reject_body_mutation!("derivation index", |tx: &mut Transaction| {
-        tx.outputs[0].derivation_index = 1;
+        tx.outputs[0].derivation_hint = Some(crate::transaction::model::Derivation {
+            branch: 0,
+            index: 0,
+        });
     });
 
-    // New signatures are part of the proof, not the immutable body. Missing or
-    // cryptographically modified proof material must fail with the exact class.
+    // New signatures are part of the proof, not the immutable body. A dropped
+    // signature no longer matches the proof count; cryptographically modified
+    // proof material must fail as an invalid proof.
     let mut missing_signature = Transaction::try_new().expect("transaction test allocation");
     parse_compact_kspt(&signed_tx_wire[..signed_tx_len], &mut missing_signature)
         .expect("parse missing-signature baseline");
-    missing_signature.inputs[0].sigs[0].present = false;
+    missing_signature.inputs[0].sigs.clear();
     assert_eq!(
         verify_host_transcript(
             &original,
@@ -975,7 +974,7 @@ fn anti_klepto_transaction_round_trip_verifies_and_rejects_mutations() {
             &signed_message,
             &host_secret
         ),
-        Err(AntiKleptoVerifyError::InvalidProof),
+        Err(AntiKleptoVerifyError::TransactionMismatch),
     );
     let mut bad_signature = Transaction::try_new().expect("transaction test allocation");
     parse_compact_kspt(&signed_tx_wire[..signed_tx_len], &mut bad_signature)
@@ -1177,26 +1176,6 @@ fn anti_klepto_finalization_rejects_invalid_ranges_slots_sighashes_and_keys() {
         Err(PsktError::InvalidSignatureState),
     );
 
-    let mut end_past_capacity = provisional_from_wire(&provisional);
-    end_past_capacity.inputs[0].sig_count = 6;
-    assert_eq!(
-        finalize_raw_key_signatures(
-            &mut end_past_capacity,
-            &private_key,
-            &initial,
-            &session,
-            &host_secret,
-        ),
-        Err(PsktError::InvalidSignatureState),
-    );
-
-    let mut absent = provisional_from_wire(&provisional);
-    absent.inputs[0].sigs[0].present = false;
-    assert_eq!(
-        finalize_raw_key_signatures(&mut absent, &private_key, &initial, &session, &host_secret),
-        Err(PsktError::InvalidSignatureState),
-    );
-
     let mut missing_pubkey = provisional_from_wire(&provisional);
     missing_pubkey.inputs[0].sigs[0].pubkey_compressed[0] = 0;
     assert_eq!(
@@ -1271,10 +1250,12 @@ fn provisional_from_wire(tx: &Transaction) -> Transaction {
     // resolved compressed key. Restore that signing metadata so each mutation
     // below reaches the branch it is intended to exercise.
     for input_index in 0..parsed.num_inputs {
-        let signature_count = usize::from(parsed.inputs[input_index].sig_count);
-        for slot in 0..signature_count {
-            parsed.inputs[input_index].sigs[slot].pubkey_compressed =
-                tx.inputs[input_index].sigs[slot].pubkey_compressed;
+        for (parsed_sig, sig) in parsed.inputs[input_index]
+            .sigs
+            .iter_mut()
+            .zip(tx.inputs[input_index].sigs.iter())
+        {
+            parsed_sig.pubkey_compressed = sig.pubkey_compressed;
         }
     }
     parsed
@@ -1329,7 +1310,7 @@ fn anti_klepto_partial_multisig_preserves_existing_signature_and_sighash_binding
         ),
         Ok(1),
     );
-    assert_eq!(signed.inputs[0].sig_count, 2);
+    assert_eq!(signed.inputs[0].sigs.len(), 2);
 
     let records = nonce_commitment_records(&signed, &initial).expect("new nonce record");
     assert_eq!(records.len(), 1);
@@ -1400,7 +1381,7 @@ fn anti_klepto_partial_multisig_preserves_existing_signature_and_sighash_binding
     let mut removed_existing = Transaction::try_new().expect("transaction test allocation");
     parse_compact_kspt(&signed_wire[..signed_len], &mut removed_existing)
         .expect("parse count mutation");
-    removed_existing.inputs[0].sig_count = 0;
+    removed_existing.inputs[0].sigs.clear();
     assert_eq!(
         verify_host_transcript(
             &original,
@@ -1433,23 +1414,13 @@ fn anti_klepto_record_builders_reject_empty_and_invalid_signature_state() {
     use super::{initial_signature_counts, nonce_commitment_records, proof_records};
 
     let private_key = [1u8; 32];
-    let mut unsigned = anti_klepto_p2pk_transaction(&private_key);
+    let unsigned = anti_klepto_p2pk_transaction(&private_key);
     let initial = initial_signature_counts(&unsigned);
     assert_eq!(
         nonce_commitment_records(&unsigned, &initial),
         Err(PsktError::NoInputs)
     );
     assert_eq!(proof_records(&unsigned, &initial), Err(PsktError::NoInputs));
-
-    unsigned.inputs[0].sig_count = 6;
-    assert_eq!(
-        nonce_commitment_records(&unsigned, &initial),
-        Err(PsktError::InvalidSignatureState),
-    );
-    assert_eq!(
-        proof_records(&unsigned, &initial),
-        Err(PsktError::InvalidSignatureState)
-    );
 
     let mut provisional = anti_klepto_p2pk_transaction(&private_key);
     super::sign_transaction_in_place_with_entropy(
@@ -1461,17 +1432,6 @@ fn anti_klepto_record_builders_reject_empty_and_invalid_signature_state() {
     .expect("provisional record");
     let provisional_initial = vec![0];
 
-    provisional.inputs[0].sigs[0].present = false;
-    assert_eq!(
-        nonce_commitment_records(&provisional, &provisional_initial),
-        Err(PsktError::InvalidSignatureState),
-    );
-    assert_eq!(
-        proof_records(&provisional, &provisional_initial),
-        Err(PsktError::InvalidSignatureState),
-    );
-
-    provisional.inputs[0].sigs[0].present = true;
     provisional.inputs[0].sigs[0].pubkey_compressed[0] = 0;
     assert_eq!(
         nonce_commitment_records(&provisional, &provisional_initial),
@@ -1501,8 +1461,7 @@ fn anti_klepto_record_builders_reject_empty_and_invalid_signature_state() {
         Err(PsktError::InvalidSignatureState),
     );
 
-    let mut invalid_range = anti_klepto_p2pk_transaction(&private_key);
-    invalid_range.inputs[0].sig_count = 1;
+    let invalid_range = anti_klepto_p2pk_transaction(&private_key);
     let after_end = vec![2];
     assert_eq!(
         nonce_commitment_records(&invalid_range, &after_end),
@@ -1548,8 +1507,7 @@ fn anti_klepto_account_finalization_covers_stealth_material_resolution() {
     let mut signed = transaction();
     set_p2pk(&mut signed, &target);
     signed.inputs[0].sighash_type = SigHashType::All.to_byte();
-    signed.has_stealth_tweak = true;
-    signed.stealth_tweak = tweak_bytes;
+    signed.stealth_tweak = Some(tweak_bytes);
     let initial = initial_signature_counts(&signed);
     sign_transaction_multi_addr_with_entropy(&mut signed, &seed, SigHashType::All, &[0x62; 32])
         .expect("provisional stealth signature");
@@ -1592,7 +1550,7 @@ fn per_input_multisig_signing_rejects_out_of_range_index_without_mutation() {
     let account = derive_account_key(&seed).expect("account");
     let accounts = [(account.to_raw(), true)];
     let mut tx = transaction();
-    let before = tx.inputs[0].sig_count;
+    let before = tx.inputs[0].sigs.len();
     assert_eq!(
         super::sign_multisig_accounts_input_with_entropy(
             &mut tx,
@@ -1604,7 +1562,7 @@ fn per_input_multisig_signing_rejects_out_of_range_index_without_mutation() {
         ),
         Err(PsktError::InvalidInputIndex),
     );
-    assert_eq!(tx.inputs[0].sig_count, before);
+    assert_eq!(tx.inputs[0].sigs.len(), before);
 }
 
 #[test]

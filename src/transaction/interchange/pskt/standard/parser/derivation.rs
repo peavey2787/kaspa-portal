@@ -1,11 +1,11 @@
 //! Untrusted BIP32 derivation-hint extraction for multisig PSKT fields.
 
-use crate::transaction::model::Ms45Hint;
+use crate::transaction::model::Ms45Derivation;
 
 /// Extract the v1.0.6 45' trailing `cosigner/chain/index` search hint from a
 /// validated PSKT KeySource value. The hint is never authoritative: signing
 /// still derives and matches the redeem script before using a key.
-pub(super) fn extract_ms45_hint(src: &[u8], start: usize, end: usize) -> Option<Ms45Hint> {
+pub(super) fn extract_ms45_hint(src: &[u8], start: usize, end: usize) -> Option<Ms45Derivation> {
     let region = src.get(start..end)?;
     parse_ms45_path(find_derivation_path(region)?)
 }
@@ -43,7 +43,7 @@ fn find_delimiter(bytes: &[u8]) -> Option<usize> {
     bytes.iter().position(|byte| matches!(*byte, b',' | b'}'))
 }
 
-fn parse_ms45_path(path: &[u8]) -> Option<Ms45Hint> {
+fn parse_ms45_path(path: &[u8]) -> Option<Ms45Derivation> {
     let tail = path.strip_prefix(b"m/45'/111111'/0'/")?;
     let mut components = tail.split(|byte| *byte == b'/');
     let cosigner = parse_soft_decimal(components.next()?)?;
@@ -52,8 +52,7 @@ fn parse_ms45_path(path: &[u8]) -> Option<Ms45Hint> {
     if components.next().is_some() || chain > 1 {
         return None;
     }
-    Some(Ms45Hint {
-        present: true,
+    Some(Ms45Derivation {
         cosigner,
         chain,
         index,

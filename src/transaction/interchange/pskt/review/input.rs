@@ -102,7 +102,7 @@ fn parse_partial_sigs_map(
         .iter()
         .map(|(pubkey, signature)| parse_partial_sig_entry(pubkey, signature, redeem))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok((sigs.len().min(u8::MAX as usize) as u8, sigs))
+    Ok((u8::try_from(sigs.len()).unwrap_or(u8::MAX), sigs))
 }
 
 fn parse_partial_sig_entry(

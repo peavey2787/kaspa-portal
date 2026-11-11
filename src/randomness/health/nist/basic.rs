@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::{
-    math::{erfc, gamma_q},
+    math::{erfc, gamma_q, power_of_two},
     normalize, NistResult,
 };
 
@@ -124,8 +124,8 @@ pub fn serial(bits: &[u8], m: usize) -> NistResult {
     let psi_m2 = psi2(&bits, m.saturating_sub(2));
     let delta1 = psi_m - psi_m1;
     let delta2 = psi_m - 2.0 * psi_m1 + psi_m2;
-    let p1 = gamma_q(2f64.powi(m as i32 - 1), delta1 / 2.0);
-    let p2 = gamma_q(2f64.powi(m as i32 - 2), delta2 / 2.0);
+    let p1 = gamma_q(power_of_two(m) / 2.0, delta1 / 2.0);
+    let p2 = gamma_q(power_of_two(m) / 4.0, delta2 / 2.0);
     NistResult::from_many(format!("serial_m{m}"), vec![p1, p2], vec![delta1, delta2])
 }
 
@@ -165,5 +165,5 @@ fn psi2(bits: &[u8], m: usize) -> f64 {
         *counts.entry(value).or_default() += 1;
     }
     let square_sum = counts.values().map(|count| count * count).sum::<usize>() as f64;
-    square_sum * 2f64.powi(m as i32) / n as f64 - n as f64
+    square_sum * power_of_two(m) / n as f64 - n as f64
 }

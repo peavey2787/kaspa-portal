@@ -133,8 +133,8 @@ pub(super) fn captured_field_at<'a>(
         parsed.unknown_scopes[index],
         CapturedField {
             key,
-            field_start: field_start as u32,
-            value_start: value_start as u32,
+            field_start: u32::try_from(field_start).map_err(|_| PskError::JsonTooLarge)?,
+            value_start: u32::try_from(value_start).map_err(|_| PskError::JsonTooLarge)?,
             end: parsed.unknowns[index].1,
         },
     )))

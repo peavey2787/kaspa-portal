@@ -24,9 +24,9 @@ fn tampered_beacon_output_is_rejected() {
     let portal = KaspaPortal::builder().build().unwrap();
     let beacon = portal.randomness().beacon();
     let mut result = beacon.generate(request()).unwrap();
-    assert!(beacon.verify(&result).unwrap().valid);
+    assert!(beacon.verify(&result).unwrap().is_valid());
     result.output[17] ^= 0x80;
-    assert!(!beacon.verify(&result).unwrap().valid);
+    assert!(!beacon.verify(&result).unwrap().is_valid());
 }
 
 #[test]

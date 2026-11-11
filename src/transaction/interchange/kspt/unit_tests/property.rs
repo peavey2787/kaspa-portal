@@ -11,8 +11,8 @@ fn generated_seed(case: u8) -> [u8; 64] {
     for (index, byte) in seed.iter_mut().enumerate() {
         *byte = case
             .wrapping_mul(37)
-            .wrapping_add(index as u8)
-            .rotate_left((index % 7) as u32);
+            .wrapping_add(u8::try_from(index).unwrap())
+            .rotate_left(u32::try_from(index % 7).unwrap());
     }
     seed
 }

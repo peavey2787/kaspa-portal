@@ -10,8 +10,8 @@ fn qr_frame_accepts_exact_protocol_maxima() {
     let mut encoded = [0u8; FRAME_HEADER_LEN + u8::MAX as usize];
     let written = encode_frame(
         &identifier,
-        (MAX_FRAMES - 1) as u8,
-        MAX_FRAMES as u8,
+        u8::try_from(MAX_FRAMES - 1).unwrap(),
+        u8::try_from(MAX_FRAMES).unwrap(),
         &fragment,
         &mut encoded,
     )
@@ -19,8 +19,8 @@ fn qr_frame_accepts_exact_protocol_maxima() {
 
     assert_eq!(written, encoded.len());
     let parsed = parse_frame(&encoded).expect("exact protocol maxima must parse");
-    assert_eq!(parsed.frame_index, (MAX_FRAMES - 1) as u8);
-    assert_eq!(parsed.total_frames, MAX_FRAMES as u8);
+    assert_eq!(parsed.frame_index, u8::try_from(MAX_FRAMES - 1).unwrap());
+    assert_eq!(parsed.total_frames, u8::try_from(MAX_FRAMES).unwrap());
     assert_eq!(parsed.fragment, fragment.as_slice());
 }
 

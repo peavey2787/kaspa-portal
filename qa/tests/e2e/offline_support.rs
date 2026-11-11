@@ -1,3 +1,7 @@
+#[path = "scanner_fixture.rs"]
+mod scanner_fixture;
+pub use scanner_fixture::raw_scanner_fixture;
+
 use kaspa_portal::primitives::address::KaspaNetwork;
 use kaspa_portal::{
     chain::utxo::UtxoEntry,
@@ -118,22 +122,6 @@ pub fn dummy_utxo(wallet: &WalletData, tx_byte: u8, index: u32, amount: u64) -> 
         block_daa_score: 1,
         covenant_id: None,
     }
-}
-
-pub fn raw_scanner_fixture(transaction_id: &[u8; 32], preimage: &[u8]) -> Vec<u8> {
-    let mut script = Vec::with_capacity(preimage.len() + 1);
-    script.push(u8::try_from(preimage.len()).expect("small preimage"));
-    script.extend_from_slice(preimage);
-    let script_length = script.len().max(10);
-    let mut raw = Vec::new();
-    raw.extend_from_slice(&37u32.to_le_bytes());
-    raw.push(1);
-    raw.extend_from_slice(transaction_id);
-    raw.extend_from_slice(&7u32.to_le_bytes());
-    raw.extend_from_slice(&(script_length as u32).to_le_bytes());
-    raw.extend_from_slice(&script);
-    raw.resize(raw.len() + script_length.saturating_sub(script.len()), 0);
-    raw
 }
 
 pub fn decode_pskb_wire(wire: &str) -> Value {

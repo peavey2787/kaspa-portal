@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::chain::utxo::UtxoEntry;
+pub use crate::transaction::model::CovenantExecution;
 
 /// Typed input description for browser-compatible PSKB planning.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -20,15 +21,6 @@ pub struct PskbInputPlan {
     #[serde(with = "crate::primitives::serialization::decimal_opt_u64")]
     pub min_time: Option<u64>,
     pub covenant_execution: Option<CovenantExecution>,
-}
-
-/// The complete selector assignment that chooses a covenant input's path.
-/// Signers and finalizers act only on this; branch names are never consulted.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CovenantExecution {
-    pub supplied_mask: u16,
-    pub supplied_true_mask: u16,
 }
 
 /// Signing and metadata policy for one covenant PSKB input.

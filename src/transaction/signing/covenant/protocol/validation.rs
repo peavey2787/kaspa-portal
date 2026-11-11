@@ -21,6 +21,13 @@ pub(super) fn validate_lengths(script_len: usize, context_len: usize) -> Result<
     }
 }
 
+/// A big-endian `u16` length field.
+pub(super) fn length_field(len: usize) -> Result<[u8; 2], ProtocolError> {
+    u16::try_from(len)
+        .map(u16::to_be_bytes)
+        .map_err(|_| ProtocolError::InvalidLength)
+}
+
 pub(super) fn request_total_len(
     script_len: usize,
     context_len: usize,

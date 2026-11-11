@@ -22,11 +22,11 @@ fn req() -> BeaconRequest {
 #[test]
 fn proof_verifies() {
     let r = generate(req()).unwrap();
-    assert!(verify_result(&r).unwrap().valid)
+    assert!(verify_result(&r).unwrap().is_valid())
 }
 #[test]
 fn tamper_fails() {
     let mut r = generate(req()).unwrap();
     r.output[0] ^= 1;
-    assert!(!verify_result(&r).unwrap().valid)
+    assert!(!verify_result(&r).unwrap().is_valid())
 }

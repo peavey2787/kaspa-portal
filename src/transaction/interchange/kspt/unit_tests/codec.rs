@@ -4,7 +4,7 @@ use alloc::{vec, vec::Vec};
 use super::super::{
     parse_compact_kspt, serialize_compact_kspt, serialize_compact_kspt_vec, PsktError,
 };
-use super::common::{add_single_signature, set_p2sh_script, transaction};
+use super::common::{add_single_signature, fill_signature_capacity, set_p2sh_script, transaction};
 
 #[test]
 fn heap_compact_serializer_is_covered_by_round_trip_fixture() {
@@ -32,7 +32,7 @@ fn compact_redeem_script_round_trips() {
     let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse compact KSPT");
     assert_eq!(parsed.redeem_bytes(0), redeem);
-    assert_eq!(parsed.inputs[0].sig_count, 1);
+    assert_eq!(parsed.inputs[0].sigs.len(), 1);
 }
 
 #[test]
@@ -40,50 +40,44 @@ fn compact_codec_accepts_exact_maximum_signature_slots() {
     use crate::transaction::model::MAX_SIGS_PER_INPUT;
 
     let mut tx = transaction();
-    tx.inputs[0].sig_count = MAX_SIGS_PER_INPUT as u8;
-    tx.inputs[0].sighash_type = 1;
-    for (position, slot) in tx.inputs[0].sigs.iter_mut().enumerate() {
-        slot.present = true;
-        slot.pubkey_pos = position as u8;
-        slot.sighash_type = 1;
-        slot.signature = [position as u8 + 1; 64];
-    }
+    fill_signature_capacity(&mut tx);
+    assert_eq!(tx.inputs[0].sigs.len(), MAX_SIGS_PER_INPUT);
 
     let mut wire = vec![0u8; 16_384];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize exact signature capacity");
     let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse exact signature capacity");
-    assert_eq!(parsed.inputs[0].sig_count as usize, MAX_SIGS_PER_INPUT);
-    for (position, slot) in parsed.inputs[0].sigs.iter().enumerate() {
-        assert!(slot.present);
-        assert_eq!(slot.pubkey_pos, position as u8);
-        assert_eq!(slot.signature, [position as u8 + 1; 64]);
-    }
+    assert_eq!(parsed.inputs[0].sigs.len(), MAX_SIGS_PER_INPUT);
+    assert_eq!(*parsed.inputs[0].sigs, *tx.inputs[0].sigs);
 }
 
 #[test]
 fn compact_covenant_binding_round_trips() {
     let mut tx = transaction();
     add_single_signature(&mut tx, 0, [0x44; 64]);
-    tx.outputs[0].has_covenant = true;
-    tx.outputs[0].covenant_auth_input = 0;
-    tx.outputs[0].covenant_id = [0x42; 32];
+    tx.outputs[0].covenant = Some(crate::transaction::model::Covenant {
+        authorizing_input: 0,
+        id: [0x42; 32],
+    });
 
     let mut wire = [0u8; 2048];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize compact KSPT");
     let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse compact KSPT");
-    assert!(parsed.outputs[0].has_covenant);
-    assert_eq!(parsed.outputs[0].covenant_id, [0x42; 32]);
+    assert_eq!(
+        parsed.outputs[0].covenant.map(|covenant| covenant.id),
+        Some([0x42; 32])
+    );
 }
 
 #[test]
 fn compact_v1_binds_network_and_output_derivation_hint() {
     let mut tx = transaction();
     tx.network = crate::primitives::address::KaspaNetwork::Testnet;
-    tx.outputs[0].has_derivation_hint = true;
-    tx.outputs[0].derivation_branch = 1;
-    tx.outputs[0].derivation_index = 37;
+    tx.outputs[0].derivation_hint = Some(crate::transaction::model::Derivation {
+        branch: 1,
+        index: 37,
+    });
 
     let mut wire = [0u8; 4096];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize v1 KSPT");
@@ -95,9 +89,13 @@ fn compact_v1_binds_network_and_output_derivation_hint() {
         parsed.network,
         crate::primitives::address::KaspaNetwork::Testnet
     );
-    assert!(parsed.outputs[0].has_derivation_hint);
-    assert_eq!(parsed.outputs[0].derivation_branch, 1);
-    assert_eq!(parsed.outputs[0].derivation_index, 37);
+    assert_eq!(
+        parsed.outputs[0].derivation_hint,
+        Some(crate::transaction::model::Derivation {
+            branch: 1,
+            index: 37
+        })
+    );
 }
 
 #[test]
@@ -337,7 +335,7 @@ fn compact_parser_rejects_each_global_count_boundary() {
         (V1_OUTPUT_COUNT_OFFSET, 0, PsktError::NoOutputs),
         (
             V1_OUTPUT_COUNT_OFFSET,
-            (MAX_OUTPUTS + 1) as u8,
+            u8::try_from(MAX_OUTPUTS + 1).unwrap(),
             PsktError::TooManyOutputs,
         ),
     ] {
@@ -350,7 +348,7 @@ fn compact_parser_rejects_each_global_count_boundary() {
 
 #[test]
 fn compact_parser_rejects_oversized_input_and_output_scripts_before_copying() {
-    let oversized = (MAX_SCRIPT_SIZE + 1) as u16;
+    let oversized = u16::try_from(MAX_SCRIPT_SIZE + 1).unwrap();
 
     let (mut input_wire, input_len) = unsigned_compact_wire();
     input_wire[V1_FIRST_INPUT_SPK_LEN_OFFSET] = 0xff;
@@ -392,14 +390,12 @@ fn append_covenant_trailer(
 #[test]
 fn compact_trailers_cover_stealth_serialization_duplicates_and_covenant_validation() {
     let mut tx = transaction();
-    tx.has_stealth_tweak = true;
-    tx.stealth_tweak = [0x77; 32];
+    tx.stealth_tweak = Some([0x77; 32]);
     let mut wire = vec![0u8; 4096];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("stealth trailer serialize");
     let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("stealth trailer parse");
-    assert!(parsed.has_stealth_tweak);
-    assert_eq!(parsed.stealth_tweak, [0x77; 32]);
+    assert_eq!(parsed.stealth_tweak, Some([0x77; 32]));
 
     let (mut duplicate_stealth, base_len) = unsigned_compact_wire();
     let mut pos = base_len;
@@ -532,7 +528,10 @@ fn compact_v1_derivation_trailers_reject_bad_position_branch_and_duplicates() {
     let (mut valid, len) = v1_network_wire(crate::primitives::address::KaspaNetwork::Mainnet);
     let end = append_derivation_trailer(&mut valid, len, 0, 0, 0x7fff_ffff);
     parse_compact_kspt(&valid[..end], &mut parsed).expect("maximum soft derivation index parses");
-    assert_eq!(parsed.outputs[0].derivation_index, 0x7fff_ffff);
+    assert_eq!(
+        parsed.outputs[0].derivation_hint.map(|hint| hint.index),
+        Some(0x7fff_ffff)
+    );
 }
 
 fn append_record(wire: &mut [u8], pos: usize, record: &[u8]) -> usize {
@@ -543,16 +542,21 @@ fn append_record(wire: &mut [u8], pos: usize, record: &[u8]) -> usize {
 #[test]
 fn compact_v1_input_derivation_hint_round_trips_and_rejects_untrusted_values() {
     let mut tx = transaction();
-    tx.inputs[0].has_derivation_hint = true;
-    tx.inputs[0].derivation_branch = 1;
-    tx.inputs[0].derivation_index = 500;
+    tx.inputs[0].derivation_hint = Some(crate::transaction::model::Derivation {
+        branch: 1,
+        index: 500,
+    });
     let mut wire = [0u8; 4096];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize input hint");
     let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire[..len], &mut parsed).expect("parse input hint");
-    assert!(parsed.inputs[0].has_derivation_hint);
-    assert_eq!(parsed.inputs[0].derivation_branch, 1);
-    assert_eq!(parsed.inputs[0].derivation_index, 500);
+    assert_eq!(
+        parsed.inputs[0].derivation_hint,
+        Some(crate::transaction::model::Derivation {
+            branch: 1,
+            index: 500
+        })
+    );
 
     for record in [
         [b'A', 0, 2, 1, 0, 0, 0],
@@ -590,7 +594,10 @@ fn compact_v1_trailers_must_follow_canonical_kind_order() {
 
     // Any trailer before the network binding is refused.
     let mut tx = transaction();
-    tx.inputs[0].has_derivation_hint = true;
+    tx.inputs[0].derivation_hint = Some(crate::transaction::model::Derivation {
+        branch: 0,
+        index: 0,
+    });
     let mut wire = vec![0u8; 4096];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize");
     let network = len - 7 - 2;
@@ -607,17 +614,26 @@ fn compact_v1_trailers_must_follow_canonical_kind_order() {
 #[test]
 fn compact_v1_covenant_execution_round_trips_and_rejects_inconsistent_masks() {
     let mut tx = transaction();
-    tx.inputs[0].covenant_execution_present = true;
-    tx.inputs[0].covenant_execution_mask = 0b101;
-    tx.inputs[0].covenant_execution_true_mask = 0b001;
+    tx.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0b101,
+        supplied_true_mask: 0b001,
+    });
     let wire = serialize_compact_kspt_vec(&tx).expect("serialize covenant execution");
     let mut parsed = Transaction::try_new().expect("transaction storage");
     parse_compact_kspt(&wire, &mut parsed).expect("parse covenant execution");
-    assert!(parsed.inputs[0].covenant_execution_present);
-    assert_eq!(parsed.inputs[0].covenant_execution_mask, 0b101);
-    assert_eq!(parsed.inputs[0].covenant_execution_true_mask, 0b001);
+    assert_eq!(
+        parsed.inputs[0].covenant_execution,
+        Some(crate::transaction::model::CovenantExecution {
+            supplied_mask: 0b101,
+            supplied_true_mask: 0b001
+        })
+    );
 
-    tx.inputs[0].covenant_execution_true_mask = 0b010;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_true_mask = 0b010;
     assert_eq!(
         serialize_compact_kspt_vec(&tx),
         Err(PsktError::InvalidModel)
@@ -665,9 +681,10 @@ fn compact_parser_honours_device_payload_and_input_limits() {
 fn compact_v1_serializer_refuses_derivation_hint_without_network_binding() {
     let mut tx = transaction();
     tx.network = crate::primitives::address::KaspaNetwork::Unknown;
-    tx.outputs[0].has_derivation_hint = true;
-    tx.outputs[0].derivation_branch = 1;
-    tx.outputs[0].derivation_index = 8;
+    tx.outputs[0].derivation_hint = Some(crate::transaction::model::Derivation {
+        branch: 1,
+        index: 8,
+    });
     let mut wire = [0u8; 4096];
     assert_eq!(
         serialize_compact_kspt(&tx, &mut wire),
@@ -677,20 +694,18 @@ fn compact_v1_serializer_refuses_derivation_hint_without_network_binding() {
 
 #[test]
 fn compact_v1_hd45_input_and_change_hints_round_trip_and_reject_duplicates() {
-    use crate::transaction::model::Ms45Hint;
+    use crate::transaction::model::Ms45Derivation;
     let mut tx = transaction();
-    tx.inputs[0].ms45_hint = Ms45Hint {
-        present: true,
+    tx.inputs[0].ms45_hint = Some(Ms45Derivation {
         cosigner: 2,
         chain: 0,
         index: 17,
-    };
-    tx.outputs[0].ms45_hint = Ms45Hint {
-        present: true,
+    });
+    tx.outputs[0].ms45_hint = Some(Ms45Derivation {
         cosigner: 2,
         chain: 1,
         index: 9,
-    };
+    });
     let mut wire = vec![0u8; 4096];
     let len = serialize_compact_kspt(&tx, &mut wire).expect("serialize 45' v1 hints");
     let mut parsed = Transaction::try_new().expect("transaction storage");

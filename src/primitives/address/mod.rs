@@ -350,7 +350,7 @@ fn decode_char(byte: u8) -> Result<u8, String> {
     CHARSET
         .iter()
         .position(|&candidate| candidate == byte)
-        .map(|index| index as u8)
+        .and_then(|index| u8::try_from(index).ok())
         .ok_or_else(|| format!("Invalid character: '{}'", byte as char))
 }
 
@@ -406,19 +406,25 @@ fn convert_bits(data: &[u8], from: u8, to: u8, pad: bool) -> Result<Vec<u8>, Str
         bits += from;
         while bits >= to {
             bits -= to;
-            output.push(((accumulator >> bits) & max_value) as u8);
+            output.push(low_bits(accumulator >> bits, max_value));
         }
     }
 
     if pad {
         if bits > 0 {
-            output.push(((accumulator << (to - bits)) & max_value) as u8);
+            output.push(low_bits(accumulator << (to - bits), max_value));
         }
     } else if bits >= from || ((accumulator << (to - bits)) & max_value) != 0 {
         return Err("Invalid address padding".into());
     }
 
     Ok(output)
+}
+
+/// `value` masked to `max_value`; `to` is at most 8 bits, so the mask leaves
+/// only the low byte.
+fn low_bits(value: u32, max_value: u32) -> u8 {
+    (value & max_value).to_le_bytes()[0]
 }
 
 #[cfg(test)]

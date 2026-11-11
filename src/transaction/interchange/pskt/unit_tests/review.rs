@@ -27,7 +27,7 @@ fn multisig(keys: &[u8], required: u8) -> Vec<u8> {
         script.push(0x20);
         script.extend_from_slice(&[*key; 32]);
     }
-    script.push(0x50 + keys.len() as u8);
+    script.push(0x50 + u8::try_from(keys.len()).unwrap());
     script.push(0xae);
     script
 }

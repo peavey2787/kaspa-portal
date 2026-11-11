@@ -138,10 +138,10 @@ async fn plan_signed_send_with_adaptive_fee(
             .await
             .expect("analyze signed funded transaction");
         assert!(
-            analysis.mass_valid,
+            analysis.mass_valid(),
             "signed funded transaction exceeds mass limits"
         );
-        if analysis.fee_sufficient {
+        if analysis.fee_sufficient() {
             return (signed_wire, analysis, fee);
         }
         fee = next_adaptive_fee(fee, analysis.recommended_fee_sompi);
@@ -194,10 +194,10 @@ async fn plan_multisig_spend_with_adaptive_fee(
             .await
             .expect("analyze signed multisig transaction");
         assert!(
-            analysis.mass_valid,
+            analysis.mass_valid(),
             "signed multisig transaction exceeds mass limits"
         );
-        if analysis.fee_sufficient {
+        if analysis.fee_sufficient() {
             return (
                 tx.finalize(&signed_wire)
                     .expect("finalize fee-sufficient multisig transaction"),
@@ -393,8 +393,8 @@ async fn spend_kip22(
             .expect("sign KIP-22 spend")
         });
         let analysis = tx.analyze(&signed).await.expect("analyze KIP-22 spend");
-        assert!(analysis.mass_valid, "KIP-22 spend exceeds mass limits");
-        if analysis.fee_sufficient {
+        assert!(analysis.mass_valid(), "KIP-22 spend exceeds mass limits");
+        if analysis.fee_sufficient() {
             let finalized = tx.finalize(&signed).expect("finalize KIP-22 spend");
             return broadcast_consensus(portal, &finalized, watched_address).await;
         }
@@ -435,7 +435,7 @@ async fn rust_funded_standard_network_transactions() {
     )
     .await;
     assert!(
-        analysis.fee_sufficient,
+        analysis.fee_sufficient(),
         "adaptive payload fee must be sufficient"
     );
     eprintln!(

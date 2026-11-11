@@ -89,6 +89,14 @@ impl MultisigInfo {
             pubkeys: [[0u8; 32]; MAX_MULTISIG_KEYS],
         }
     }
+
+    /// The script position of `xonly` among the `n` declared keys.
+    #[must_use]
+    pub fn position_of(&self, xonly: &[u8; 32]) -> Option<u8> {
+        (0..self.n)
+            .zip(&self.pubkeys)
+            .find_map(|(position, key)| (key == xonly).then_some(position))
+    }
 }
 
 /// Script type detected from scriptPublicKey

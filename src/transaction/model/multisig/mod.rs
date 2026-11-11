@@ -4,17 +4,49 @@
 use crate::wallet::key::xpub::KpubParts;
 
 use super::{
+    annotations::Ms45Derivation,
     constants::{MAX_MULTISIG_KEYS, MAX_MULTISIG_WALLETS, MAX_SCRIPT_SIZE},
-    input::Ms45Hint,
-    multisig_validation::{contains_cosigner, slot_empty, valid_config},
 };
 
+mod change;
 mod derivation;
+mod validation;
+
+pub use change::{find_forged_change, trusted_multisig_output_chain};
+use validation::{contains_cosigner, slot_empty, valid_config};
 
 use derivation::{
     derive_children_at, derive_multisig_children, encode_redeem, push_byte, serialized_parts,
     sort_xonly_children, write_multisig_script,
 };
+
+/// Key family a multisig wallet derives its addresses in.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MultisigFamily {
+    /// Legacy 44': `/0/index` children, re-sorted for every address.
+    Legacy44,
+    /// Strict 45': `/cosigner/chain/index` in canonical parent order.
+    Hd45 {
+        /// This device's position in the sorted descriptor.
+        cosigner_index: u8,
+        /// 0 = external/receive, 1 = change.
+        chain: u8,
+    },
+}
+
+impl MultisigFamily {
+    /// A 45' family on the receive chain of cosigner 0, before the device has
+    /// located itself with [`MultisigConfig::resolve_cosigner_index`].
+    pub const HD45_UNRESOLVED: Self = Self::Hd45 {
+        cosigner_index: 0,
+        chain: 0,
+    };
+
+    #[must_use]
+    pub const fn is_hd45(self) -> bool {
+        matches!(self, Self::Hd45 { .. })
+    }
+}
 
 /// Strict v1.0.6 45' multisig plus legacy 44' compatibility. New 45' wallets
 /// derive `/cosigner/chain/index` beneath `m/45'/111111'/0'`; legacy descriptors
@@ -26,19 +58,13 @@ pub struct MultisigConfig {
     pub cosigner_pubkeys: [[u8; 33]; MAX_MULTISIG_KEYS],
     pub cosigner_chain_codes: [[u8; 32]; MAX_MULTISIG_KEYS],
     pub addr_index: u32,
-    pub v45: bool,
-    /// Address family this device issues. In 45' it is this device's position
-    /// in the sorted descriptor; ignored for legacy 44'.
-    pub cosigner_index: u8,
-    /// 0=external/receive, 1=change for 45'; ignored by legacy 44'.
-    pub chain: u8,
+    pub family: MultisigFamily,
     /// Metadata required to re-serialize each 45' participant byte-identically.
     pub cosigner_depth: [u8; MAX_MULTISIG_KEYS],
     pub cosigner_parent_fp: [[u8; 4]; MAX_MULTISIG_KEYS],
     pub cosigner_child_num: [[u8; 4]; MAX_MULTISIG_KEYS],
     pub script: [u8; MAX_SCRIPT_SIZE],
     pub script_len: usize,
-    pub active: bool,
 }
 
 impl Default for MultisigConfig {
@@ -72,15 +98,12 @@ impl MultisigConfig {
             cosigner_pubkeys: [[0; 33]; MAX_MULTISIG_KEYS],
             cosigner_chain_codes: [[0; 32]; MAX_MULTISIG_KEYS],
             addr_index: 0,
-            v45: false,
-            cosigner_index: 0,
-            chain: 0,
+            family: MultisigFamily::Legacy44,
             cosigner_depth: [0; MAX_MULTISIG_KEYS],
             cosigner_parent_fp: [[0; 4]; MAX_MULTISIG_KEYS],
             cosigner_child_num: [[0; 4]; MAX_MULTISIG_KEYS],
             script: [0; MAX_SCRIPT_SIZE],
             script_len: 0,
-            active: false,
         }
     }
 
@@ -114,8 +137,8 @@ impl MultisigConfig {
         let Some(mut children) = derive_multisig_children(self) else {
             return 0;
         };
-        if !self.v45 {
-            sort_xonly_children(&mut children, self.n as usize);
+        if !self.family.is_hd45() {
+            sort_xonly_children(&mut children, usize::from(self.n));
         }
         write_multisig_script(self, &children)
     }
@@ -124,9 +147,8 @@ impl MultisigConfig {
     /// derivation hint? The caller can therefore use hints as lookup indexes
     /// without trusting them as authorization.
     #[must_use]
-    pub fn matches_at(&self, hint: &Ms45Hint, script_hash: &[u8; 32]) -> bool {
-        if !self.v45
-            || !hint.present
+    pub fn matches_at(&self, hint: &Ms45Derivation, script_hash: &[u8; 32]) -> bool {
+        if !self.family.is_hd45()
             || hint.chain > 1
             || hint.cosigner >= 0x8000_0000
             || hint.index >= 0x8000_0000
@@ -147,11 +169,10 @@ impl MultisigConfig {
     /// Sort 45' cosigner parents into the v1.0.6/rusty-kaspa canonical order.
     /// Legacy 44' configs are intentionally not reordered here.
     pub fn sort_cosigners(&mut self) {
-        if !self.v45 {
+        if !self.family.is_hd45() {
             return;
         }
-        let n = self.n as usize;
-        for index in 1..n {
+        for index in 1..usize::from(self.n) {
             let mut cursor = index;
             while cursor > 0 && self.serialized_entry(cursor - 1) > self.serialized_entry(cursor) {
                 self.cosigner_pubkeys.swap(cursor - 1, cursor);
@@ -167,13 +188,13 @@ impl MultisigConfig {
     #[must_use]
     pub fn same_wallet_as(&self, other: &Self) -> bool {
         (
-            self.v45,
+            self.family.is_hd45(),
             self.m,
             self.n,
             &self.cosigner_pubkeys,
             &self.cosigner_chain_codes,
         ) == (
-            other.v45,
+            other.family.is_hd45(),
             other.m,
             other.n,
             &other.cosigner_pubkeys,
@@ -184,18 +205,20 @@ impl MultisigConfig {
     /// Resolve this device's own 45' family by matching its account kpub parts
     /// against the already-canonicalized descriptor.
     pub fn resolve_cosigner_index(&mut self, own: &KpubParts) -> bool {
-        if !self.v45 {
-            self.cosigner_index = 0;
+        let MultisigFamily::Hd45 { chain, .. } = self.family else {
             return true;
-        }
+        };
         let own_entry = serialized_parts(own);
-        for index in 0..self.n as usize {
-            if self.serialized_entry(index) == own_entry {
-                self.cosigner_index = index as u8;
-                return true;
-            }
-        }
-        false
+        let Some(cosigner_index) =
+            (0..self.n).find(|index| self.serialized_entry(usize::from(*index)) == own_entry)
+        else {
+            return false;
+        };
+        self.family = MultisigFamily::Hd45 {
+            cosigner_index,
+            chain,
+        };
+        true
     }
 
     /// Write this wallet's current P2SH address for `network` into `out`,
@@ -225,15 +248,19 @@ impl MultisigConfig {
             push_byte(buf, &mut pos, *byte);
         }
         push_byte(buf, &mut pos, b'0' + self.n);
-        if self.v45 {
+        if let MultisigFamily::Hd45 {
+            cosigner_index,
+            chain,
+        } = self.family
+        {
             for byte in b" 45' S" {
                 push_byte(buf, &mut pos, *byte);
             }
-            push_byte(buf, &mut pos, b'0' + self.cosigner_index);
+            push_byte(buf, &mut pos, b'0' + cosigner_index);
             for byte in b"/C" {
                 push_byte(buf, &mut pos, *byte);
             }
-            push_byte(buf, &mut pos, b'0' + self.chain);
+            push_byte(buf, &mut pos, b'0' + chain);
         }
         pos.min(buf.len())
     }
@@ -254,7 +281,11 @@ impl MultisigConfig {
         let mut config = Self::new();
         config.m = parsed.threshold;
         config.n = parsed.participant_count;
-        config.v45 = parsed.is_hd45();
+        config.family = if parsed.is_hd45() {
+            MultisigFamily::HD45_UNRESOLVED
+        } else {
+            MultisigFamily::Legacy44
+        };
         config.cosigner_pubkeys = parsed.public_keys;
         config.cosigner_chain_codes = parsed.chain_codes;
         config.cosigner_depth = parsed.depths;
@@ -280,7 +311,7 @@ impl MultisigConfig {
     /// otherwise. `None` when `out` is too small or a key will not encode.
     pub fn write_descriptor(&self, out: &mut [u8]) -> Option<usize> {
         let mut text = DescriptorText { out, length: 0 };
-        text.push(if self.v45 {
+        text.push(if self.family.is_hd45() {
             b"multi_hd45("
         } else {
             b"multi_hd("
@@ -288,7 +319,7 @@ impl MultisigConfig {
         text.push(&[b'0' + self.m])?;
         for index in 0..usize::from(self.n) {
             text.push(b",")?;
-            if self.v45 {
+            if self.family.is_hd45() {
                 let mut encoded = [0u8; crate::wallet::key::xpub::KPUB_MAX_LEN];
                 let length = crate::wallet::key::xpub::serialize_kpub_parts(
                     &self.cosigner_parts(index),
@@ -327,9 +358,9 @@ impl DescriptorText<'_> {
     }
 }
 
-/// Storage for multisig wallet configurations.
+/// Storage for multisig wallet configurations; an empty slot is `None`.
 pub struct MultisigStore {
-    pub configs: [MultisigConfig; MAX_MULTISIG_WALLETS],
+    pub configs: [Option<MultisigConfig>; MAX_MULTISIG_WALLETS],
 }
 
 impl Default for MultisigStore {
@@ -341,12 +372,17 @@ impl Default for MultisigStore {
 impl MultisigStore {
     pub const fn new() -> Self {
         Self {
-            configs: [MultisigConfig::new(), MultisigConfig::new()],
+            configs: [const { None }; MAX_MULTISIG_WALLETS],
         }
     }
 
     #[must_use]
     pub fn find_free(&self) -> Option<usize> {
-        self.configs.iter().position(|config| !config.active)
+        self.configs.iter().position(Option::is_none)
+    }
+
+    /// The stored wallets, in slot order.
+    pub fn wallets(&self) -> impl Iterator<Item = &MultisigConfig> {
+        self.configs.iter().flatten()
     }
 }

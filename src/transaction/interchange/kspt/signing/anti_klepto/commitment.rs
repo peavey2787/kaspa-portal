@@ -1,6 +1,6 @@
 use crate::transaction::signing::anti_klepto::protocol::{Commitment, NonceCommitment};
 
-use crate::transaction::model::Transaction;
+use crate::transaction::model::{Transaction, MAX_SIGS_PER_INPUT};
 
 use super::{keys::pubkey_is_allowed_for_input, AntiKleptoVerifyError};
 
@@ -58,10 +58,7 @@ pub(in crate::transaction::interchange::kspt::signing) fn commitment_position_is
     let Some(input) = original.inputs.get(input_index) else {
         return false;
     };
-    if input_index >= original.num_inputs || slot < usize::from(input.sig_count) {
-        return false;
-    }
-    input.sigs.get(slot).is_some()
+    input_index < original.num_inputs && slot >= input.sigs.len() && slot < MAX_SIGS_PER_INPUT
 }
 
 fn canonical_points_are_valid(record: &NonceCommitment) -> bool {

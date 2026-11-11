@@ -6,13 +6,10 @@ use crate::transaction::{
             validate_transaction_for_review,
         },
     },
-    model::{
-        MAX_OUTPUTS, MAX_PAYLOAD_SIZE, MAX_REDEEM_SIZE, MAX_SCRIPT_SIZE, MAX_SIGS_PER_INPUT,
-        REDEEM_POOL_SIZE,
-    },
+    model::{MAX_OUTPUTS, MAX_PAYLOAD_SIZE, MAX_REDEEM_SIZE, MAX_SCRIPT_SIZE, REDEEM_POOL_SIZE},
 };
 
-use super::common::{add_single_signature, transaction};
+use super::common::{add_single_signature, fill_signature_capacity, transaction};
 
 #[test]
 fn base_validation_classifies_transaction_shape_and_capacity_failures() {
@@ -111,8 +108,10 @@ fn base_validation_rejects_oversized_scripts_and_invalid_covenant_links() {
     );
 
     let mut covenant = transaction();
-    covenant.outputs[0].has_covenant = true;
-    covenant.outputs[0].covenant_auth_input = 1;
+    covenant.outputs[0].covenant = Some(crate::transaction::model::Covenant {
+        authorizing_input: 1,
+        id: [0u8; 32],
+    });
     assert_eq!(
         validate_base_transaction(&covenant),
         Err(PsktError::InvalidInputIndex)
@@ -154,12 +153,12 @@ fn redeem_script_validation_covers_inline_pool_and_index_boundaries() {
     let mut pooled = transaction();
     pooled.redeem_pool[..3].copy_from_slice(b"xyz");
     pooled.redeem_pool_used = 3;
-    pooled.inputs[0].redeem_in_pool = true;
+    pooled.inputs[0].redeem_pool_offset = Some(0);
     pooled.inputs[0].redeem_script_len = 3;
     assert_eq!(checked_redeem_bytes(&pooled, 0), Ok(&b"xyz"[..]));
 
     let mut pool_usage_short = transaction();
-    pool_usage_short.inputs[0].redeem_in_pool = true;
+    pool_usage_short.inputs[0].redeem_pool_offset = Some(0);
     pool_usage_short.inputs[0].redeem_script_len = 3;
     pool_usage_short.redeem_pool_used = 2;
     assert_eq!(
@@ -168,8 +167,8 @@ fn redeem_script_validation_covers_inline_pool_and_index_boundaries() {
     );
 
     let mut pool_slice_out_of_bounds = transaction();
-    pool_slice_out_of_bounds.inputs[0].redeem_in_pool = true;
-    pool_slice_out_of_bounds.inputs[0].redeem_script_offset = REDEEM_POOL_SIZE as u16;
+    pool_slice_out_of_bounds.inputs[0].redeem_pool_offset =
+        Some(u16::try_from(REDEEM_POOL_SIZE).unwrap());
     pool_slice_out_of_bounds.inputs[0].redeem_script_len = 1;
     pool_slice_out_of_bounds.redeem_pool_used = REDEEM_POOL_SIZE;
     assert_eq!(
@@ -180,20 +179,6 @@ fn redeem_script_validation_covers_inline_pool_and_index_boundaries() {
 
 #[test]
 fn partial_signature_validation_rejects_every_inconsistent_slot_state() {
-    let mut too_many = transaction();
-    too_many.inputs[0].sig_count = (MAX_SIGS_PER_INPUT + 1) as u8;
-    assert_eq!(
-        validate_partial_signed(&too_many),
-        Err(PsktError::TooManySignatures)
-    );
-
-    let mut missing = transaction();
-    missing.inputs[0].sig_count = 1;
-    assert_eq!(
-        validate_partial_signed(&missing),
-        Err(PsktError::InvalidSignatureState)
-    );
-
     let mut invalid_sighash = transaction();
     add_single_signature(&mut invalid_sighash, 0, [0x11; 64]);
     invalid_sighash.inputs[0].sigs[0].sighash_type = 0xff;
@@ -205,17 +190,10 @@ fn partial_signature_validation_rejects_every_inconsistent_slot_state() {
 
     let mut duplicate_position = transaction();
     add_single_signature(&mut duplicate_position, 0, [0x22; 64]);
-    duplicate_position.inputs[0].sig_count = 2;
-    duplicate_position.inputs[0].sigs[1] = duplicate_position.inputs[0].sigs[0].clone();
+    let first = duplicate_position.inputs[0].sigs[0];
+    assert!(duplicate_position.inputs[0].sigs.push(first));
     assert_eq!(
         validate_partial_signed(&duplicate_position),
-        Err(PsktError::InvalidSignatureState)
-    );
-
-    let mut unexpected_slot = transaction();
-    unexpected_slot.inputs[0].sigs[1].present = true;
-    assert_eq!(
-        validate_partial_signed(&unexpected_slot),
         Err(PsktError::InvalidSignatureState)
     );
 
@@ -264,13 +242,15 @@ fn validation_accepts_dynamic_inputs_and_fixed_output_boundaries() {
     for output in &mut tx.outputs[..MAX_OUTPUTS] {
         output.script_public_key.script_len = MAX_SCRIPT_SIZE;
     }
-    tx.outputs[0].has_covenant = true;
-    tx.outputs[0].covenant_auth_input = (MANY_INPUTS - 1) as u16;
+    tx.outputs[0].covenant = Some(crate::transaction::model::Covenant {
+        authorizing_input: u16::try_from(MANY_INPUTS - 1).unwrap(),
+        id: [0u8; 32],
+    });
     assert_eq!(validate_base_transaction(&tx), Ok(()));
 
     let mut pooled = transaction();
-    pooled.inputs[0].redeem_in_pool = true;
-    pooled.inputs[0].redeem_script_offset = (REDEEM_POOL_SIZE - MAX_REDEEM_SIZE) as u16;
+    pooled.inputs[0].redeem_pool_offset =
+        Some(u16::try_from(REDEEM_POOL_SIZE - MAX_REDEEM_SIZE).unwrap());
     pooled.inputs[0].redeem_script_len = MAX_REDEEM_SIZE;
     pooled.redeem_pool_used = REDEEM_POOL_SIZE;
     assert_eq!(
@@ -279,14 +259,7 @@ fn validation_accepts_dynamic_inputs_and_fixed_output_boundaries() {
     );
 
     let mut exact_signatures = transaction();
-    exact_signatures.inputs[0].sig_count = MAX_SIGS_PER_INPUT as u8;
-    exact_signatures.inputs[0].sighash_type = 1;
-    for (position, slot) in exact_signatures.inputs[0].sigs.iter_mut().enumerate() {
-        slot.present = true;
-        slot.pubkey_pos = position as u8;
-        slot.sighash_type = 1;
-        slot.signature = [position as u8 + 1; 64];
-    }
+    fill_signature_capacity(&mut exact_signatures);
     assert_eq!(validate_partial_signed(&exact_signatures), Ok(()));
 }
 

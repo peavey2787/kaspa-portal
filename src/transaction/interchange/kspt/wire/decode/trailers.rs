@@ -1,9 +1,9 @@
 use super::super::io::Reader;
 use super::super::{
-    valid_covenant_execution, valid_derivation, valid_ms45, valid_network, CovenantExecution,
-    DecodeError, Derivation, Ms45Derivation, WireError, COVENANT_EXECUTION_MARKER, COVENANT_MARKER,
-    INPUT_DERIVATION_MARKER, MS45_INPUT_MARKER, MS45_OUTPUT_MARKER, NETWORK_MARKER,
-    OUTPUT_DERIVATION_MARKER, STEALTH_MARKER,
+    valid_derivation, valid_ms45, valid_network, CovenantExecution, DecodeError, Derivation,
+    Ms45Derivation, WireError, COVENANT_EXECUTION_MARKER, COVENANT_MARKER, INPUT_DERIVATION_MARKER,
+    MS45_INPUT_MARKER, MS45_OUTPUT_MARKER, NETWORK_MARKER, OUTPUT_DERIVATION_MARKER,
+    STEALTH_MARKER,
 };
 use super::DecodeSink;
 
@@ -301,7 +301,7 @@ fn read_covenant_execution<S: DecodeSink>(
         supplied_mask: reader.u16()?,
         supplied_true_mask: reader.u16()?,
     };
-    if !valid_covenant_execution(value) {
+    if !value.is_well_formed() {
         return Err(WireError::InvalidTrailer.into());
     }
     state.covenant_execution[usize::from(position)] = true;

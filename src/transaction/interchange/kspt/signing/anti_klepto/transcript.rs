@@ -100,7 +100,7 @@ pub(in crate::transaction::interchange::kspt::signing) fn validate_proof_positio
     if commitment.input_index != proof.input_index
         || commitment.signature_slot != proof.signature_slot
         || input_index >= signed.num_inputs
-        || slot >= usize::from(signed.inputs[input_index].sig_count)
+        || slot >= signed.inputs[input_index].sigs.len()
     {
         Err(AntiKleptoVerifyError::InvalidProof)
     } else {
@@ -118,12 +118,8 @@ fn validate_proof_signature_metadata(
     let input_index =
         usize::try_from(proof.input_index).map_err(|_| AntiKleptoVerifyError::InvalidProof)?;
     let expected_sighash = expected_added_sighash(original, input_index);
-    if (actual.present, actual.sighash_type, actual.sighash_type)
-        != (
-            true,
-            signed.inputs[input_index].sighash_type,
-            expected_sighash,
-        )
+    if (actual.sighash_type, actual.sighash_type)
+        != (signed.inputs[input_index].sighash_type, expected_sighash)
     {
         return Err(AntiKleptoVerifyError::InvalidProof);
     }
@@ -139,7 +135,7 @@ pub(in crate::transaction::interchange::kspt::signing) fn expected_added_sighash
     input_index: usize,
 ) -> u8 {
     let input = &original.inputs[input_index];
-    if input.sig_count == 0 {
+    if input.sigs.is_empty() {
         SigHashType::All.to_byte()
     } else {
         input.sighash_type
@@ -198,14 +194,9 @@ pub(in crate::transaction::interchange::kspt::signing) fn added_signatures_for_i
     signed: &Transaction,
     input_index: usize,
 ) -> Result<usize, AntiKleptoVerifyError> {
-    let before = usize::from(original.inputs[input_index].sig_count);
-    let after = usize::from(signed.inputs[input_index].sig_count);
-    let added = signed.inputs[input_index]
+    signed.inputs[input_index]
         .sigs
-        .get(before..after)
-        .ok_or(AntiKleptoVerifyError::TransactionMismatch)?;
-    if added.iter().any(|slot| !slot.present) {
-        return Err(AntiKleptoVerifyError::InvalidProof);
-    }
-    Ok(added.len())
+        .len()
+        .checked_sub(original.inputs[input_index].sigs.len())
+        .ok_or(AntiKleptoVerifyError::TransactionMismatch)
 }

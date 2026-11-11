@@ -17,7 +17,7 @@ fn noise(len: usize, state: &mut u64) -> alloc::vec::Vec<u8> {
             *state = state
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
-            (*state >> 32) as u8
+            (*state >> 32).to_le_bytes()[0]
         })
         .collect()
 }

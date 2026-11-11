@@ -13,3 +13,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 kaspa-portal = { path = "../../..", features = ["wasm", "secret-export"] }
+
+[lints.clippy]
+cast_possible_truncation = "deny"
+fn_params_excessive_bools = "deny"
+struct_excessive_bools = "deny"
+undocumented_unsafe_blocks = "deny"

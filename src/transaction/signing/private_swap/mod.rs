@@ -56,7 +56,7 @@ fn validate_claim_transaction_shape(tx: &Transaction) -> Result<SigHashType, Pri
         return Err(PrivateSwapError::InvalidTransaction);
     }
     let input = &tx.inputs[0];
-    if input.sig_count != 0 || input.incoming_partial_sigs_count != 0 {
+    if !input.sigs.is_empty() || !input.incoming_partial_sigs.is_empty() {
         return Err(PrivateSwapError::InvalidTransaction);
     }
     // Compact KSPT carries sighash metadata with signature records, not as

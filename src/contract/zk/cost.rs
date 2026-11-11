@@ -16,7 +16,8 @@ pub const fn groth16_sig_op_count(public_inputs: u64) -> u8 {
     if sigops > u8::MAX as u64 {
         u8::MAX
     } else {
-        sigops as u8
+        // Below `u8::MAX`, so the low byte is the whole value.
+        sigops.to_le_bytes()[0]
     }
 }
 

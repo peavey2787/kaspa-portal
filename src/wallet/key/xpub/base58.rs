@@ -78,7 +78,8 @@ fn base58_digits(mut number: &mut [u8], digits: &mut [u8; MAX_BASE58_CHARS]) -> 
         let mut remainder = 0u32;
         for byte in number.iter_mut() {
             let value = remainder * 256 + u32::from(*byte);
-            *byte = (value / 58) as u8;
+            // `remainder < 58`, so `value / 58 < 256`.
+            *byte = u8::try_from(value / 58).unwrap_or(u8::MAX);
             remainder = value % 58;
         }
         digits[count] = BASE58_ALPHABET[remainder as usize];
@@ -134,7 +135,7 @@ fn base58_char_value(byte: u8) -> Option<u8> {
     BASE58_ALPHABET
         .iter()
         .position(|candidate| *candidate == byte)
-        .map(|index| index as u8)
+        .and_then(|index| u8::try_from(index).ok())
 }
 
 /// Base58 decode into `out`; returns the decoded length. Input that decodes to

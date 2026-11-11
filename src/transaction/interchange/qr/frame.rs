@@ -51,11 +51,11 @@ pub fn encode_frame(
     fragment: &[u8],
     output: &mut [u8],
 ) -> Result<usize, FrameError> {
+    let fragment_len = u8::try_from(fragment.len()).map_err(|_| FrameError::InvalidIndex)?;
     if total_frames < 2
         || usize::from(total_frames) > MAX_FRAMES
         || frame_index >= total_frames
-        || fragment.is_empty()
-        || fragment.len() > u8::MAX as usize
+        || fragment_len == 0
     {
         return Err(FrameError::InvalidIndex);
     }
@@ -73,7 +73,7 @@ pub fn encode_frame(
     output[3..3 + SESSION_ID_LEN].copy_from_slice(identifier);
     output[3 + SESSION_ID_LEN] = frame_index;
     output[4 + SESSION_ID_LEN] = total_frames;
-    output[5 + SESSION_ID_LEN] = fragment.len() as u8;
+    output[5 + SESSION_ID_LEN] = fragment_len;
     output[FRAME_HEADER_LEN..encoded_len].copy_from_slice(fragment);
     Ok(display_len)
 }

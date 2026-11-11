@@ -31,12 +31,12 @@ fn message_detection_and_domain_hashes_are_exact() {
     let mut public_key = [0u8; 33];
     public_key[0] = 0x02;
     for (index, byte) in public_key[1..].iter_mut().enumerate() {
-        *byte = (index + 1) as u8;
+        *byte = u8::try_from(index + 1).unwrap();
     }
     let mut nonce_point = [0u8; 33];
     nonce_point[0] = 0x02;
     for (index, byte) in nonce_point[1..].iter_mut().enumerate() {
-        *byte = (index + 33) as u8;
+        *byte = u8::try_from(index + 33).unwrap();
     }
     assert_eq!(
         host_scalar_material(

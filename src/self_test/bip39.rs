@@ -124,24 +124,11 @@ fn test_word_lookup() -> bool {
 /// Run all BIP39 tests.
 /// Returns (passed, total).
 pub fn run_bip39_tests() -> (u32, u32) {
-    let mut passed = 0u32;
-    let total = 5u32;
-
-    if test_vector_12_zeros() {
-        passed += 1;
-    }
-    if test_vector_12_7f() {
-        passed += 1;
-    }
-    if test_vector_24_zeros() {
-        passed += 1;
-    }
-    if test_seed_derivation_trezor() {
-        passed += 1;
-    }
-    if test_word_lookup() {
-        passed += 1;
-    }
-
-    (passed, total)
+    super::tally(&[
+        test_vector_12_zeros(),
+        test_vector_12_7f(),
+        test_vector_24_zeros(),
+        test_seed_derivation_trezor(),
+        test_word_lookup(),
+    ])
 }

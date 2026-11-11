@@ -22,7 +22,7 @@ examine_globs = [
   "src/transaction/sighash/**/*.rs",
   "src/transaction/signing/**/*.rs",
   "src/transaction/signature_verification/**/*.rs",
-  "src/transaction/mass.rs",
+  "src/transaction/mass/**/*.rs",
   "src/transaction/consensus/**/*.rs",
   "src/transaction/policy/**/*.rs",
   "src/transaction/builder/planning/amounts.rs",

@@ -6,6 +6,8 @@ pub mod bytes;
 pub mod hash;
 pub mod limits;
 pub mod multisig_script;
+#[cfg(feature = "std")]
+pub mod numeric;
 pub mod opcode;
 pub mod qr_payload;
 pub mod script;
@@ -65,10 +67,11 @@ impl NetworkId {
         let suffix = suffix
             .parse::<u16>()
             .map_err(|_| "invalid Kaspa testnet suffix".to_owned())?;
-        if !(1..=127).contains(&suffix) {
-            return Err("Kaspa testnet suffix must be 1..=127".to_owned());
-        }
-        Ok(Self::Testnet(suffix as u8))
+        u8::try_from(suffix)
+            .ok()
+            .filter(|suffix| (1..=127).contains(suffix))
+            .map(Self::Testnet)
+            .ok_or_else(|| "Kaspa testnet suffix must be 1..=127".to_owned())
     }
 
     pub fn canonical_name(self) -> String {

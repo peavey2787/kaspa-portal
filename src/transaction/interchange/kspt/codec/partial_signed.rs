@@ -1,4 +1,4 @@
-use crate::transaction::model::{Transaction, MAX_OUTPUTS};
+use crate::transaction::model::Transaction;
 
 use super::super::{
     error::PsktError,
@@ -12,7 +12,7 @@ use super::{sink::TransactionSink, source::TransactionSource};
 fn limits(tx: &Transaction) -> Limits {
     Limits::new(
         u32::try_from(tx.limits.max_inputs).unwrap_or(u32::MAX),
-        MAX_OUTPUTS as u8,
+        wire::MAX_OUTPUTS,
         tx.limits.max_payload_bytes,
     )
 }

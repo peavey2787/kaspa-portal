@@ -1,3 +1,6 @@
+#[path = "../../tests/e2e/scanner_fixture.rs"]
+mod scanner_fixture;
+
 use std::{env, fs, path::PathBuf};
 
 use kaspa_portal::primitives::address::KaspaNetwork;
@@ -104,22 +107,6 @@ fn sign_pskb_for_account(
         Ok(())
     })
     .expect("merge browser fixture signatures")
-}
-
-fn raw_scanner_fixture(transaction_id: &[u8; 32], preimage: &[u8]) -> Vec<u8> {
-    let mut script = Vec::with_capacity(preimage.len() + 1);
-    script.push(u8::try_from(preimage.len()).expect("small preimage"));
-    script.extend_from_slice(preimage);
-    let script_length = script.len().max(10);
-    let mut raw = Vec::new();
-    raw.extend_from_slice(&37u32.to_le_bytes());
-    raw.push(1);
-    raw.extend_from_slice(transaction_id);
-    raw.extend_from_slice(&7u32.to_le_bytes());
-    raw.extend_from_slice(&(script_length as u32).to_le_bytes());
-    raw.extend_from_slice(&script);
-    raw.resize(raw.len() + script_length.saturating_sub(script.len()), 0);
-    raw
 }
 
 fn configured_network(env_name: &str, default: &str) -> (String, NetworkId) {
@@ -355,7 +342,7 @@ fn main() {
         .generate_payment(&public_metadata, &[0x53; 32])
         .expect("stealth payment");
     let transaction_id = [0x61; 32];
-    let raw_scanner = raw_scanner_fixture(&transaction_id, b"portal-e2e-preimage");
+    let raw_scanner = scanner_fixture::raw_scanner_fixture(&transaction_id, b"portal-e2e-preimage");
 
     let indexer =
         IndexerApi::with_clock(IndexerConfig::default(), || Ok(100)).expect("construct indexer");

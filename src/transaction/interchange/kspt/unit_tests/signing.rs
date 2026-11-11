@@ -37,7 +37,7 @@ fn imported_account_key_signs_receive_inputs() {
     .expect("account input should sign");
 
     assert_eq!(signed, 1);
-    assert_eq!(tx.inputs[0].sig_count, 1);
+    assert_eq!(tx.inputs[0].sigs.len(), 1);
 }
 
 #[test]
@@ -104,8 +104,7 @@ fn imported_account_signer_handles_stealth_tweaks_and_rejects_mismatches() {
 
     let mut transaction = super::common::transaction();
     set_p2pk(&mut transaction, &target);
-    transaction.has_stealth_tweak = true;
-    transaction.stealth_tweak = tweak_bytes;
+    transaction.stealth_tweak = Some(tweak_bytes);
     assert_eq!(
         sign_transaction_account_multi_addr_with_entropy(
             &mut transaction,
@@ -118,8 +117,7 @@ fn imported_account_signer_handles_stealth_tweaks_and_rejects_mismatches() {
 
     let mut mismatch = super::common::transaction();
     set_p2pk(&mut mismatch, &[0xff; 32]);
-    mismatch.has_stealth_tweak = true;
-    mismatch.stealth_tweak = tweak_bytes;
+    mismatch.stealth_tweak = Some(tweak_bytes);
     assert_eq!(
         sign_transaction_account_multi_addr_with_entropy(
             &mut mismatch,

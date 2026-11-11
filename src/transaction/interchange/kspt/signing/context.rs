@@ -103,9 +103,9 @@ impl SigningContext {
     pub(super) fn ms45_material(
         &self,
         seed_index: usize,
-        hint: &crate::transaction::model::Ms45Hint,
+        hint: &crate::transaction::model::Ms45Derivation,
     ) -> Option<SigningKeyMaterial> {
-        if !hint.present || hint.chain > 1 {
+        if hint.chain > 1 {
             return None;
         }
         let account = self.ms45_account_keys.get(seed_index)?.as_ref()?;

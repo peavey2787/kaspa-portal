@@ -10,7 +10,7 @@ use crate::alloc_prelude::*;
 use serde_json::{Map, Value};
 
 use crate::transaction::interchange::pskt::schema::{
-    self as pskt_schema, DefaultRule, NullRule, Scope, ValueKind, EXTENSION_GRAMMAR,
+    self as pskt_schema, DefaultRule, NullRule, Scope, ValueKind,
 };
 
 pub(super) fn default_u64(scope: Scope, field: &str) -> Result<u64, String> {
@@ -192,10 +192,8 @@ fn validate_object_field(
     value: &Value,
 ) -> Result<(), String> {
     let Some(spec) = pskt_schema::field_spec(scope, key.as_bytes()) else {
-        if EXTENSION_GRAMMAR.preserve_unknown_fields {
-            return Ok(());
-        }
-        return Err(format!("unknown {label} field: {key}"));
+        // Unknown extension fields are preserved, not validated (see the schema).
+        return Ok(());
     };
     if value.is_null() {
         return validate_null_field(spec, label, key);

@@ -1,6 +1,6 @@
 //! [`EncodeSource`] view of a validated [`Transaction`].
 
-use crate::transaction::model::{Ms45Hint, Transaction};
+use crate::transaction::model::Transaction;
 
 use super::super::{
     signing::is_fully_signed,
@@ -14,24 +14,6 @@ use super::super::{
 /// Encodes a transaction that already passed `validate_partial_signed`.
 pub(super) struct TransactionSource<'a>(pub(super) &'a Transaction);
 
-const fn ms45(hint: Ms45Hint) -> Option<Ms45Derivation> {
-    if !hint.present {
-        return None;
-    }
-    Some(Ms45Derivation {
-        cosigner: hint.cosigner,
-        chain: hint.chain,
-        index: hint.index,
-    })
-}
-
-const fn derivation(present: bool, branch: u8, index: u32) -> Option<Derivation> {
-    if !present {
-        return None;
-    }
-    Some(Derivation { branch, index })
-}
-
 impl EncodeSource for TransactionSource<'_> {
     fn global(&self) -> Global<'_> {
         let tx = self.0;
@@ -42,9 +24,10 @@ impl EncodeSource for TransactionSource<'_> {
                 0
             },
             version: tx.version,
-            // Validation bounds both counts by the transaction limits.
-            input_count: tx.num_inputs as u32,
-            output_count: tx.num_outputs as u8,
+            // Validation bounds both counts by the transaction limits, and the
+            // encoder rejects a saturated count.
+            input_count: u32::try_from(tx.num_inputs).unwrap_or(u32::MAX),
+            output_count: u8::try_from(tx.num_outputs).unwrap_or(u8::MAX),
             locktime: tx.locktime,
             subnetwork_id: tx.subnetwork_id,
             gas: tx.gas,
@@ -66,7 +49,7 @@ impl EncodeSource for TransactionSource<'_> {
     }
 
     fn signature_count(&self, input: usize) -> usize {
-        usize::from(self.0.inputs[input].sig_count)
+        self.0.inputs[input].sigs.len()
     }
 
     fn signature(&self, input: usize, slot: usize) -> Signature {
@@ -97,50 +80,30 @@ impl EncodeSource for TransactionSource<'_> {
     }
 
     fn stealth(&self) -> Option<[u8; 32]> {
-        self.0.has_stealth_tweak.then_some(self.0.stealth_tweak)
+        self.0.stealth_tweak
     }
 
     fn input_derivation(&self, index: usize) -> Option<Derivation> {
-        let input = &self.0.inputs[index];
-        derivation(
-            input.has_derivation_hint,
-            input.derivation_branch,
-            input.derivation_index,
-        )
+        self.0.inputs[index].derivation_hint
     }
 
     fn output_derivation(&self, index: usize) -> Option<Derivation> {
-        let output = &self.0.outputs[index];
-        derivation(
-            output.has_derivation_hint,
-            output.derivation_branch,
-            output.derivation_index,
-        )
+        self.0.outputs[index].derivation_hint
     }
 
     fn input_ms45(&self, index: usize) -> Option<Ms45Derivation> {
-        ms45(self.0.inputs[index].ms45_hint)
+        self.0.inputs[index].ms45_hint
     }
 
     fn output_ms45(&self, index: usize) -> Option<Ms45Derivation> {
-        ms45(self.0.outputs[index].ms45_hint)
+        self.0.outputs[index].ms45_hint
     }
 
     fn covenant(&self, index: usize) -> Option<Covenant> {
-        let output = &self.0.outputs[index];
-        output.has_covenant.then_some(Covenant {
-            authorizing_input: output.covenant_auth_input,
-            id: output.covenant_id,
-        })
+        self.0.outputs[index].covenant
     }
 
     fn covenant_execution(&self, index: usize) -> Option<CovenantExecution> {
-        let input = &self.0.inputs[index];
-        input
-            .covenant_execution_present
-            .then_some(CovenantExecution {
-                supplied_mask: input.covenant_execution_mask,
-                supplied_true_mask: input.covenant_execution_true_mask,
-            })
+        self.0.inputs[index].covenant_execution
     }
 }

@@ -222,7 +222,14 @@ fn branch_helpers_cover_both_chains_usage_and_first_free_indexes() {
     let all_used = change
         .iter()
         .enumerate()
-        .map(|(slot, (_, _, address))| utxo(address, 0x40 + slot as u8, slot as u32, 10))
+        .map(|(slot, (_, _, address))| {
+            utxo(
+                address,
+                0x40 + u8::try_from(slot).unwrap(),
+                u32::try_from(slot).unwrap(),
+                10,
+            )
+        })
         .collect::<Vec<_>>();
     assert_eq!(first_unused_change_index(&change, &all_used, 3), Ok(3));
 }

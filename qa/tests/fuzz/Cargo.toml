@@ -92,3 +92,9 @@ path = "fuzz_targets/qr_session.rs"
 test = false
 doc = false
 bench = false
+
+[lints.clippy]
+cast_possible_truncation = "deny"
+fn_params_excessive_bools = "deny"
+struct_excessive_bools = "deny"
+undocumented_unsafe_blocks = "deny"

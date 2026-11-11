@@ -663,7 +663,7 @@ fn pipeline_sighash_matches_the_signer_model_for_the_same_bytes() {
     let output = |value: u64, covenant| Output {
         amount: value,
         script_version: 0,
-        script: vec![0x51, value as u8],
+        script: vec![0x51, value.to_le_bytes()[0]],
         derivation: None,
         ms45: None,
         covenant,

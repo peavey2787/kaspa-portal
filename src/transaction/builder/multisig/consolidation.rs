@@ -231,7 +231,8 @@ fn resolve_consolidation_source(
     let keys = descriptor.public_keys_at(path.index, path.cosigner, path.chain)?;
     let redeem = build_redeem_script(descriptor.threshold(), &keys)?;
     let derivations = descriptor.bip32_derivations(path.index, path.cosigner, path.chain)?;
-    Ok((redeem, derivations, keys.len() as u8))
+    let key_count = u8::try_from(keys.len()).map_err(|_| "Too many multisig keys".to_string())?;
+    Ok((redeem, derivations, key_count))
 }
 
 pub(super) fn unique_source_addresses(sources: &[MultisigConsolidationSource]) -> Vec<String> {

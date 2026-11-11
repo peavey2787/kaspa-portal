@@ -23,5 +23,5 @@ fn same_canonical_public_evidence_produces_same_beacon_output() {
     let first = beacon.generate(request.clone()).unwrap();
     let second = beacon.generate(request).unwrap();
     assert_eq!(first, second);
-    assert!(beacon.verify(&first).unwrap().valid);
+    assert!(beacon.verify(&first).unwrap().is_valid());
 }

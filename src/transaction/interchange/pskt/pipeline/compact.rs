@@ -91,8 +91,9 @@ impl kspt_wire::EncodeSource for Transaction {
         kspt_wire::Global {
             flags: self.flags,
             version: self.version,
-            input_count: self.inputs.len() as u32,
-            output_count: self.outputs.len() as u8,
+            // The encoder rejects a saturated count.
+            input_count: u32::try_from(self.inputs.len()).unwrap_or(u32::MAX),
+            output_count: u8::try_from(self.outputs.len()).unwrap_or(u8::MAX),
             locktime: self.locktime,
             subnetwork_id: self.subnetwork,
             gas: self.gas,

@@ -33,10 +33,9 @@ fn added_signatures<'a>(
             .get(input_index)
             .ok_or(PsktError::InvalidSignatureState)?,
     );
-    let end = usize::from(input.sig_count);
     let signatures = input
         .sigs
-        .get(start..end)
+        .get(start..)
         .ok_or(PsktError::InvalidSignatureState)?;
     Ok((start, signatures))
 }
@@ -56,7 +55,7 @@ pub fn nonce_commitment_records(
     for input_index in 0..tx.num_inputs {
         let (start, signatures) = added_signatures(tx, initial_counts, input_index)?;
         for (slot, sig) in (start..).zip(signatures.iter()) {
-            if !sig.present || sig.pubkey_compressed[0] == 0 {
+            if sig.pubkey_compressed[0] == 0 {
                 return Err(PsktError::InvalidSignatureState);
             }
             let provisional = SchnorrSignature {
@@ -67,7 +66,7 @@ pub fn nonce_commitment_records(
             canonical_public_key[1..].copy_from_slice(&sig.pubkey_compressed[1..]);
             records.push(NonceCommitment {
                 input_index: u32::try_from(input_index).map_err(|_| PsktError::TooManyInputs)?,
-                signature_slot: slot as u8,
+                signature_slot: u8::try_from(slot).map_err(|_| PsktError::TooManySignatures)?,
                 public_key: canonical_public_key,
                 nonce_point: crypto::provisional_nonce_point(&provisional),
             });
@@ -87,13 +86,10 @@ pub fn proof_records(
     let mut proofs = reserved_records(tx)?;
     for input_index in 0..tx.num_inputs {
         let (start, signatures) = added_signatures(tx, initial_counts, input_index)?;
-        for (slot, sig) in (start..).zip(signatures.iter()) {
-            if !sig.present {
-                return Err(PsktError::InvalidSignatureState);
-            }
+        for slot in start..start + signatures.len() {
             proofs.push(SignatureProof {
                 input_index: u32::try_from(input_index).map_err(|_| PsktError::TooManyInputs)?,
-                signature_slot: slot as u8,
+                signature_slot: u8::try_from(slot).map_err(|_| PsktError::TooManySignatures)?,
             });
         }
     }

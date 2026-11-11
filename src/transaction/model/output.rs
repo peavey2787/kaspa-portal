@@ -13,7 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use super::{input::Ms45Hint, script::ScriptPublicKey};
+use super::{
+    annotations::{Covenant, Derivation, Ms45Derivation},
+    script::ScriptPublicKey,
+};
 
 // ─── Transaction Output ───────────────────────────────────────────────
 
@@ -24,19 +27,15 @@ pub struct TransactionOutput {
     pub value: u64, // sompi
     pub script_public_key: ScriptPublicKey,
     /// Covenant binding (KIP-20, tx version >= 1)
-    pub has_covenant: bool,
-    pub covenant_auth_input: u16,
-    pub covenant_id: [u8; 32],
+    pub covenant: Option<Covenant>,
     /// Optional non-authoritative wallet derivation hint supplied by the watcher.
     /// The signer must independently derive and match the actual output before
     /// classifying it as wallet-owned or change. Branch 0=receive, 1=change.
-    pub derivation_branch: u8,
-    pub derivation_index: u32,
-    pub has_derivation_hint: bool,
+    pub derivation_hint: Option<Derivation>,
     /// Coordinated-multisig derivation claim from an output
     /// `bip32Derivations` map. It is advisory until a loaded descriptor
     /// reproduces the actual output script hash.
-    pub ms45_hint: Ms45Hint,
+    pub ms45_hint: Option<Ms45Derivation>,
 }
 
 impl TransactionOutput {
@@ -45,13 +44,9 @@ impl TransactionOutput {
         Self {
             value: 0,
             script_public_key: ScriptPublicKey::new(),
-            has_covenant: false,
-            covenant_auth_input: 0,
-            covenant_id: [0u8; 32],
-            derivation_branch: 0,
-            derivation_index: 0,
-            has_derivation_hint: false,
-            ms45_hint: Ms45Hint::none(),
+            covenant: None,
+            derivation_hint: None,
+            ms45_hint: None,
         }
     }
 }

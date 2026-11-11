@@ -10,7 +10,9 @@ use super::{
 use crate::transaction::interchange::qr::frame::{encode_frame, session_id};
 
 fn data(length: usize) -> Vec<u8> {
-    (0..length).map(|index| (index * 7 % 251) as u8).collect()
+    (0..length)
+        .map(|index| u8::try_from(index * 7 % 251).unwrap())
+        .collect()
 }
 
 #[test]
@@ -168,7 +170,7 @@ fn generated_frames_are_numbered_and_rendered() {
     for ((frame, payload), index) in multi.iter().zip(&payloads).zip(0u8..) {
         assert_eq!(
             (frame.frame_num, frame.total_frames),
-            (index, multi.len() as u8)
+            (index, u8::try_from(multi.len()).unwrap())
         );
         assert_eq!(frame.svg, qr_to_svg(payload).unwrap());
     }

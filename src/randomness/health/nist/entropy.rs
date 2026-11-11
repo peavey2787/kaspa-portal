@@ -1,4 +1,7 @@
-use super::{math::gamma_q, normalize, NistResult};
+use super::{
+    math::{gamma_q, power_of_two},
+    normalize, NistResult,
+};
 use std::collections::HashMap;
 
 pub fn approximate_entropy(bits: &[u8], m: usize) -> NistResult {
@@ -11,7 +14,7 @@ pub fn approximate_entropy(bits: &[u8], m: usize) -> NistResult {
     }
     let ap_en = phi(&bits, m) - phi(&bits, m + 1);
     let chi_squared = 2.0 * bits.len() as f64 * (core::f64::consts::LN_2 - ap_en);
-    let shape = 2f64.powi(m as i32 - 1);
+    let shape = power_of_two(m) / 2.0;
     NistResult::from_p(name, gamma_q(shape, chi_squared / 2.0), chi_squared)
 }
 

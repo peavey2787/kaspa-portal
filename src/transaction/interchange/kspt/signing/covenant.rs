@@ -1,6 +1,6 @@
 use crate::primitives::bytes::zeroize_bytes;
 
-use crate::transaction::model::{SigHashType, Transaction};
+use crate::transaction::model::{CovenantExecution, SigHashType, Transaction};
 
 use super::super::{error::PsktError, validation::checked_redeem_bytes};
 use super::{context::SigningContext, signature_state::set_single_signature};
@@ -48,25 +48,23 @@ pub(super) fn scan_candidate_keys(script: &[u8]) -> Result<CandidateKeys, PsktEr
 
 fn scan_active_candidate_keys(
     script: &[u8],
-    supplied_mask: u16,
-    supplied_true_mask: u16,
+    execution: CovenantExecution,
 ) -> Result<CandidateKeys, PsktError> {
-    let resolved = resolve_execution_branches(script, supplied_mask, supplied_true_mask)?;
-    let candidates = collect_active_candidate_keys(&resolved, supplied_mask, supplied_true_mask)?;
+    let resolved = resolve_execution_branches(script, execution)?;
+    let candidates = collect_active_candidate_keys(&resolved, execution)?;
     require_single_active_candidate(candidates)
 }
 
 fn resolve_execution_branches(
     script: &[u8],
-    supplied_mask: u16,
-    supplied_true_mask: u16,
+    execution: CovenantExecution,
 ) -> Result<crate::contract::covenant::branch::BranchResolution, PsktError> {
-    if supplied_true_mask & !supplied_mask != 0 {
+    if !execution.is_well_formed() {
         return Err(PsktError::InvalidModel);
     }
     let resolved = crate::contract::covenant::branch::resolve_covenant_branches(script)
         .map_err(|_| PsktError::InvalidModel)?;
-    if supplied_mask != resolved.selector_mask() {
+    if execution.supplied_mask != resolved.selector_mask() {
         return Err(PsktError::InvalidModel);
     }
     // Signing and raw-KSPT broadcasting deliberately have different topology
@@ -83,18 +81,11 @@ fn resolve_execution_branches(
 
 fn collect_active_candidate_keys(
     resolved: &crate::contract::covenant::branch::BranchResolution,
-    supplied_mask: u16,
-    supplied_true_mask: u16,
+    execution: CovenantExecution,
 ) -> Result<CandidateKeys, PsktError> {
     let mut candidates = CandidateKeys::new();
     for position in 0..resolved.len() {
-        append_active_candidate(
-            &mut candidates,
-            resolved,
-            position,
-            supplied_mask,
-            supplied_true_mask,
-        )?;
+        append_active_candidate(&mut candidates, resolved, position, execution)?;
     }
     Ok(candidates)
 }
@@ -103,14 +94,13 @@ fn append_active_candidate(
     candidates: &mut CandidateKeys,
     resolved: &crate::contract::covenant::branch::BranchResolution,
     position: usize,
-    supplied_mask: u16,
-    supplied_true_mask: u16,
+    execution: CovenantExecution,
 ) -> Result<(), PsktError> {
     let encoded_position = u8::try_from(position).map_err(|_| PsktError::InvalidModel)?;
     let binding = resolved
         .key_at(encoded_position)
         .map_err(|_| PsktError::InvalidModel)?;
-    if !binding.matches_selectors(supplied_mask, supplied_true_mask) {
+    if !binding.matches_selectors(execution.supplied_mask, execution.supplied_true_mask) {
         return Ok(());
     }
     // A branchless canonical CHECKSIG has no structural selector bits.
@@ -138,16 +128,9 @@ pub(super) fn candidate_keys_for_input(
     input_index: usize,
 ) -> Result<CandidateKeys, PsktError> {
     let input = tx.inputs.get(input_index).ok_or(PsktError::InvalidModel)?;
-    if !input.covenant_execution_present {
-        return Err(PsktError::InvalidModel);
-    }
-    checked_redeem_bytes(tx, input_index).and_then(|script| {
-        scan_active_candidate_keys(
-            script,
-            input.covenant_execution_mask,
-            input.covenant_execution_true_mask,
-        )
-    })
+    let execution = input.covenant_execution.ok_or(PsktError::InvalidModel)?;
+    checked_redeem_bytes(tx, input_index)
+        .and_then(|script| scan_active_candidate_keys(script, execution))
 }
 
 struct CovenantCandidate<'a> {
@@ -163,7 +146,7 @@ pub(super) fn sign_covenant_input(
     active_seed_index: Option<usize>,
     signing_entropy: Option<&[u8; 32]>,
 ) -> Result<usize, PsktError> {
-    if tx.inputs[input_index].sig_count != 0 {
+    if !tx.inputs[input_index].sigs.is_empty() {
         return Ok(0);
     }
     let candidates = candidate_keys_for_input(tx, input_index)?;

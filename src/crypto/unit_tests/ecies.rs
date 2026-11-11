@@ -21,7 +21,7 @@ fn roundtrip() {
     rng[1] = 0xBB;
     rng[2] = 0xCC;
     for (i, byte) in rng.iter_mut().enumerate().skip(3) {
-        *byte = (i as u8).wrapping_mul(7);
+        *byte = u8::try_from(i).unwrap().wrapping_mul(7);
     }
 
     let plaintext = b"KaspaPortal ECIES test message";
@@ -47,7 +47,7 @@ fn wrong_key_fails() {
 
     let mut rng = [0u8; 44];
     for (i, byte) in rng.iter_mut().enumerate() {
-        *byte = (i as u8).wrapping_add(0x55);
+        *byte = u8::try_from(i).unwrap().wrapping_add(0x55);
     }
 
     let ct = encrypt(&xonly, b"secret", &rng).unwrap();

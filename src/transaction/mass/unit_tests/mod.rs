@@ -47,11 +47,11 @@ fn analysis_of_a_p2pk_spend_is_byte_and_gram_exact() {
     assert_eq!(analysis.minimum_fee_sompi, 126_100);
     assert_eq!(analysis.recommended_fee_rate_sompi_per_gram, 100);
     assert_eq!(analysis.recommended_fee_sompi, 126_100);
-    assert!(analysis.compute_mass_valid);
-    assert!(analysis.transient_mass_valid);
-    assert!(analysis.storage_mass_valid);
-    assert!(analysis.mass_valid);
-    assert!(!analysis.fee_sufficient);
+    assert!(analysis.compute_mass_valid());
+    assert!(analysis.transient_mass_valid());
+    assert!(analysis.storage_mass_valid());
+    assert!(analysis.mass_valid());
+    assert!(!analysis.fee_sufficient());
 }
 
 #[test]
@@ -60,12 +60,12 @@ fn analysis_raises_the_rate_floor_and_judges_the_fee_against_it() {
     let at_floor = analyze_verified(&paid, 99).expect("analysis");
     assert_eq!(at_floor.recommended_fee_rate_sompi_per_gram, 100);
     assert_eq!(at_floor.fee_rate_sompi_per_gram, 100);
-    assert!(at_floor.fee_sufficient);
+    assert!(at_floor.fee_sufficient());
 
     let raised = analyze_verified(&paid, 101).expect("analysis");
     assert_eq!(raised.recommended_fee_rate_sompi_per_gram, 101);
     assert_eq!(raised.recommended_fee_sompi, 1_261 * 101);
-    assert!(!raised.fee_sufficient);
+    assert!(!raised.fee_sufficient());
 }
 
 #[test]
@@ -84,9 +84,9 @@ fn each_mass_dimension_alone_makes_the_transaction_invalid() {
     let dust = verify_for_broadcast(&pskb(&sign_first_input(dust, &[0x11])), Limits::grammar())
         .expect("verified");
     let analysis = analyze_verified(&dust, 0).expect("analysis");
-    assert!(analysis.compute_mass_valid && analysis.transient_mass_valid);
-    assert!(!analysis.storage_mass_valid);
-    assert!(!analysis.mass_valid);
+    assert!(analysis.compute_mass_valid() && analysis.transient_mass_valid());
+    assert!(!analysis.storage_mass_valid());
+    assert!(!analysis.mass_valid());
 }
 
 #[test]
@@ -231,4 +231,18 @@ fn thread_maximum_withdraw_is_the_largest_amount_that_still_prices() {
         thread(5_000_000).maximum_withdraw(u64::MAX, minimum_return),
         0
     );
+}
+
+#[test]
+fn analysis_json_carries_decimal_figures_and_derived_verdicts() {
+    let analysis = analyze_verified(&verified(10_000), 0).expect("analysis");
+    let json = serde_json::to_value(&analysis).expect("json");
+    assert_eq!(json["feeSompi"], json!("10000"));
+    assert_eq!(json["maximumMass"], json!(MAX_COMPUTE_MASS.to_string()));
+    assert_eq!(json["computeMassValid"], json!(true));
+    assert_eq!(json["transientMassValid"], json!(true));
+    assert_eq!(json["storageMassValid"], json!(true));
+    assert_eq!(json["massValid"], json!(true));
+    assert_eq!(json["feeSufficient"], json!(false));
+    assert_eq!(json.as_object().expect("object").len(), 18);
 }

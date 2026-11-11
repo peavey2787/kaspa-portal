@@ -201,24 +201,11 @@ fn test_format_kas() -> bool {
 /// Runs all sighash tests
 /// Run all sighash test vectors.
 pub fn run_sighash_tests() -> (u32, u32) {
-    let mut passed = 0u32;
-    let total = 5u32;
-
-    if test_keyed_differs() {
-        passed += 1;
-    }
-    if test_sighash_basic() {
-        passed += 1;
-    }
-    if test_sighash_different_inputs() {
-        passed += 1;
-    }
-    if test_sign_transaction_complete() {
-        passed += 1;
-    }
-    if test_format_kas() {
-        passed += 1;
-    }
-
-    (passed, total)
+    super::tally(&[
+        test_keyed_differs(),
+        test_sighash_basic(),
+        test_sighash_different_inputs(),
+        test_sign_transaction_complete(),
+        test_format_kas(),
+    ])
 }

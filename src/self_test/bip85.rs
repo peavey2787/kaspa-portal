@@ -22,5 +22,5 @@ fn test_bip85_12word_index0() -> bool {
 
 /// Run the BIP85 child-mnemonic test suite.
 pub fn run_bip85_tests() -> (u32, u32) {
-    (u32::from(test_bip85_12word_index0()), 1)
+    super::tally(&[test_bip85_12word_index0()])
 }

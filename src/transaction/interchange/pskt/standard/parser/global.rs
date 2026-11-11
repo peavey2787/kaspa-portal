@@ -206,11 +206,11 @@ impl GlobalParser<'_> {
     }
 
     fn parse_output_count(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        let count = expect_u64(tok)?;
-        if count > MAX_OUTPUTS as u64 {
-            return Err(PskError::TooManyOutputs);
-        }
-        self.context.declared_output_count = Some(count as usize);
+        let count = usize::try_from(expect_u64(tok)?)
+            .ok()
+            .filter(|count| *count <= MAX_OUTPUTS)
+            .ok_or(PskError::TooManyOutputs)?;
+        self.context.declared_output_count = Some(count);
         Ok(())
     }
 

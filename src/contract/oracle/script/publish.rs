@@ -204,7 +204,7 @@ fn build_oracle_mb_publish_body(
     heartbeat_cov_id: &[u8; 32],
 ) -> Vec<u8> {
     use super::covenant_ops::*;
-    let mut script = Vec::with_capacity(ORACLE_MB_BODY_LEN as usize);
+    let mut script = Vec::with_capacity(usize::try_from(ORACLE_MB_BODY_LEN).unwrap_or_default());
     script.push(OP_IF);
     push_oracle_roll_branch(
         &mut script,

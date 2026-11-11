@@ -77,10 +77,13 @@ fn generic_finalizer_multisig_covers_reachable_push_encodings_with_five_key_cap(
             hex::decode(finalized["inputs"][0]["signatureScript"].as_str().unwrap()).unwrap();
         if marker == 36 {
             assert!(script.ends_with(&redeem));
-            assert_eq!(script[script.len() - redeem.len() - 1], redeem.len() as u8);
+            assert_eq!(
+                script[script.len() - redeem.len() - 1],
+                u8::try_from(redeem.len()).unwrap()
+            );
         } else {
             assert!(script.ends_with(&redeem));
-            assert!(script[..script.len() - redeem.len()].contains(&(marker as u8)));
+            assert!(script[..script.len() - redeem.len()].contains(&u8::try_from(marker).unwrap()));
         }
     }
 

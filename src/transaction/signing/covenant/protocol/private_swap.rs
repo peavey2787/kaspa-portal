@@ -153,7 +153,9 @@ pub fn encode_request(
     out[118..150].copy_from_slice(&request.adaptor_point);
     out[150..214].copy_from_slice(&request.presignature);
     out[214] = u8::from(request.presignature_negated);
-    out[215..219].copy_from_slice(&(request.payload.len() as u32).to_be_bytes());
+    let payload_len =
+        u32::try_from(request.payload.len()).map_err(|_| ProtocolError::InvalidLength)?;
+    out[215..219].copy_from_slice(&payload_len.to_be_bytes());
     // Reserved bytes are authenticated by transport shape and must remain zero.
     out[219..221].fill(0);
     out[REQUEST_HEADER_LEN..total].copy_from_slice(request.payload);

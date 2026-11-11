@@ -40,5 +40,8 @@ async fn rust_live_standard_randomness() {
         )
         .await
         .expect("generate live beacon from selected-network evidence");
-    assert!(beacon.verify(&result).expect("verify live beacon").valid);
+    assert!(beacon
+        .verify(&result)
+        .expect("verify live beacon")
+        .is_valid());
 }

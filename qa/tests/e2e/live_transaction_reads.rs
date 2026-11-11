@@ -41,7 +41,7 @@ async fn rust_live_standard_transaction_reads() {
         .get("utxo_count")
         .and_then(serde_json::Value::as_u64)
         .expect("multisig scan UTXO count");
-    assert_eq!(utxo_count as usize, utxos.len());
+    assert_eq!(usize::try_from(utxo_count).ok(), Some(utxos.len()));
     let balance = object
         .get("balance_sompi")
         .and_then(serde_json::Value::as_str)

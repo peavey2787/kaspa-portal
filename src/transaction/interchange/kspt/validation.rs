@@ -1,6 +1,6 @@
 use crate::transaction::model::{
     SigHashType, Transaction, TransactionAmountError, TransactionAmounts, MAX_OUTPUTS,
-    MAX_PAYLOAD_SIZE, MAX_REDEEM_SIZE, MAX_SCRIPT_SIZE, MAX_SIGS_PER_INPUT, REDEEM_POOL_SIZE,
+    MAX_PAYLOAD_SIZE, MAX_REDEEM_SIZE, MAX_SCRIPT_SIZE, REDEEM_POOL_SIZE,
 };
 
 use super::error::PsktError;
@@ -61,8 +61,8 @@ pub(crate) fn checked_redeem_bytes(
     if len > MAX_REDEEM_SIZE {
         return Err(PsktError::ScriptTooLong);
     }
-    if input.redeem_in_pool {
-        return checked_pool_redeem_bytes(tx, input.redeem_script_offset as usize, len);
+    if let Some(offset) = input.redeem_pool_offset {
+        return checked_pool_redeem_bytes(tx, usize::from(offset), len);
     }
     checked_inline_redeem_bytes(input, len)
 }
@@ -108,7 +108,10 @@ fn validate_outputs(tx: &Transaction) -> Result<(), PsktError> {
         if output.script_public_key.script_len > MAX_SCRIPT_SIZE {
             return Err(PsktError::ScriptTooLong);
         }
-        if output.has_covenant && output.covenant_auth_input as usize >= tx.num_inputs {
+        if output
+            .covenant
+            .is_some_and(|covenant| usize::from(covenant.authorizing_input) >= tx.num_inputs)
+        {
             return Err(PsktError::InvalidInputIndex);
         }
     }
@@ -125,36 +128,28 @@ pub(crate) fn validate_base_transaction(tx: &Transaction) -> Result<(), PsktErro
 fn validate_signature_slots(
     input: &crate::transaction::model::TransactionInput,
 ) -> Result<(), PsktError> {
-    let count = input.sig_count as usize;
-    if count > MAX_SIGS_PER_INPUT {
-        return Err(PsktError::TooManySignatures);
-    }
     let mut seen_positions = [false; 256];
-    for slot_index in 0..MAX_SIGS_PER_INPUT {
-        let slot = &input.sigs[slot_index];
-        if slot_index < count {
-            validate_present_signature(slot, &mut seen_positions)?;
-        } else if slot.present {
-            return Err(PsktError::InvalidSignatureState);
-        }
+    for slot in input.sigs.iter() {
+        validate_signature(slot, &mut seen_positions)?;
     }
-    if count != 0 && input.sighash_type != input.sigs[0].sighash_type {
+    if input
+        .sigs
+        .first()
+        .is_some_and(|first| input.sighash_type != first.sighash_type)
+    {
         return Err(PsktError::InvalidSignatureState);
     }
     Ok(())
 }
 
-fn validate_present_signature(
+fn validate_signature(
     slot: &crate::transaction::model::InputSig,
     seen_positions: &mut [bool; 256],
 ) -> Result<(), PsktError> {
-    if !slot.present {
-        return Err(PsktError::InvalidSignatureState);
-    }
     if slot.sighash_type != SigHashType::All.to_byte() {
         return Err(PsktError::InvalidSigHashType);
     }
-    let position = slot.pubkey_pos as usize;
+    let position = usize::from(slot.pubkey_pos);
     if seen_positions[position] {
         return Err(PsktError::InvalidSignatureState);
     }

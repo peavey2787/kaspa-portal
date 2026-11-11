@@ -10,8 +10,9 @@ use crate::wallet::mnemonic::wordlist::WORDLIST;
 pub fn word_to_index(word: &str) -> Result<u16, Bip39Error> {
     WORDLIST
         .binary_search_by(|candidate| str_cmp(candidate, word))
-        .map(|index| index as u16)
-        .map_err(|_| Bip39Error::WordNotFound)
+        .ok()
+        .and_then(|index| u16::try_from(index).ok())
+        .ok_or(Bip39Error::WordNotFound)
 }
 
 /// Return the word corresponding to an index (0-2047).

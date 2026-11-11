@@ -2,6 +2,7 @@ use super::envelope::response_body;
 use crate::network::{
     codec::primitives::WireReader, error::NetworkError, model::fee_estimate::FeeEstimate,
 };
+use crate::primitives::numeric::saturating_f64_to_u64;
 
 /// 1 MiB.
 const MAX_BLOB_BYTES: usize = 1_048_576;
@@ -14,7 +15,7 @@ fn decode_estimate(estimate: &[u8]) -> Result<FeeEstimate, NetworkError> {
     let priority_seconds = reader.read_f64()?;
     let (normal_sompi_per_gram, normal_seconds) = read_first_bucket(&mut reader, 1.0, 30.0)?;
     let (low_sompi_per_gram, low_seconds) = read_first_bucket(&mut reader, 1.0, 1800.0)?;
-    let suggested_fee = (normal_sompi_per_gram * 2300.0).max(10_000.0) as u64;
+    let suggested_fee = saturating_f64_to_u64((normal_sompi_per_gram * 2300.0).max(10_000.0));
     Ok(FeeEstimate {
         priority_sompi_per_gram,
         normal_sompi_per_gram,

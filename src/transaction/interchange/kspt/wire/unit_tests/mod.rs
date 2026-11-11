@@ -327,7 +327,7 @@ fn canonical_extended_script_length_marker_is_ff() {
         assert_eq!(wire[prefix], EXTENDED_SCRIPT_LENGTH);
         assert_eq!(
             u16::from_le_bytes([wire[prefix + 1], wire[prefix + 2]]),
-            length as u16
+            u16::try_from(length).unwrap()
         );
         let mut sink = CaptureSink::default();
         decode(&wire, &mut sink).expect("extended script decode");

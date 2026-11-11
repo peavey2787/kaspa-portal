@@ -19,7 +19,7 @@ pub fn canonical_evidence(
     let mut output = Vec::with_capacity(64 + kaspa.len() * 48 + extra);
     output.extend_from_slice(b"kaspa-portal/beacon/evidence/v1\0");
     output.push(network_code(network));
-    output.extend_from_slice(&(kaspa.len() as u16).to_be_bytes());
+    output.extend_from_slice(&length_field(kaspa.len())?);
     append_kaspa_evidence(&mut output, kaspa)?;
     append_curby_evidence(&mut output, curby)?;
 
@@ -77,6 +77,13 @@ fn append_optional_u64(output: &mut Vec<u8>, value: Option<u64>) {
     }
 }
 
+/// A big-endian `u16` length prefix.
+fn length_field(len: usize) -> Result<[u8; 2], String> {
+    u16::try_from(len)
+        .map(u16::to_be_bytes)
+        .map_err(|_| "Beacon evidence field is too long".to_string())
+}
+
 fn append_curby_evidence(
     output: &mut Vec<u8>,
     curby: Option<&CurbyEvidence>,
@@ -88,9 +95,9 @@ fn append_curby_evidence(
 
     curby.validate()?;
     output.push(1);
-    output.extend_from_slice(&(curby.round.len() as u16).to_be_bytes());
+    output.extend_from_slice(&length_field(curby.round.len())?);
     output.extend_from_slice(curby.round.as_bytes());
-    output.extend_from_slice(&(curby.value.len() as u16).to_be_bytes());
+    output.extend_from_slice(&length_field(curby.value.len())?);
     output.extend_from_slice(&curby.value);
     output.extend_from_slice(&curby.raw_response_hash);
     Ok(())

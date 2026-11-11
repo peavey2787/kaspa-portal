@@ -38,7 +38,7 @@ fn utxo_response_vector_is_stable() {
 
 fn bytes_field(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + bytes.len());
-    out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&u32::try_from(bytes.len()).unwrap().to_le_bytes());
     out.extend_from_slice(bytes);
     out
 }

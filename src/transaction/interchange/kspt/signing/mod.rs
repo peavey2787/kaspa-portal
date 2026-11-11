@@ -8,6 +8,7 @@ mod p2pk;
 mod signature_state;
 mod single_key;
 mod status;
+mod stealth;
 
 use crate::transaction::{
     model::{SigHashType, Transaction},

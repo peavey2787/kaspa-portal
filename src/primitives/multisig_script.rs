@@ -15,6 +15,7 @@ const KEY_RECORD_LEN: usize = 33;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MultisigScript<'a> {
     threshold: u8,
+    key_count: u8,
     records: &'a [u8],
 }
 
@@ -28,7 +29,7 @@ impl<'a> MultisigScript<'a> {
     /// Keys declared, which equals the keys present.
     #[must_use]
     pub const fn key_count(&self) -> u8 {
-        (self.records.len() / KEY_RECORD_LEN) as u8
+        self.key_count
     }
 
     /// The key at `position`, in script order.
@@ -80,7 +81,11 @@ pub fn parse(script: &[u8]) -> Option<MultisigScript<'_>> {
             .0
             .iter()
             .all(|record| record[0] == OP_DATA_32);
-    canonical.then_some(MultisigScript { threshold, records })
+    canonical.then_some(MultisigScript {
+        threshold,
+        key_count: count,
+        records,
+    })
 }
 
 /// Bytes [`encode`] writes for `key_count` keys.

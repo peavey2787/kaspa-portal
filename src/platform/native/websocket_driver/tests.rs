@@ -1,4 +1,6 @@
 use super::*;
+use crate::platform::native::websocket::MAX_QUEUED_NOTIFICATIONS;
+use tokio::sync::oneshot;
 
 fn rpc_response(request_id: u64, operation: Operation, payload: &[u8]) -> Vec<u8> {
     let mut frame = Vec::with_capacity(12 + payload.len());
@@ -32,8 +34,7 @@ fn notification_does_not_consume_active_rpc_response() {
         deadline: Instant::now() + Duration::from_secs(1),
     });
     let mut subscriptions = Vec::new();
-    let mut notifications = VecDeque::new();
-    let mut waiters = VecDeque::new();
+    let mut notifications = Notifications::default();
 
     let event = notification(60, &[0xaa]);
     handle_received_frame(
@@ -41,18 +42,16 @@ fn notification_does_not_consume_active_rpc_response() {
         &mut active,
         &mut subscriptions,
         &mut notifications,
-        &mut waiters,
     )
     .expect("notification is routed independently");
     assert!(active.is_some());
-    assert_eq!(notifications.pop_front(), Some(event));
+    assert_eq!(notifications.queued.pop_front(), Some(event));
 
     handle_received_frame(
         rpc_response(42, Operation::GetBlock, &[0xbb]),
         &mut active,
         &mut subscriptions,
         &mut notifications,
-        &mut waiters,
     )
     .expect("matching response is delivered");
     assert!(active.is_none());
@@ -77,15 +76,13 @@ fn successful_subscription_is_retained_for_replay() {
         deadline: Instant::now() + Duration::from_secs(1),
     });
     let mut subscriptions = Vec::new();
-    let mut notifications = VecDeque::new();
-    let mut waiters = VecDeque::new();
+    let mut notifications = Notifications::default();
 
     handle_received_frame(
         rpc_response(77, Operation::Subscribe, &[]),
         &mut active,
         &mut subscriptions,
         &mut notifications,
-        &mut waiters,
     )
     .expect("subscription response");
 
@@ -94,4 +91,70 @@ fn successful_subscription_is_retained_for_replay() {
         .expect("response channel")
         .expect("subscription success");
     assert_eq!(subscriptions, vec![body]);
+}
+
+#[test]
+fn a_waiting_caller_is_answered_from_the_queue_first() {
+    let mut notifications = Notifications::default();
+    notifications.deliver(vec![1]).expect("queued");
+    let (waiter, mut received) = oneshot::channel();
+    notifications.wait(waiter);
+    assert_eq!(
+        received.try_recv().expect("answered").expect("frame"),
+        vec![1]
+    );
+    assert!(!notifications.has_waiters());
+}
+
+#[test]
+fn queued_notifications_skip_callers_that_stopped_waiting() {
+    let mut notifications = Notifications::default();
+    notifications.deliver(vec![1]).expect("queued");
+    notifications.deliver(vec![2]).expect("queued");
+    let (gone, closed) = oneshot::channel();
+    drop(closed);
+    let (waiter, mut received) = oneshot::channel();
+    notifications.waiters.push_back(gone);
+    notifications.waiters.push_back(waiter);
+
+    notifications.dispatch_queued();
+
+    assert_eq!(
+        received.try_recv().expect("answered").expect("frame"),
+        vec![1]
+    );
+    assert_eq!(notifications.queued, VecDeque::from([vec![2]]));
+    assert!(!notifications.has_waiters());
+}
+
+#[test]
+fn the_notification_queue_is_bounded() {
+    let mut notifications = Notifications::default();
+    for frame in 0..MAX_QUEUED_NOTIFICATIONS {
+        notifications
+            .deliver(frame.to_le_bytes().to_vec())
+            .expect("within capacity");
+    }
+    assert!(matches!(
+        notifications.deliver(vec![0]),
+        Err(NetworkError::UnexpectedResponse(_))
+    ));
+    assert_eq!(notifications.queued.len(), MAX_QUEUED_NOTIFICATIONS);
+}
+
+#[test]
+fn failing_waiters_reports_the_error_to_each_one() {
+    let mut notifications = Notifications::default();
+    let (first, mut first_rx) = oneshot::channel();
+    let (second, mut second_rx) = oneshot::channel();
+    notifications.wait(first);
+    notifications.wait(second);
+    notifications.fail_waiters(&NetworkError::SendFailed);
+    for received in [&mut first_rx, &mut second_rx] {
+        assert!(matches!(
+            received.try_recv(),
+            Ok(Err(NetworkError::SendFailed))
+        ));
+    }
+    assert!(!notifications.has_waiters());
 }

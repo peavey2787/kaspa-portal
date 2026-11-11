@@ -221,7 +221,8 @@ fn mark_branch_used(summary: &mut BranchSummary, chain: u32, index: u32) {
 }
 
 pub(super) fn first_free(used: &[bool]) -> u32 {
-    used.iter().position(|value| !*value).unwrap_or(used.len()) as u32
+    let index = used.iter().position(|value| !*value).unwrap_or(used.len());
+    u32::try_from(index).unwrap_or(u32::MAX)
 }
 
 pub(super) fn encode_branch_summary(

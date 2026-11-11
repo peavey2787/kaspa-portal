@@ -53,9 +53,10 @@ fn transaction(context: &Context, inputs: &[Input], outputs: &[Output]) -> Trans
         slot.script_public_key.script[..output.script.len()].copy_from_slice(output.script);
         slot.script_public_key.script_len = output.script.len();
         if let Some((authorizing_input, id)) = output.covenant {
-            slot.has_covenant = true;
-            slot.covenant_auth_input = authorizing_input;
-            slot.covenant_id = id;
+            slot.covenant = Some(crate::transaction::model::Covenant {
+                authorizing_input,
+                id,
+            });
         }
     }
     tx.subnetwork_id = context.subnetwork_id;

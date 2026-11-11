@@ -152,13 +152,13 @@ fn emit_covenant_execution(
     writer: &mut HexWriter<'_>,
     input: &TransactionInput,
 ) -> Result<(), PskError> {
-    if !input.covenant_execution_present {
+    let Some(execution) = input.covenant_execution else {
         return Ok(());
-    }
+    };
     writer.lit(b",\"covenantExecution\":{\"suppliedMask\":")?;
-    writer.u64(u64::from(input.covenant_execution_mask))?;
+    writer.u64(u64::from(execution.supplied_mask))?;
     writer.lit(b",\"suppliedTrueMask\":")?;
-    writer.u64(u64::from(input.covenant_execution_true_mask))?;
+    writer.u64(u64::from(execution.supplied_true_mask))?;
     writer.byte(b'}')
 }
 
@@ -232,16 +232,12 @@ fn emit_partial_sig_entry(
 }
 
 fn emit_partial_sigs(writer: &mut HexWriter<'_>, input: &TransactionInput) -> Result<(), PskError> {
-    if input.incoming_partial_sigs_count == 0 {
-        writer.lit(b"{}")?;
-        return Ok(());
-    }
     writer.lit(b"{")?;
-    for index in 0..input.incoming_partial_sigs_count as usize {
+    for (index, signature) in input.incoming_partial_sigs.iter().enumerate() {
         if index > 0 {
             writer.lit(b",")?;
         }
-        emit_partial_sig_entry(writer, &input.incoming_partial_sigs[index])?;
+        emit_partial_sig_entry(writer, signature)?;
     }
     writer.lit(b"}")
 }
@@ -250,18 +246,13 @@ fn emit_bip32_derivations_for_input(
     writer: &mut HexWriter<'_>,
     input: &TransactionInput,
 ) -> Result<(), PskError> {
-    if input.incoming_partial_sigs_count == 0 {
-        writer.lit(b"{}")?;
-        return Ok(());
-    }
     writer.lit(b"{")?;
-    for index in 0..input.incoming_partial_sigs_count as usize {
+    for (index, signature) in input.incoming_partial_sigs.iter().enumerate() {
         if index > 0 {
             writer.lit(b",")?;
         }
-        writer.hex_string_field(&input.incoming_partial_sigs[index].pubkey)?;
+        writer.hex_string_field(&signature.pubkey)?;
         writer.lit(b":null")?;
     }
-    writer.lit(b"}")?;
-    Ok(())
+    writer.lit(b"}")
 }

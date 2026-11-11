@@ -108,6 +108,8 @@ pub fn constant_time_eq_32(left: &[u8; 32], right: &[u8; 32]) -> bool {
 #[inline(never)]
 pub fn volatile_clear<T: Copy>(values: &mut [T], zero: T) {
     for value in values {
+        // SAFETY: `value` is a live, aligned, exclusive `&mut T` taken from the
+        // slice, and `T: Copy` has no destructor the overwrite could skip.
         unsafe { core::ptr::write_volatile(value, zero) };
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);

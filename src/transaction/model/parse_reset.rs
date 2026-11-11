@@ -23,8 +23,7 @@ impl Transaction {
         self.gas = 0;
         self.payload.fill(0);
         self.payload.clear();
-        self.stealth_tweak.fill(0);
-        self.has_stealth_tweak = false;
+        self.clear_stealth_tweak();
         self.redeem_pool.fill(0);
         self.redeem_pool_used = 0;
     }

@@ -4,7 +4,7 @@ use crate::transaction::{
     interchange::kspt::{
         parse_compact_kspt, serialize_compact_kspt, sign_transaction, PsktError, SignedResponse,
     },
-    model::{SigHashType, Transaction},
+    model::{EmptySlot, InputSig, SigHashType, Transaction},
 };
 
 fn test_compact_roundtrip() -> bool {
@@ -20,11 +20,12 @@ fn test_compact_roundtrip() -> bool {
     tx.inputs[0].utxo_entry.script_public_key.script_len = 34;
     tx.inputs[0].utxo_entry.script_public_key.script[0] = 0x20;
     tx.inputs[0].utxo_entry.script_public_key.script[33] = 0xac;
-    tx.inputs[0].sig_count = 1;
     tx.inputs[0].sighash_type = SigHashType::All.to_byte();
-    tx.inputs[0].sigs[0].present = true;
-    tx.inputs[0].sigs[0].sighash_type = SigHashType::All.to_byte();
-    tx.inputs[0].sigs[0].signature = [0x22; 64];
+    tx.inputs[0].sigs.replace_with(InputSig {
+        sighash_type: SigHashType::All.to_byte(),
+        signature: [0x22; 64],
+        ..InputSig::EMPTY
+    });
     tx.outputs[0].value = 9_000;
     tx.outputs[0].script_public_key.script_len = 34;
     tx.outputs[0].script_public_key.script[0] = 0x20;
@@ -40,7 +41,7 @@ fn test_compact_roundtrip() -> bool {
     parse_compact_kspt(&wire[..size], &mut parsed).is_ok()
         && parsed.num_inputs == 1
         && parsed.num_outputs == 1
-        && parsed.inputs[0].sig_count == 1
+        && parsed.inputs[0].sigs.len() == 1
 }
 
 fn test_invalid_magic() -> bool {
@@ -74,14 +75,10 @@ fn test_signing_rejects_empty_transaction() -> bool {
 }
 
 pub fn run_kspt_tests() -> (u32, u32) {
-    let checks = [
+    super::tally(&[
         test_compact_roundtrip(),
         test_invalid_magic(),
         test_signed_response_size(),
         test_signing_rejects_empty_transaction(),
-    ];
-    (
-        checks.iter().filter(|passed| **passed).count() as u32,
-        checks.len() as u32,
-    )
+    ])
 }

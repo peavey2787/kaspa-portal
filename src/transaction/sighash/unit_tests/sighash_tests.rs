@@ -36,20 +36,21 @@ fn component_hashes_cover_all_sighash_and_covenant_payload_branches() {
     tx.num_inputs = 2;
     tx.num_outputs = 2;
     for index in 0..2 {
-        tx.inputs[index].previous_outpoint.transaction_id = [index as u8 + 1; 32];
-        tx.inputs[index].previous_outpoint.index = index as u32;
+        tx.inputs[index].previous_outpoint.transaction_id = [u8::try_from(index).unwrap() + 1; 32];
+        tx.inputs[index].previous_outpoint.index = u32::try_from(index).unwrap();
         tx.inputs[index].sequence = 10 + index as u64;
-        tx.inputs[index].sig_op_count = index as u8 + 1;
+        tx.inputs[index].sig_op_count = u8::try_from(index).unwrap() + 1;
         tx.inputs[index].utxo_entry.amount = 100 + index as u64;
         tx.outputs[index].value = 90 + index as u64;
         tx.outputs[index].script_public_key.script[0] = 0x20;
-        tx.outputs[index].script_public_key.script[1..33].fill(0x30 + index as u8);
+        tx.outputs[index].script_public_key.script[1..33].fill(0x30 + u8::try_from(index).unwrap());
         tx.outputs[index].script_public_key.script[33] = 0xac;
         tx.outputs[index].script_public_key.script_len = 34;
     }
-    tx.outputs[0].has_covenant = true;
-    tx.outputs[0].covenant_auth_input = 1;
-    tx.outputs[0].covenant_id = [0x77; 32];
+    tx.outputs[0].covenant = Some(crate::transaction::model::Covenant {
+        authorizing_input: 1,
+        id: [0x77; 32],
+    });
 
     assert_ne!(previous_outputs_hash(&tx, SigHashType::All), [0; 32]);
     assert_eq!(
@@ -78,7 +79,7 @@ fn component_hashes_cover_all_sighash_and_covenant_payload_branches() {
     assert_eq!(outputs_hash(&tx, SigHashType::None, 0), [0; 32]);
     assert_eq!(outputs_hash(&tx, SigHashType::Single, 2), [0; 32]);
 
-    tx.outputs[0].has_covenant = false;
+    tx.outputs[0].covenant = None;
     assert_ne!(outputs_hash(&tx, SigHashType::All, 0), all);
 
     assert_eq!(

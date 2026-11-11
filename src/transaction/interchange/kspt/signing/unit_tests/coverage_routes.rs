@@ -55,7 +55,7 @@ fn single_key_public_routes_cover_response_in_place_entropy_and_matching_scan() 
         sign_transaction_in_place(&mut in_place, &private_key, SigHashType::All),
         Ok(1),
     );
-    assert_eq!(in_place.inputs[0].sig_count, 1);
+    assert_eq!(in_place.inputs[0].sigs.len(), 1);
     assert_eq!(in_place.inputs[0].sigs[0].pubkey_compressed, compressed);
 
     let mut entropy_in_place = transaction();
@@ -68,7 +68,7 @@ fn single_key_public_routes_cover_response_in_place_entropy_and_matching_scan() 
         ),
         Ok(1),
     );
-    assert_eq!(entropy_in_place.inputs[0].sig_count, 1);
+    assert_eq!(entropy_in_place.inputs[0].sigs.len(), 1);
     assert_eq!(
         entropy_in_place.inputs[0].sigs[0].sighash_type,
         SigHashType::Single.to_byte()
@@ -90,8 +90,8 @@ fn single_key_public_routes_cover_response_in_place_entropy_and_matching_scan() 
         ),
         Ok(1),
     );
-    assert_eq!(matching.inputs[0].sig_count, 1);
-    assert_eq!(matching.inputs[1].sig_count, 0);
+    assert_eq!(matching.inputs[0].sigs.len(), 1);
+    assert_eq!(matching.inputs[1].sigs.len(), 0);
 
     let mut no_match = transaction();
     set_p2pk(&mut no_match, &[0x98; 32]);
@@ -182,12 +182,12 @@ fn account_finalization_entry_points_cover_zero_addition_range_without_fabricati
         finalize_account_signatures(&mut tx, &account, &initial, &session, &[0x52; 32],),
         Err(PsktError::NoInputs),
     );
-    assert_eq!(tx.inputs[0].sig_count, 0);
+    assert_eq!(tx.inputs[0].sigs.len(), 0);
 }
 
 #[test]
 fn signing_context_hd45_account_sets_cover_valid_and_rejected_hints() {
-    use crate::transaction::model::Ms45Hint;
+    use crate::transaction::model::Ms45Derivation;
 
     let seed = [0x52u8; 64];
     let account = derive_account_key(&seed).expect("44' account");
@@ -197,8 +197,7 @@ fn signing_context_hd45_account_sets_cover_valid_and_rejected_hints() {
     let ms45_accounts = [(ms45.to_raw(), true), ([0u8; 65], false)];
     let context = SigningContext::from_account_sets(&accounts, &ms45_accounts);
 
-    let hint = Ms45Hint {
-        present: true,
+    let hint = Ms45Derivation {
         cosigner: 2,
         chain: 1,
         index: 7,
@@ -215,12 +214,10 @@ fn signing_context_hd45_account_sets_cover_valid_and_rejected_hints() {
     );
 
     assert!(context.ms45_material(1, &hint).is_none());
-    assert!(context.ms45_material(0, &Ms45Hint::none()).is_none());
     assert!(context
         .ms45_material(
             0,
-            &Ms45Hint {
-                present: true,
+            &Ms45Derivation {
                 cosigner: 0,
                 chain: 2,
                 index: 0
@@ -232,7 +229,7 @@ fn signing_context_hd45_account_sets_cover_valid_and_rejected_hints() {
 #[test]
 fn hd45_input_signing_covers_match_duplicate_miss_and_entropy_routes() {
     use super::super::ms45;
-    use crate::transaction::model::{Ms45Hint, MultisigInfo};
+    use crate::transaction::model::{Ms45Derivation, MultisigInfo};
 
     let seed = [0x73u8; 64];
     let account = derive_account_key(&seed).expect("44' account");
@@ -242,8 +239,7 @@ fn hd45_input_signing_covers_match_duplicate_miss_and_entropy_routes() {
         &[(account.to_raw(), true)],
         &[(ms45_account.to_raw(), true)],
     );
-    let hint = Ms45Hint {
-        present: true,
+    let hint = Ms45Derivation {
         cosigner: 1,
         chain: 0,
         index: 3,
@@ -264,7 +260,7 @@ fn hd45_input_signing_covers_match_duplicate_miss_and_entropy_routes() {
         ms45::sign_input(&mut tx, 0, &info, &context, SigHashType::All, None, &hint),
         Ok(1),
     );
-    assert_eq!(tx.inputs[0].sig_count, 1);
+    assert_eq!(tx.inputs[0].sigs.len(), 1);
     assert_ne!(tx.inputs[0].sigs[0].signature, [0u8; 64]);
     assert_ne!(tx.inputs[0].sigs[0].signature, [1u8; 64]);
     assert_eq!(
@@ -321,7 +317,7 @@ fn hd45_input_signing_covers_match_duplicate_miss_and_entropy_routes() {
 
 #[test]
 fn signing_context_account_sets_reject_absent_and_out_of_range_hd45_slots() {
-    use crate::transaction::model::Ms45Hint;
+    use crate::transaction::model::Ms45Derivation;
 
     let seed0 = [0x91u8; 64];
     let seed1 = [0x92u8; 64];
@@ -331,8 +327,7 @@ fn signing_context_account_sets_reject_absent_and_out_of_range_hd45_slots() {
         crate::wallet::derivation::bip32::derive_multisig_account_key(&seed0, 0).expect("ms0");
     let ms1 =
         crate::wallet::derivation::bip32::derive_multisig_account_key(&seed1, 0).expect("ms1");
-    let hint = Ms45Hint {
-        present: true,
+    let hint = Ms45Derivation {
         cosigner: 0,
         chain: 0,
         index: 0,

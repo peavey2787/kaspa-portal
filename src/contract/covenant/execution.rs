@@ -202,7 +202,8 @@ impl Parser<'_> {
         if !self.open.is_empty() {
             return Err(ExecutionError::MalformedScript);
         }
-        let selector_mask = ((1u32 << self.next_branch) - 1) as u16;
+        let selector_mask = u16::try_from((1u32 << self.next_branch) - 1)
+            .map_err(|_| ExecutionError::MalformedScript)?;
         Ok((self.root, selector_mask))
     }
 }

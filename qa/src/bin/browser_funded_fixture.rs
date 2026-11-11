@@ -131,10 +131,10 @@ async fn plan_signed_send_with_adaptive_fee(
             .await
             .expect("analyze signed funded browser transaction");
         assert!(
-            analysis.mass_valid,
+            analysis.mass_valid(),
             "signed funded browser transaction exceeds mass limits"
         );
-        if analysis.fee_sufficient {
+        if analysis.fee_sufficient() {
             return (signed_wire, fee);
         }
         fee = next_adaptive_fee(fee, analysis.recommended_fee_sompi);

@@ -31,7 +31,8 @@ impl Rng {
     }
 
     fn below(&mut self, bound: usize) -> usize {
-        (self.next() % bound.max(1) as u64) as usize
+        let bound = u64::try_from(bound.max(1)).unwrap_or(u64::MAX);
+        usize::try_from(self.next() % bound).expect("below a usize bound")
     }
 }
 
@@ -39,8 +40,8 @@ fn mutate(rng: &mut Rng, input: &mut Vec<u8>) {
     let at = rng.below(input.len());
     match rng.below(5) {
         0 if !input.is_empty() => input[at] ^= 1 << rng.below(8),
-        1 if !input.is_empty() => input[at] = rng.next() as u8,
-        2 => input.insert(at.min(input.len()), rng.next() as u8),
+        1 if !input.is_empty() => input[at] = rng.next().to_le_bytes()[0],
+        2 => input.insert(at.min(input.len()), rng.next().to_le_bytes()[0]),
         3 if !input.is_empty() => {
             input.remove(at);
         }

@@ -1,19 +1,19 @@
 //! Descriptor-backed 45' multisig change verification.
 
-use super::{multisig::MultisigConfig, transaction::Transaction};
+use super::{super::transaction::Transaction, MultisigConfig, MultisigStore};
 use crate::primitives::address::p2sh_hash;
 
 /// Find the first 45' output change claim contradicted by a descriptor already
 /// proven against one of this transaction's inputs. Unknown/unverifiable claims
 /// are not called forged; only a trusted-descriptor mismatch is fatal.
 #[must_use]
-pub fn find_forged_change(tx: &Transaction, configs: &[MultisigConfig]) -> Option<usize> {
-    let trusted = trusted_descriptor(tx, configs)?;
+pub fn find_forged_change(tx: &Transaction, store: &MultisigStore) -> Option<usize> {
+    let trusted = trusted_descriptor(tx, store)?;
     for output_index in 0..tx.num_outputs {
         let output = &tx.outputs[output_index];
-        if !output.ms45_hint.present {
+        let Some(hint) = output.ms45_hint else {
             continue;
-        }
+        };
         let Some(hash) =
             p2sh_hash(&output.script_public_key.script[..output.script_public_key.script_len])
         else {
@@ -25,7 +25,7 @@ pub fn find_forged_change(tx: &Transaction, configs: &[MultisigConfig]) -> Optio
         ) {
             continue;
         }
-        if !trusted.matches_at(&output.ms45_hint, &hash) {
+        if !trusted.matches_at(&hint, &hash) {
             return Some(output_index);
         }
     }
@@ -39,35 +39,37 @@ pub fn find_forged_change(tx: &Transaction, configs: &[MultisigConfig]) -> Optio
 #[must_use]
 pub fn trusted_multisig_output_chain(
     tx: &Transaction,
-    configs: &[MultisigConfig],
+    store: &MultisigStore,
     output_index: usize,
 ) -> Option<u8> {
-    let trusted = trusted_descriptor(tx, configs)?;
+    let trusted = trusted_descriptor(tx, store)?;
     let output = tx.outputs.get(output_index)?;
-    if output_index >= tx.num_outputs || !output.ms45_hint.present {
+    if output_index >= tx.num_outputs {
         return None;
     }
+    let hint = output.ms45_hint?;
     let script = &output.script_public_key.script[..output.script_public_key.script_len];
     let hash = p2sh_hash(script)?;
-    if matches_input_script(tx, script) || !trusted.matches_at(&output.ms45_hint, &hash) {
+    if matches_input_script(tx, script) || !trusted.matches_at(&hint, &hash) {
         return None;
     }
-    u8::try_from(output.ms45_hint.chain)
-        .ok()
-        .filter(|chain| *chain <= 1)
+    u8::try_from(hint.chain).ok().filter(|chain| *chain <= 1)
 }
 
 fn trusted_descriptor<'a>(
     tx: &Transaction,
-    configs: &'a [MultisigConfig],
+    store: &'a MultisigStore,
 ) -> Option<&'a MultisigConfig> {
-    for config in configs.iter().filter(|config| config.active && config.v45) {
+    for config in store.wallets() {
         for input in tx.inputs.iter().take(tx.num_inputs) {
             let script = input.utxo_entry.script_public_key.script_bytes();
             let Some(hash) = p2sh_hash(script) else {
                 continue;
             };
-            if config.matches_at(&input.ms45_hint, &hash) {
+            if input
+                .ms45_hint
+                .is_some_and(|hint| config.matches_at(&hint, &hash))
+            {
                 return Some(config);
             }
         }

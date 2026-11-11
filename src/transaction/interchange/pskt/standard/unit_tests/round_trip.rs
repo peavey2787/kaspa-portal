@@ -2,7 +2,7 @@ use alloc::{format, vec, vec::Vec};
 
 use crate::transaction::interchange::pskt::shared::{PsktParsed, TxInputFormat};
 
-use crate::transaction::model::Transaction;
+use crate::transaction::model::{IncomingPartialSig, Transaction};
 
 use super::super::{
     parse_pskt, serialize_pskt, serialize_pskt_vec, PskError, PSKB_MAGIC, PSKT_MAGIC,
@@ -114,16 +114,16 @@ fn generated_bip32_derivations_follow_incoming_signature_pubkeys() {
     tx.inputs[0].utxo_entry.amount = 1;
     tx.outputs[0].value = 1;
     tx.inputs[0].sighash_type = 1;
-    tx.inputs[0].incoming_partial_sigs_count = 1;
-    tx.inputs[0].incoming_partial_sigs[0].present = true;
-    for (index, byte) in tx.inputs[0].incoming_partial_sigs[0]
-        .pubkey
-        .iter_mut()
-        .enumerate()
-    {
-        *byte = index as u8;
+    let mut pubkey = [0u8; 33];
+    for (byte, value) in pubkey.iter_mut().zip(0u8..) {
+        *byte = value;
     }
-    tx.inputs[0].incoming_partial_sigs[0].signature = [0x24; 64];
+    tx.inputs[0]
+        .incoming_partial_sigs
+        .replace_with(IncomingPartialSig {
+            pubkey,
+            signature: [0x24; 64],
+        });
 
     let emitted = serialize_json(&tx, &PsktParsed::empty(), b"", TxInputFormat::PsktSingle)
         .expect("serialize generated derivation");
@@ -218,10 +218,12 @@ fn valid_partial_signature_round_trips_and_invalid_mutation_is_rejected() {
 
     let signature = sighash::sign_input(&tx, 0, &private_key, SigHashType::All)
         .expect("valid partial signature");
-    tx.inputs[0].incoming_partial_sigs[0].present = true;
-    tx.inputs[0].incoming_partial_sigs[0].pubkey = compressed;
-    tx.inputs[0].incoming_partial_sigs[0].signature = signature.bytes;
-    tx.inputs[0].incoming_partial_sigs_count = 1;
+    tx.inputs[0]
+        .incoming_partial_sigs
+        .replace_with(IncomingPartialSig {
+            pubkey: compressed,
+            signature: signature.bytes,
+        });
 
     let emitted = serialize_json(&tx, &PsktParsed::empty(), b"", TxInputFormat::PsktSingle)
         .expect("serialize valid partial signature");
@@ -229,7 +231,7 @@ fn valid_partial_signature_round_trips_and_invalid_mutation_is_rejected() {
     assert!(contains_subslice(&emitted, b"\"bip32Derivations\":{"));
 
     let (reparsed, _, _) = parse_json(PSKT_MAGIC, &emitted).expect("valid signature reparses");
-    assert_eq!(reparsed.inputs[0].incoming_partial_sigs_count, 1);
+    assert_eq!(reparsed.inputs[0].incoming_partial_sigs.len(), 1);
 
     let mut tampered = tx;
     tampered.inputs[0].incoming_partial_sigs[0].signature[0] ^= 1;
@@ -343,28 +345,25 @@ fn serializer_accepts_an_exact_output_buffer_and_rejects_one_byte_short() {
 
 #[test]
 fn serializer_keeps_multiple_input_signature_maps_scope_separated() {
-    use crate::transaction::model::IncomingPartialSig;
-
     let mut tx = Transaction::try_new().expect("transaction test allocation");
     tx.version = 1;
     tx.num_inputs = 2;
     tx.num_outputs = 1;
     for input_index in 0..2 {
         let input = &mut tx.inputs[input_index];
-        input.previous_outpoint.transaction_id = [0x30 + input_index as u8; 32];
-        input.previous_outpoint.index = input_index as u32;
+        input.previous_outpoint.transaction_id = [0x30 + u8::try_from(input_index).unwrap(); 32];
+        input.previous_outpoint.index = u32::try_from(input_index).unwrap();
         input.sighash_type = 1;
-        input.incoming_partial_sigs_count = 2;
-        input.incoming_partial_sigs[0] = IncomingPartialSig {
-            pubkey: [0x40 + input_index as u8; 33],
-            signature: [0x50 + input_index as u8; 64],
-            present: true,
-        };
-        input.incoming_partial_sigs[1] = IncomingPartialSig {
-            pubkey: [0x60 + input_index as u8; 33],
-            signature: [0x70 + input_index as u8; 64],
-            present: true,
-        };
+        input
+            .incoming_partial_sigs
+            .replace_with(IncomingPartialSig {
+                pubkey: [0x40 + u8::try_from(input_index).unwrap(); 33],
+                signature: [0x50 + u8::try_from(input_index).unwrap(); 64],
+            });
+        assert!(input.incoming_partial_sigs.push(IncomingPartialSig {
+            pubkey: [0x60 + u8::try_from(input_index).unwrap(); 33],
+            signature: [0x70 + u8::try_from(input_index).unwrap(); 64],
+        }));
     }
 
     let emitted = serialize_json(&tx, &PsktParsed::empty(), b"", TxInputFormat::PsktSingle)
@@ -516,13 +515,13 @@ fn serializer_accepts_maximum_output_and_script_capacity_and_rejects_next_value(
     let script_capacity = tx.outputs[0].script_public_key.script.len();
     tx.outputs[0].script_public_key.version = 0xabcd;
     tx.outputs[0].script_public_key.script_len = script_capacity;
-    for (index, byte) in tx.outputs[0]
+    for (byte, value) in tx.outputs[0]
         .script_public_key
         .script
         .iter_mut()
-        .enumerate()
+        .zip((0..=u8::MAX).cycle())
     {
-        *byte = index as u8;
+        *byte = value;
     }
 
     let mut wire = vec![0u8; 32_768];
@@ -650,9 +649,10 @@ fn covenant_execution_selectors_round_trip_through_the_standard_codec() {
     assert!(!contains_subslice(&plain, b"covenantExecution"));
 
     let mut tx = tx;
-    tx.inputs[0].covenant_execution_present = true;
-    tx.inputs[0].covenant_execution_mask = 0b11;
-    tx.inputs[0].covenant_execution_true_mask = 0b01;
+    tx.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0b11,
+        supplied_true_mask: 0b01,
+    });
     let emitted = serialize_json(&tx, &parsed, &scratch, TxInputFormat::PsktSingle)
         .expect("serialize selectors");
     let document: serde_json::Value = serde_json::from_slice(&emitted).expect("valid JSON");
@@ -661,7 +661,11 @@ fn covenant_execution_selectors_round_trip_through_the_standard_codec() {
         serde_json::json!({"suppliedMask": 3, "suppliedTrueMask": 1})
     );
     let (reparsed, _, _) = parse_json(PSKT_MAGIC, &emitted).expect("reparse selectors");
-    assert!(reparsed.inputs[0].covenant_execution_present);
-    assert_eq!(reparsed.inputs[0].covenant_execution_mask, 0b11);
-    assert_eq!(reparsed.inputs[0].covenant_execution_true_mask, 0b01);
+    assert_eq!(
+        reparsed.inputs[0].covenant_execution,
+        Some(crate::transaction::model::CovenantExecution {
+            supplied_mask: 0b11,
+            supplied_true_mask: 0b01
+        })
+    );
 }

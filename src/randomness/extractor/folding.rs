@@ -88,7 +88,9 @@ fn fold_round(
     hash.update(b"kaspa-portal/beacon/fold/v1\0");
     hash.update([round]);
     hash.update(seed);
-    hash.update((positions.len() as u32).to_be_bytes());
+    let position_count =
+        u32::try_from(positions.len()).map_err(|_| "Too many beacon positions".to_string())?;
+    hash.update(position_count.to_be_bytes());
     hash.update(packed);
     hash.update(evidence_hash);
     Ok(hash.finalize().into())

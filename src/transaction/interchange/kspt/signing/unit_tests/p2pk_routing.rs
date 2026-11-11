@@ -101,7 +101,7 @@ fn p2pk_single_input_signing_rejects_wrong_key_without_mutation() {
         ),
         Ok(false),
     );
-    assert_eq!(wrong.inputs[0].sig_count, 0);
+    assert_eq!(wrong.inputs[0].sigs.len(), 0);
 
     let mut valid = transaction();
     set_p2pk(&mut valid, &target);
@@ -115,6 +115,6 @@ fn p2pk_single_input_signing_rejects_wrong_key_without_mutation() {
         ),
         Ok(true),
     );
-    assert_eq!(valid.inputs[0].sig_count, 1);
+    assert_eq!(valid.inputs[0].sigs.len(), 1);
     assert_eq!(valid.inputs[0].sigs[0].pubkey_compressed, compressed);
 }

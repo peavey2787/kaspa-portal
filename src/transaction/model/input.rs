@@ -14,34 +14,11 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use super::{
-    constants::{Hash256, MAX_SCRIPT_SIZE, MAX_SIGS_PER_INPUT},
+    annotations::{CovenantExecution, Derivation, Ms45Derivation},
+    constants::{Hash256, MAX_SCRIPT_SIZE},
     script::UtxoEntry,
-    signatures::{IncomingPartialSig, InputSig},
+    signatures::{IncomingPartialSig, InputSig, SignatureSlots},
 };
-
-/// Untrusted coordinated-multisig derivation hint carried by PSKT/KSPT v4.
-/// It identifies the address path beneath `m/45'/111111'/account'` as
-/// `/cosigner/chain/index`. The signing path must still prove the derived
-/// public key is present in the redeem script before signing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Ms45Hint {
-    pub present: bool,
-    pub cosigner: u32,
-    pub chain: u32,
-    pub index: u32,
-}
-
-impl Ms45Hint {
-    #[must_use]
-    pub const fn none() -> Self {
-        Self {
-            present: false,
-            cosigner: 0,
-            chain: 0,
-            index: 0,
-        }
-    }
-}
 
 // ─── Outpoint ─────────────────────────────────────────────────────────
 
@@ -62,38 +39,30 @@ pub struct TransactionInput {
     pub sig_op_count: u8,
     pub utxo_entry: UtxoEntry,
     /// Signatures — up to MAX_SIGS_PER_INPUT for multisig
-    pub sigs: [InputSig; MAX_SIGS_PER_INPUT],
-    pub sig_count: u8,
+    pub sigs: SignatureSlots<InputSig>,
     /// Sighash policy requested by the PSKT input. Signed slots record the
     /// actual sighash byte alongside each signature.
     pub sighash_type: u8,
     /// P2SH redeem script (the actual multisig script inside the P2SH wrapper).
     /// For scripts <= 256 bytes, stored inline here.
-    /// For scripts > 256 bytes (covenants), stored in Transaction::redeem_pool
-    /// and redeem_script_offset points into that pool.
+    /// For scripts > 256 bytes (covenants), stored in Transaction::redeem_pool.
     pub redeem_script: [u8; MAX_SCRIPT_SIZE],
     pub redeem_script_len: usize,
-    /// If true, this input's redeem script lives in Transaction::redeem_pool
-    /// at byte offset redeem_script_offset, not in the inline redeem_script array.
-    pub redeem_in_pool: bool,
-    pub redeem_script_offset: u16,
+    /// Byte offset into Transaction::redeem_pool when this input's redeem
+    /// script lives there instead of in the inline redeem_script array.
+    pub redeem_pool_offset: Option<u16>,
     /// Partial signatures carried in an incoming PSKT, keyed by full pubkey.
     /// Preserved byte-for-byte on re-serialization so counterparty signers
     /// see the same PSKT they sent, plus our additions. Empty for KSPT flow.
-    pub incoming_partial_sigs: [IncomingPartialSig; MAX_SIGS_PER_INPUT],
-    pub incoming_partial_sigs_count: u8,
+    pub incoming_partial_sigs: SignatureSlots<IncomingPartialSig>,
     /// Untrusted standard-account receive/change path hint carried by KSPT v4.
     /// The signer must derive this exact child and verify its x-only public key
     /// matches the input script before using it.
-    pub has_derivation_hint: bool,
-    pub derivation_branch: u8,
-    pub derivation_index: u32,
+    pub derivation_hint: Option<Derivation>,
     /// 45' address path extracted from `bip32Derivations`, if present.
-    pub ms45_hint: Ms45Hint,
+    pub ms45_hint: Option<Ms45Derivation>,
     /// Explicit witness selector assignment proving the covenant execution branch.
-    pub covenant_execution_present: bool,
-    pub covenant_execution_mask: u16,
-    pub covenant_execution_true_mask: u16,
+    pub covenant_execution: Option<CovenantExecution>,
 }
 
 impl TransactionInput {
@@ -111,22 +80,15 @@ impl TransactionInput {
                 script_public_key: super::script::ScriptPublicKey::new(),
                 block_daa_score: 0,
             },
-            sigs: core::array::from_fn(|_| InputSig::empty()),
-            sig_count: 0,
+            sigs: SignatureSlots::new(),
             sighash_type: 0,
             redeem_script: [0u8; MAX_SCRIPT_SIZE],
             redeem_script_len: 0,
-            redeem_in_pool: false,
-            redeem_script_offset: 0,
-            incoming_partial_sigs: [IncomingPartialSig::empty(); MAX_SIGS_PER_INPUT],
-            incoming_partial_sigs_count: 0,
-            has_derivation_hint: false,
-            derivation_branch: 0,
-            derivation_index: 0,
-            ms45_hint: Ms45Hint::none(),
-            covenant_execution_present: false,
-            covenant_execution_mask: 0,
-            covenant_execution_true_mask: 0,
+            redeem_pool_offset: None,
+            incoming_partial_sigs: SignatureSlots::new(),
+            derivation_hint: None,
+            ms45_hint: None,
+            covenant_execution: None,
         }
     }
 }

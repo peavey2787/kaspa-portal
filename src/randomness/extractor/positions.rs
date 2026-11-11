@@ -44,6 +44,9 @@ fn append_positions(
         }
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(chunk);
-        positions.push((u64::from_be_bytes(bytes) % bit_len as u64) as usize);
+        let modulus = u64::try_from(bit_len).unwrap_or(u64::MAX);
+        let position = u64::from_be_bytes(bytes) % modulus;
+        // The remainder is below `bit_len`, which is itself a `usize`.
+        positions.push(usize::try_from(position).unwrap_or(bit_len));
     }
 }

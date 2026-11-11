@@ -42,7 +42,7 @@ fn captured_unknown_ranges_enforce_every_json_boundary() {
 
     let mut full = PsktParsed::empty();
     full.json_len = 1;
-    full.unknowns_count = MAX_PSKT_UNKNOWN_REGIONS as u8;
+    full.unknowns_count = u8::try_from(MAX_PSKT_UNKNOWN_REGIONS).unwrap();
     assert_eq!(
         capture_unknown(&mut full, scope, 0, 1),
         Err(PskError::TooManyUnknownRegions),
@@ -128,7 +128,7 @@ fn preservation_metadata_count_and_scope_are_validated_before_writing() {
     let mut output = vec![0u8; 4096];
 
     let mut excessive = PsktParsed::empty();
-    excessive.unknowns_count = (MAX_PSKT_UNKNOWN_REGIONS + 1) as u8;
+    excessive.unknowns_count = u8::try_from(MAX_PSKT_UNKNOWN_REGIONS + 1).unwrap();
     assert_eq!(
         serialize_pskt(&tx, &excessive, b"", TxInputFormat::PsktSingle, &mut output,),
         Err(PskError::TooManyUnknownRegions)
@@ -157,9 +157,9 @@ fn preservation_scope_rejects_output_index_equal_to_output_count() {
 
     let scratch = b"\"x\":1";
     let mut parsed = PsktParsed::empty();
-    parsed.json_len = scratch.len() as u32;
+    parsed.json_len = u32::try_from(scratch.len()).unwrap();
     parsed.unknowns_count = 1;
-    parsed.unknowns[0] = (0, scratch.len() as u32);
+    parsed.unknowns[0] = (0, u32::try_from(scratch.len()).unwrap());
     parsed.unknown_scopes[0] = PsktUnknownScope::output(1);
 
     assert_eq!(
@@ -179,7 +179,7 @@ fn duplicate_preserved_names_in_one_scope_are_rejected() {
     parsed.unknowns[1] = (6, 11);
     parsed.unknown_scopes[0] = PsktUnknownScope::global();
     parsed.unknown_scopes[1] = PsktUnknownScope::global();
-    parsed.json_len = scratch.len() as u32;
+    parsed.json_len = u32::try_from(scratch.len()).unwrap();
 
     let mut output = vec![0u8; 4096];
     assert_eq!(
@@ -228,7 +228,7 @@ fn preservation_accepts_exact_region_capacity_and_rejects_exact_scope_boundary()
     for index in 0..MAX_PSKT_UNKNOWN_REGIONS {
         let start = scratch.len();
         scratch.extend_from_slice(b"\"");
-        scratch.push(b'a' + index as u8);
+        scratch.push(b'a' + u8::try_from(index).unwrap());
         scratch.extend_from_slice(b"\":1");
         let end = scratch.len();
         ranges.push((start, end));
@@ -238,7 +238,7 @@ fn preservation_accepts_exact_region_capacity_and_rejects_exact_scope_boundary()
     }
 
     let mut parsed = PsktParsed::empty();
-    parsed.json_len = scratch.len() as u32;
+    parsed.json_len = u32::try_from(scratch.len()).unwrap();
     for (start, end) in ranges {
         capture_unknown(&mut parsed, PsktUnknownScope::global(), start, end)
             .expect("exact preservation capacity");

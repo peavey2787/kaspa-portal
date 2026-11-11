@@ -14,6 +14,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 mod formatting;
+mod review_digest;
 
 use super::{
     constants::{
@@ -25,6 +26,7 @@ use super::{
 };
 use crate::primitives::address::KaspaNetwork;
 use alloc::{boxed::Box, vec::Vec};
+use zeroize::Zeroize;
 /// Aggregate monetary totals for a transaction after checked arithmetic.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TransactionAmounts {
@@ -67,14 +69,14 @@ pub struct Transaction {
     /// Application payload, at most `limits.max_payload_bytes` long. Set it
     /// through [`Transaction::set_payload`], which allocates fallibly.
     pub payload: Vec<u8>,
-    /// Stealth address tweak: if non-zero, the signing key is
+    /// Stealth address tweak: when present, the signing key is
     /// account_privkey + stealth_tweak (scalar addition mod n).
-    /// Set by Companion when spending a stealth UTXO.
-    pub stealth_tweak: [u8; 32],
-    pub has_stealth_tweak: bool,
+    /// Set by Companion when spending a stealth UTXO. Clear it with
+    /// [`Transaction::clear_stealth_tweak`] so the scalar is wiped.
+    pub stealth_tweak: Option<[u8; 32]>,
     /// Shared pool for redeem scripts > MAX_SCRIPT_SIZE bytes.
-    /// Inputs with `redeem_in_pool == true` store their redeem data here
-    /// at `redeem_script_offset..redeem_script_offset + redeem_script_len`.
+    /// Inputs with `redeem_pool_offset == Some(offset)` store their redeem
+    /// data here at `offset..offset + redeem_script_len`.
     pub redeem_pool: Box<[u8; REDEEM_POOL_SIZE]>,
     /// Next free byte in redeem_pool.
     pub redeem_pool_used: usize,
@@ -127,8 +129,7 @@ impl Transaction {
             subnetwork_id: SUBNETWORK_ID_NATIVE,
             gas: 0,
             payload: Vec::new(),
-            stealth_tweak: [0u8; 32],
-            has_stealth_tweak: false,
+            stealth_tweak: None,
             redeem_pool: try_boxed_array(|| 0u8)?,
             redeem_pool_used: 0,
             limits,
@@ -137,25 +138,21 @@ impl Transaction {
 
     /// Reset the transaction while retaining allocated input capacity.
     pub fn clear(&mut self) {
-        self.version = 0;
-        self.num_inputs = 0;
         for input in &mut self.inputs {
             *input = TransactionInput::empty();
         }
         for output in self.outputs.iter_mut() {
             *output = TransactionOutput::empty();
         }
-        self.num_outputs = 0;
-        self.network = KaspaNetwork::Unknown;
-        self.locktime = 0;
-        self.subnetwork_id = SUBNETWORK_ID_NATIVE;
-        self.gas = 0;
-        self.payload.fill(0);
-        self.payload.clear();
-        self.stealth_tweak.fill(0);
-        self.has_stealth_tweak = false;
-        self.redeem_pool.fill(0);
-        self.redeem_pool_used = 0;
+        self.prepare_for_parse();
+    }
+
+    /// Wipe the stealth scalar before forgetting it.
+    pub fn clear_stealth_tweak(&mut self) {
+        if let Some(tweak) = self.stealth_tweak.as_mut() {
+            tweak.zeroize();
+        }
+        self.stealth_tweak = None;
     }
 
     /// Ensure storage exists for every declared input. This grows only the
@@ -190,17 +187,15 @@ impl Transaction {
 
     /// Get the redeem script bytes for input `idx`.
     /// Returns the inline buffer if the script fits, or the pool slice
-    /// if `redeem_in_pool` is set.
+    /// if `redeem_pool_offset` is set.
     pub fn redeem_bytes(&self, idx: usize) -> &[u8] {
         let inp = &self.inputs[idx];
-        if inp.redeem_script_len == 0 {
-            return &[];
-        }
-        if inp.redeem_in_pool {
-            let off = inp.redeem_script_offset as usize;
-            &self.redeem_pool[off..off + inp.redeem_script_len]
-        } else {
-            &inp.redeem_script[..inp.redeem_script_len]
+        match inp.redeem_pool_offset {
+            Some(offset) => {
+                let off = usize::from(offset);
+                &self.redeem_pool[off..off + inp.redeem_script_len]
+            }
+            None => &inp.redeem_script[..inp.redeem_script_len],
         }
     }
 
@@ -209,15 +204,10 @@ impl Transaction {
     /// Returns a specific storage error if the script cannot be retained safely.
     pub fn store_redeem(&mut self, idx: usize, data: &[u8]) -> Result<(), TransactionStorageError> {
         let len = data.len();
-        if len == 0 {
-            self.inputs[idx].redeem_script_len = 0;
-            self.inputs[idx].redeem_in_pool = false;
-            return Ok(());
-        }
         if len <= MAX_SCRIPT_SIZE {
             self.inputs[idx].redeem_script[..len].copy_from_slice(data);
             self.inputs[idx].redeem_script_len = len;
-            self.inputs[idx].redeem_in_pool = false;
+            self.inputs[idx].redeem_pool_offset = None;
         } else {
             if len > MAX_REDEEM_SIZE {
                 return Err(TransactionStorageError::RedeemScriptTooLarge);
@@ -226,10 +216,10 @@ impl Transaction {
             if off + len > REDEEM_POOL_SIZE {
                 return Err(TransactionStorageError::RedeemPoolFull);
             }
+            let offset = u16::try_from(off).map_err(|_| TransactionStorageError::RedeemPoolFull)?;
             self.redeem_pool[off..off + len].copy_from_slice(data);
-            self.inputs[idx].redeem_script_offset = off as u16;
+            self.inputs[idx].redeem_pool_offset = Some(offset);
             self.inputs[idx].redeem_script_len = len;
-            self.inputs[idx].redeem_in_pool = true;
             self.redeem_pool_used = off + len;
         }
         Ok(())

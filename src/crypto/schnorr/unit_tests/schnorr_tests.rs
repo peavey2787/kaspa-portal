@@ -16,7 +16,7 @@ fn schnorr_vectors_pass() {
 fn schnorr_accessors_errors_and_known_answer_are_covered() {
     let mut bytes = [0u8; 64];
     for (index, byte) in bytes.iter_mut().enumerate() {
-        *byte = index as u8;
+        *byte = u8::try_from(index).unwrap();
     }
     let signature = SchnorrSignature { bytes };
     assert_eq!(signature.r_bytes(), &bytes[..32]);

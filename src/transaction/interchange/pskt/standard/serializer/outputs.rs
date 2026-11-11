@@ -1,7 +1,7 @@
 //! Serializer for PSKT outputs.
 
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
-use crate::transaction::model::Transaction;
+use crate::transaction::model::{Covenant, Transaction};
 
 use super::super::PskError;
 use super::preserved::{emit_additional_fields, emit_value_or_default};
@@ -85,14 +85,16 @@ fn emit_covenant_binding(
 }
 
 fn validate_covenant_binding(tx: &Transaction, index: usize) -> Result<(), PskError> {
-    let output = &tx.outputs[index];
-    (!output.has_covenant || (output.covenant_auth_input as usize) < tx.num_inputs)
-        .then_some(())
-        .ok_or(PskError::InvalidCovenantBinding)
+    match tx.outputs[index].covenant {
+        Some(covenant) if usize::from(covenant.authorizing_input) >= tx.num_inputs => {
+            Err(PskError::InvalidCovenantBinding)
+        }
+        _ => Ok(()),
+    }
 }
 
 fn should_emit_covenant_binding(tx: &Transaction, parsed: &PsktParsed, index: usize) -> bool {
-    tx.outputs[index].has_covenant || parsed.output_has_covenant_binding_field(index)
+    tx.outputs[index].covenant.is_some() || parsed.output_has_covenant_binding_field(index)
 }
 
 fn emit_covenant_value(
@@ -100,22 +102,20 @@ fn emit_covenant_value(
     tx: &Transaction,
     index: usize,
 ) -> Result<(), PskError> {
-    if !tx.outputs[index].has_covenant {
-        return writer.lit(b"null");
+    match &tx.outputs[index].covenant {
+        Some(covenant) => emit_present_covenant_value(writer, covenant),
+        None => writer.lit(b"null"),
     }
-    emit_present_covenant_value(writer, tx, index)
 }
 
 fn emit_present_covenant_value(
     writer: &mut HexWriter<'_>,
-    tx: &Transaction,
-    index: usize,
+    covenant: &Covenant,
 ) -> Result<(), PskError> {
-    let output = &tx.outputs[index];
     writer
         .lit(b"{\"authorizingInput\":")
-        .and_then(|()| writer.u64(output.covenant_auth_input as u64))
+        .and_then(|()| writer.u64(u64::from(covenant.authorizing_input)))
         .and_then(|()| writer.lit(b",\"covenantId\":"))
-        .and_then(|()| writer.hex_string_field(&output.covenant_id))
+        .and_then(|()| writer.hex_string_field(&covenant.id))
         .and_then(|()| writer.lit(b"}"))
 }

@@ -210,17 +210,11 @@ fn test_scalar_arithmetic() -> bool {
     // Test 2: (n-1) + 1 = 0 mod n
     let n_minus_1 = {
         let mut a = SECP256K1_ORDER;
-        // Restar 1
-        let mut borrow: i16 = 1;
-        for i in (0..32).rev() {
-            let diff = (a[i] as i16) - borrow;
-            if diff < 0 {
-                a[i] = (diff + 256) as u8;
-                borrow = 1;
-            } else {
-                a[i] = diff as u8;
-                borrow = 0;
-            }
+        let mut borrow = true;
+        for byte in a.iter_mut().rev() {
+            let (value, underflow) = byte.overflowing_sub(u8::from(borrow));
+            *byte = value;
+            borrow = underflow;
         }
         a
     };
@@ -407,30 +401,13 @@ fn test_derive_child_pub_consistency() -> bool {
 /// Run all BIP32 tests.
 /// Returns (passed, total).
 pub fn run_bip32_tests() -> (u32, u32) {
-    let mut passed = 0u32;
-    let total = 7u32;
-
-    if test_vector1_master() {
-        passed += 1;
-    }
-    if test_vector1_official() {
-        passed += 1;
-    }
-    if test_vector1_child_hardened() {
-        passed += 1;
-    }
-    if test_kaspa_path_derivation() {
-        passed += 1;
-    }
-    if test_scalar_arithmetic() {
-        passed += 1;
-    }
-    if test_multi_address_derivation() {
-        passed += 1;
-    }
-    if test_derive_child_pub_consistency() {
-        passed += 1;
-    }
-
-    (passed, total)
+    super::tally(&[
+        test_vector1_master(),
+        test_vector1_official(),
+        test_vector1_child_hardened(),
+        test_kaspa_path_derivation(),
+        test_scalar_arithmetic(),
+        test_multi_address_derivation(),
+        test_derive_child_pub_consistency(),
+    ])
 }

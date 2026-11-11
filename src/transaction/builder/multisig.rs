@@ -168,7 +168,9 @@ fn prepare_source_material(
     verify_source_address(source_address, &redeem_script)?;
     let derivations =
         descriptor.bip32_derivations(source_path.index, source_path.cosigner, source_path.chain)?;
-    Ok((redeem_script, public_keys.len() as u8, derivations))
+    let key_count =
+        u8::try_from(public_keys.len()).map_err(|_| "Too many multisig keys".to_string())?;
+    Ok((redeem_script, key_count, derivations))
 }
 
 fn prepare_change_material(

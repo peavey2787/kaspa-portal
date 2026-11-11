@@ -18,11 +18,10 @@
 //! Protocol limits, script analysis, signatures, inputs, outputs, transaction
 //! behavior, and multisig configuration live in single-purpose modules.
 
+mod annotations;
 mod constants;
 mod input;
 mod multisig;
-mod multisig_change;
-mod multisig_validation;
 mod output;
 mod parse_reset;
 mod script;
@@ -33,20 +32,23 @@ mod transaction;
 pub use crate::primitives::opcode::{
     OP_1, OP_2, OP_3, OP_4, OP_5, OP_BLAKE2B, OP_CHECKMULTISIG, OP_CHECKSIG, OP_DATA_32, OP_EQUAL,
 };
+pub use annotations::{Covenant, CovenantExecution, Derivation, Ms45Derivation};
 pub use constants::{
     Hash256, SubnetworkId, TransactionLimits, DEFAULT_INPUT_CAPACITY, MAX_INPUTS,
     MAX_MULTISIG_KEYS, MAX_MULTISIG_WALLETS, MAX_OUTPUTS, MAX_PAYLOAD_SIZE, MAX_REDEEM_SIZE,
     MAX_SCRIPT_SIZE, MAX_SIGS_PER_INPUT, REDEEM_POOL_SIZE, SUBNETWORK_ID_NATIVE,
 };
-pub use input::{Ms45Hint, Outpoint, TransactionInput};
-pub use multisig::{MultisigConfig, MultisigStore};
-pub use multisig_change::{find_forged_change, trusted_multisig_output_chain};
+pub use input::{Outpoint, TransactionInput};
+pub use multisig::{
+    find_forged_change, trusted_multisig_output_chain, MultisigConfig, MultisigFamily,
+    MultisigStore,
+};
 pub use output::TransactionOutput;
 pub use script::{
     detect_script_type, parse_multisig_script, MultisigInfo, ScriptPublicKey, ScriptType, UtxoEntry,
 };
 pub use sighash_type::SigHashType;
-pub use signatures::{IncomingPartialSig, InputSig};
+pub use signatures::{EmptySlot, IncomingPartialSig, InputSig, SignatureSlots};
 pub use transaction::{
     Transaction, TransactionAmountError, TransactionAmounts, TransactionStorageError,
 };

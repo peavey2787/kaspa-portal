@@ -76,7 +76,7 @@ fn account_input_route_distinguishes_receive_change_stealth_and_nonmatch() {
             sign_account_input_with_entropy(&mut tx, 0, &account, SigHashType::All, &entropy),
             Ok(true),
         );
-        assert_eq!(tx.inputs[0].sig_count, 1);
+        assert_eq!(tx.inputs[0].sigs.len(), 1);
         assert_eq!(tx.inputs[0].sigs[0].pubkey_compressed, expected_compressed);
     }
 
@@ -91,19 +91,18 @@ fn account_input_route_distinguishes_receive_change_stealth_and_nonmatch() {
         sign_account_input_with_entropy(&mut nonmatch, 0, &account, SigHashType::All, &entropy),
         Ok(false),
     );
-    assert_eq!(nonmatch.inputs[0].sig_count, 0);
+    assert_eq!(nonmatch.inputs[0].sigs.len(), 0);
 
     let tweak = [1u8; 32];
     let target = stealth_target(&account, tweak);
     let mut stealth = transaction();
     set_p2pk(&mut stealth, &target);
-    stealth.has_stealth_tweak = true;
-    stealth.stealth_tweak = tweak;
+    stealth.stealth_tweak = Some(tweak);
     assert_eq!(
         sign_account_input_with_entropy(&mut stealth, 0, &account, SigHashType::All, &entropy),
         Ok(true),
     );
-    assert_eq!(stealth.inputs[0].sig_count, 1);
+    assert_eq!(stealth.inputs[0].sigs.len(), 1);
     assert_eq!(&stealth.inputs[0].sigs[0].pubkey_compressed[1..33], &target);
 }
 
@@ -117,9 +116,10 @@ fn standard_input_derivation_hint_signs_beyond_legacy_scan_and_must_match_script
 
     let mut hinted = transaction();
     set_p2pk(&mut hinted, &target);
-    hinted.inputs[0].has_derivation_hint = true;
-    hinted.inputs[0].derivation_branch = 0;
-    hinted.inputs[0].derivation_index = 500;
+    hinted.inputs[0].derivation_hint = Some(crate::transaction::model::Derivation {
+        branch: 0,
+        index: 500,
+    });
     assert_eq!(
         sign_account_input_with_entropy(&mut hinted, 0, &account, SigHashType::All, &entropy),
         Ok(true),
@@ -131,14 +131,15 @@ fn standard_input_derivation_hint_signs_beyond_legacy_scan_and_must_match_script
 
     let mut wrong_hint = transaction();
     set_p2pk(&mut wrong_hint, &target);
-    wrong_hint.inputs[0].has_derivation_hint = true;
-    wrong_hint.inputs[0].derivation_branch = 0;
-    wrong_hint.inputs[0].derivation_index = 499;
+    wrong_hint.inputs[0].derivation_hint = Some(crate::transaction::model::Derivation {
+        branch: 0,
+        index: 499,
+    });
     assert_eq!(
         sign_account_input_with_entropy(&mut wrong_hint, 0, &account, SigHashType::All, &entropy),
         Ok(false),
     );
-    assert_eq!(wrong_hint.inputs[0].sig_count, 0);
+    assert_eq!(wrong_hint.inputs[0].sigs.len(), 0);
 }
 
 #[test]
@@ -149,8 +150,7 @@ fn multi_address_standard_match_wins_even_when_stealth_metadata_is_present() {
     let target = receive.public_key_x_only().unwrap();
     let mut tx = transaction();
     set_p2pk(&mut tx, &target);
-    tx.has_stealth_tweak = true;
-    tx.stealth_tweak = [1u8; 32];
+    tx.stealth_tweak = Some([1u8; 32]);
 
     assert_eq!(
         sign_transaction_account_multi_addr_with_entropy(
@@ -161,7 +161,7 @@ fn multi_address_standard_match_wins_even_when_stealth_metadata_is_present() {
         ),
         Ok(1),
     );
-    assert_eq!(tx.inputs[0].sig_count, 1);
+    assert_eq!(tx.inputs[0].sigs.len(), 1);
     assert_eq!(
         tx.inputs[0].sigs[0].pubkey_compressed,
         receive.public_key_compressed().unwrap()
@@ -196,7 +196,7 @@ fn multi_address_shape_filters_reject_each_independent_p2pk_malformation() {
             Err(PsktError::NoInputs),
             "variant {variant}",
         );
-        assert_eq!(tx.inputs[0].sig_count, 0);
+        assert_eq!(tx.inputs[0].sigs.len(), 0);
     }
 }
 
@@ -224,8 +224,8 @@ fn multi_address_public_wrapper_reports_exact_number_of_signed_inputs() {
         sign_transaction_multi_addr(&mut tx, &seed, SigHashType::All),
         Ok(2)
     );
-    assert_eq!(tx.inputs[0].sig_count, 1);
-    assert_eq!(tx.inputs[1].sig_count, 1);
+    assert_eq!(tx.inputs[0].sigs.len(), 1);
+    assert_eq!(tx.inputs[1].sigs.len(), 1);
 
     let other = derive_account_key(&[0x32u8; 64]).unwrap();
     let other_target = derive_address_key(&other, 0)

@@ -122,7 +122,7 @@ fn each_key_records_exactly_its_enclosing_selectors() {
     let resolved = resolve_covenant_branches(&script).expect("nested covenant");
     assert!(!resolved.is_empty());
     assert_eq!(resolved.selector_mask(), 0b111);
-    let masks: Vec<(u8, u16, u16)> = (0..resolved.len() as u8)
+    let masks: Vec<(u8, u16, u16)> = (0..u8::try_from(resolved.len()).unwrap())
         .map(|position| {
             let key = resolved.key_at(position).unwrap();
             (key.key[0], key.decision_mask, key.if_mask)

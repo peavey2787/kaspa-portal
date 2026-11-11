@@ -122,3 +122,12 @@ web-sys = { version = "0.3", optional = true, features = [
 [dev-dependencies]
 proptest = "1"
 futures = "0.3"
+
+[lints.clippy]
+cast_possible_truncation = "deny"
+fn_params_excessive_bools = "deny"
+struct_excessive_bools = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+overflow-checks = true

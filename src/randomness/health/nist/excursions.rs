@@ -64,8 +64,8 @@ fn excursion_probabilities(state: i32) -> [f64; 6] {
     let q = 1.0 - 1.0 / (2.0 * x);
     let mut p = [0.0; 6];
     p[0] = q;
-    for (k, probability) in p.iter_mut().enumerate().take(5).skip(1) {
-        *probability = q.powi(k as i32 - 1) / (4.0 * x * x);
+    for (exponent, probability) in (0i32..).zip(p.iter_mut().take(5).skip(1)) {
+        *probability = q.powi(exponent) / (4.0 * x * x);
     }
     p[5] = q.powi(4) / (2.0 * x);
     p

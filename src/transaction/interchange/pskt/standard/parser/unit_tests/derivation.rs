@@ -9,8 +9,7 @@ fn derivation_path_extraction_covers_valid_missing_and_malformed_json_regions() 
     );
     assert_eq!(
         extract_ms45_hint(valid, 0, valid.len()),
-        Some(Ms45Hint {
-            present: true,
+        Some(Ms45Derivation {
             cosigner: 2,
             chain: 1,
             index: 17,
@@ -35,8 +34,7 @@ fn derivation_path_extraction_covers_valid_missing_and_malformed_json_regions() 
 fn ms45_path_parser_rejects_short_hardened_invalid_chain_and_large_components() {
     assert_eq!(
         parse_ms45_path(b"m/45'/111111'/0'/3/0/9"),
-        Some(Ms45Hint {
-            present: true,
+        Some(Ms45Derivation {
             cosigner: 3,
             chain: 0,
             index: 9,

@@ -614,7 +614,7 @@ fn private_swap_wire_short_circuits_cover_each_parse_boundary() {
     }
 
     let mut oversized_declared = request_wire;
-    let oversized = (MAX_PAYLOAD_LEN as u32 + 1).to_be_bytes();
+    let oversized = (u32::try_from(MAX_PAYLOAD_LEN).unwrap() + 1).to_be_bytes();
     oversized_declared[215..219].copy_from_slice(&oversized);
     assert_eq!(
         parse_request(&oversized_declared[..request_len]).map(|_| ()),

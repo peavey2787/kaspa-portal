@@ -81,8 +81,9 @@ impl SighashSource for Transaction {
             script_version: output.script_public_key.version,
             script: output.script_public_key.script_bytes(),
             covenant: output
-                .has_covenant
-                .then_some((output.covenant_auth_input, &output.covenant_id)),
+                .covenant
+                .as_ref()
+                .map(|covenant| (covenant.authorizing_input, &covenant.id)),
         }
     }
     fn locktime(&self) -> u64 {

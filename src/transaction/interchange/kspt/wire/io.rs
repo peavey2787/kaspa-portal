@@ -104,11 +104,12 @@ impl<'a> Writer<'a> {
         if value.len() > MAX_SCRIPT_SIZE {
             return Err(WireError::ScriptTooLong);
         }
-        if value.len() < usize::from(EXTENDED_SCRIPT_LENGTH) {
-            self.u8(value.len() as u8)?;
-        } else {
-            self.u8(EXTENDED_SCRIPT_LENGTH)?;
-            self.u16(u16::try_from(value.len()).map_err(|_| WireError::ScriptTooLong)?)?;
+        match u8::try_from(value.len()) {
+            Ok(length) if length < EXTENDED_SCRIPT_LENGTH => self.u8(length)?,
+            _ => {
+                self.u8(EXTENDED_SCRIPT_LENGTH)?;
+                self.u16(u16::try_from(value.len()).map_err(|_| WireError::ScriptTooLong)?)?;
+            }
         }
         self.bytes(value)
     }

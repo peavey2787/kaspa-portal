@@ -1,10 +1,10 @@
 use super::io::Writer;
 use super::{
-    valid_covenant_execution, valid_derivation, valid_ms45, valid_network, valid_sighash, Covenant,
-    CovenantExecution, Derivation, Global, Input, Limits, Ms45Derivation, Output, Signature,
-    WireError, ALLOWED_FLAGS, COVENANT_EXECUTION_MARKER, COVENANT_MARKER, INPUT_DERIVATION_MARKER,
-    KSPT_VERSION, MAGIC, MAX_SIGNATURE_RECORDS, MS45_INPUT_MARKER, MS45_OUTPUT_MARKER,
-    NETWORK_MARKER, OUTPUT_DERIVATION_MARKER, STEALTH_MARKER,
+    valid_derivation, valid_ms45, valid_network, valid_sighash, Covenant, CovenantExecution,
+    Derivation, Global, Input, Limits, Ms45Derivation, Output, Signature, WireError, ALLOWED_FLAGS,
+    COVENANT_EXECUTION_MARKER, COVENANT_MARKER, INPUT_DERIVATION_MARKER, KSPT_VERSION, MAGIC,
+    MAX_SIGNATURE_RECORDS, MS45_INPUT_MARKER, MS45_OUTPUT_MARKER, NETWORK_MARKER,
+    OUTPUT_DERIVATION_MARKER, STEALTH_MARKER,
 };
 
 pub trait EncodeSource {
@@ -104,8 +104,7 @@ fn write_signatures<S: EncodeSource>(
     index: usize,
 ) -> Result<(), WireError> {
     let count = source.signature_count(index);
-    validate_signature_count(count)?;
-    writer.u8(count as u8)?;
+    writer.u8(signature_count_byte(count)?)?;
     let mut seen = [false; 256];
     for slot in 0..count {
         write_signature(writer, source.signature(index, slot), &mut seen)?;
@@ -113,11 +112,12 @@ fn write_signatures<S: EncodeSource>(
     Ok(())
 }
 
-fn validate_signature_count(count: usize) -> Result<(), WireError> {
-    if count > MAX_SIGNATURE_RECORDS {
-        return Err(WireError::TooManySignatures);
-    }
-    Ok(())
+/// `count` as its wire byte, once it is within the per-input record limit.
+fn signature_count_byte(count: usize) -> Result<u8, WireError> {
+    u8::try_from(count)
+        .ok()
+        .filter(|_| count <= MAX_SIGNATURE_RECORDS)
+        .ok_or(WireError::TooManySignatures)
 }
 
 fn write_signature(
@@ -213,7 +213,7 @@ fn write_covenant_execution_trailers<S: EncodeSource>(
 ) -> Result<(), WireError> {
     for index in 0..inputs {
         if let Some(value) = source.covenant_execution(index) {
-            if !valid_covenant_execution(value) {
+            if !value.is_well_formed() {
                 return Err(WireError::InvalidTrailer);
             }
             writer.u8(COVENANT_EXECUTION_MARKER)?;

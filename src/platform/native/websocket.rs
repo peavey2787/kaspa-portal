@@ -63,7 +63,11 @@ pub struct NativeWebSocketTransport {
 
 impl NativeWebSocketTransport {
     pub fn new(endpoint: &str) -> Result<Self, NetworkError> {
-        Self::with_config(endpoint, DEFAULT_TIMEOUT.as_millis() as u64, 0)
+        Self::with_config(
+            endpoint,
+            u64::try_from(DEFAULT_TIMEOUT.as_millis()).unwrap_or(u64::MAX),
+            0,
+        )
     }
 
     pub fn with_config(

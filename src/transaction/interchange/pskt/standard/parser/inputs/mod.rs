@@ -8,7 +8,7 @@ use metadata::{parse_bip32_derivations, parse_partial_sigs};
 
 use crate::transaction::interchange::pskt::shared::{PsktParsed, PsktUnknownScope};
 use crate::transaction::model::{
-    Transaction, TransactionInput, MAX_REDEEM_SIZE, MAX_SIGS_PER_INPUT,
+    CovenantExecution, Transaction, TransactionInput, MAX_REDEEM_SIZE, MAX_SIGS_PER_INPUT,
 };
 
 use super::super::{PskError, Tok, Tokenizer};
@@ -140,14 +140,16 @@ struct InputParser<'a> {
     seen: u64,
 }
 
-fn parse_covenant_execution_object(tok: &mut Tokenizer<'_>) -> Result<(u16, u16), PskError> {
+fn parse_covenant_execution_object(tok: &mut Tokenizer<'_>) -> Result<CovenantExecution, PskError> {
     expect(tok, Tok::LBrace)?;
     reject_empty_object(tok)?;
     let mut seen = 0u64;
-    let mut mask = 0u16;
-    let mut truth = 0u16;
+    let mut execution = CovenantExecution {
+        supplied_mask: 0,
+        supplied_true_mask: 0,
+    };
     loop {
-        parse_covenant_execution_member(tok, &mut seen, &mut mask, &mut truth)?;
+        parse_covenant_execution_member(tok, &mut seen, &mut execution)?;
         if !consume_object_separator(tok)? {
             break;
         }
@@ -156,17 +158,16 @@ fn parse_covenant_execution_object(tok: &mut Tokenizer<'_>) -> Result<(u16, u16)
         crate::transaction::interchange::pskt::schema::Scope::CovenantExecution,
         seen,
     )?;
-    if truth & !mask != 0 {
+    if !execution.is_well_formed() {
         return Err(PskError::UnexpectedToken);
     }
-    Ok((mask, truth))
+    Ok(execution)
 }
 
 fn parse_covenant_execution_member(
     tok: &mut Tokenizer<'_>,
     seen: &mut u64,
-    mask: &mut u16,
-    truth: &mut u16,
+    execution: &mut CovenantExecution,
 ) -> Result<(), PskError> {
     let key = expect_string(tok)?;
     expect(tok, Tok::Colon)?;
@@ -179,18 +180,17 @@ fn parse_covenant_execution_member(
         return Err(PskError::UnexpectedToken);
     }
     let value = u16::try_from(expect_u64(tok)?).map_err(|_| PskError::UnexpectedToken)?;
-    assign_covenant_execution_member(key, value, mask, truth)
+    assign_covenant_execution_member(key, value, execution)
 }
 
 fn assign_covenant_execution_member(
     key: &[u8],
     value: u16,
-    mask: &mut u16,
-    truth: &mut u16,
+    execution: &mut CovenantExecution,
 ) -> Result<(), PskError> {
     match key {
-        b"suppliedMask" => *mask = value,
-        b"suppliedTrueMask" => *truth = value,
+        b"suppliedMask" => execution.supplied_mask = value,
+        b"suppliedTrueMask" => execution.supplied_true_mask = value,
         _ => return Err(PskError::UnexpectedToken),
     }
     Ok(())
@@ -312,11 +312,10 @@ impl InputParser<'_> {
     }
 
     fn parse_sig_op_count(&mut self, tok: &mut Tokenizer<'_>) -> Result<(), PskError> {
-        let count = expect_u64(tok)?;
-        if count > MAX_SIGS_PER_INPUT as u64 {
-            return Err(PskError::TooManyPartialSigs);
-        }
-        self.input.sig_op_count = count as u8;
+        self.input.sig_op_count = u8::try_from(expect_u64(tok)?)
+            .ok()
+            .filter(|count| usize::from(*count) <= MAX_SIGS_PER_INPUT)
+            .ok_or(PskError::TooManyPartialSigs)?;
         Ok(())
     }
 
@@ -345,10 +344,7 @@ impl InputParser<'_> {
             tok.next_token()?;
             return Ok(());
         }
-        let (mask, truth) = parse_covenant_execution_object(tok)?;
-        self.input.covenant_execution_present = true;
-        self.input.covenant_execution_mask = mask;
-        self.input.covenant_execution_true_mask = truth;
+        self.input.covenant_execution = Some(parse_covenant_execution_object(tok)?);
         Ok(())
     }
 

@@ -1,4 +1,5 @@
 use super::{math::normal_cdf, normalize, NistResult};
+use crate::primitives::numeric::saturating_f64_to_i64;
 
 pub fn cumulative_sums_forward(bits: &[u8]) -> NistResult {
     cumulative_sums(bits, false)
@@ -20,7 +21,7 @@ fn cumulative_sums(bits: &[u8], backward: bool) -> NistResult {
         return NistResult::not_applicable(name, "empty sequence");
     }
     let mut sum = 0i64;
-    let mut z = 0i64;
+    let mut z = 0u64;
     let iterator: Box<dyn Iterator<Item = &u8>> = if backward {
         Box::new(bits.iter().rev())
     } else {
@@ -28,22 +29,22 @@ fn cumulative_sums(bits: &[u8], backward: bool) -> NistResult {
     };
     for bit in iterator {
         sum += if *bit == 1 { 1 } else { -1 };
-        z = z.max(sum.abs());
+        z = z.max(sum.unsigned_abs());
     }
-    let p = cusum_probability(bits.len(), z as usize);
+    let p = cusum_probability(bits.len(), z);
     NistResult::from_p(name, p, z as f64)
 }
 
-fn cusum_probability(n: usize, z: usize) -> f64 {
+fn cusum_probability(n: usize, z: u64) -> f64 {
     if z == 0 {
         return 1.0;
     }
     let n = n as f64;
     let z = z as f64;
     let sqrt_n = n.sqrt();
-    let k1_start = ((-n / z + 1.0) / 4.0).ceil() as i64;
-    let k1_end = ((n / z - 1.0) / 4.0).floor() as i64;
-    let k2_start = ((-n / z - 3.0) / 4.0).ceil() as i64;
+    let k1_start = saturating_f64_to_i64(((-n / z + 1.0) / 4.0).ceil());
+    let k1_end = saturating_f64_to_i64(((n / z - 1.0) / 4.0).floor());
+    let k2_start = saturating_f64_to_i64(((-n / z - 3.0) / 4.0).ceil());
     let k2_end = k1_end;
     let sum1 = bounded_sum(k1_start, k1_end, |k| {
         normal_cdf((4.0 * k as f64 + 1.0) * z / sqrt_n)

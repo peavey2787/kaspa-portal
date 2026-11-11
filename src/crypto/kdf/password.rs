@@ -141,7 +141,8 @@ pub fn encode_metadata(
     out[0] = KDF_ID_ARGON2ID;
     out[1] = parameters.profile_version;
     out[2] = parameters.argon_version;
-    out[3] = parameters.p_cost as u8;
+    out[3] =
+        u8::try_from(parameters.p_cost).map_err(|_| PasswordKdfError::UnsupportedParameters)?;
     out[4..8].copy_from_slice(&parameters.m_cost_kib.to_le_bytes());
     out[8..12].copy_from_slice(&parameters.t_cost.to_le_bytes());
     Ok(out)
@@ -285,7 +286,8 @@ fn derive_effective_salt(purpose: PasswordKdfPurpose, salt: &[u8; SALT_SIZE]) ->
     let domain = purpose.domain();
     let mut hasher = Sha256::new();
     hasher.update(EFFECTIVE_SALT_DOMAIN);
-    hasher.update([domain.len() as u8]);
+    // Every purpose domain is a short constant, so its length fits one byte.
+    hasher.update([u8::try_from(domain.len()).unwrap_or(u8::MAX)]);
     hasher.update(domain);
     hasher.update(salt);
     hasher.finalize().into()

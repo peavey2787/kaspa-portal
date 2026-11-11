@@ -108,9 +108,8 @@ impl SeedDerivation {
         if self.rounds_complete == 0 {
             return 0;
         }
-        let percent =
-            ((u32::from(self.rounds_complete) * 100) / u32::from(BIP39_PBKDF2_ROUNDS)) as u8;
-        percent.max(1)
+        let percent = (u32::from(self.rounds_complete) * 100) / u32::from(BIP39_PBKDF2_ROUNDS);
+        u8::try_from(percent).unwrap_or(100).max(1)
     }
 
     fn wipe(&mut self) {

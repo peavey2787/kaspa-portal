@@ -2,7 +2,7 @@
 
 use crate::primitives::bytes::zeroize_bytes;
 
-use crate::transaction::model::{Ms45Hint, MultisigInfo, SigHashType, Transaction};
+use crate::transaction::model::{Ms45Derivation, MultisigInfo, SigHashType, Transaction};
 
 use super::super::error::PsktError;
 use super::{
@@ -17,7 +17,7 @@ pub(super) fn sign_input(
     context: &SigningContext,
     sighash_type: SigHashType,
     signing_entropy: Option<&[u8; 32]>,
-    hint: &Ms45Hint,
+    hint: &Ms45Derivation,
 ) -> Result<usize, PsktError> {
     let mut added = 0usize;
     for seed_index in 0..context.seed_count() {
@@ -26,14 +26,11 @@ pub(super) fn sign_input(
         };
         let mut xonly = [0u8; 32];
         xonly.copy_from_slice(&material.compressed_public_key[1..]);
-        let Some(position) = multisig.pubkeys[..multisig.n as usize]
-            .iter()
-            .position(|candidate| *candidate == xonly)
-        else {
+        let Some(position) = multisig.position_of(&xonly) else {
             zeroize_bytes(&mut material.private_key);
             continue;
         };
-        if has_pubkey_position(&tx.inputs[input_index], position as u8) {
+        if has_pubkey_position(&tx.inputs[input_index], position) {
             zeroize_bytes(&mut material.private_key);
             continue;
         }
@@ -49,7 +46,7 @@ pub(super) fn sign_input(
             &mut tx.inputs[input_index],
             signature,
             sighash_type.to_byte(),
-            position as u8,
+            position,
             material.compressed_public_key,
         ));
     }

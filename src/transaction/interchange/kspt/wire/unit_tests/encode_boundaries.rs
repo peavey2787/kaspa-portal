@@ -73,7 +73,7 @@ impl EncodeSource for EncoderBoundarySource {
             position: if self.duplicate_signatures {
                 0
             } else {
-                slot as u8
+                u8::try_from(slot).unwrap()
             },
             sighash: self.sighash,
             bytes: [0x33; 64],
@@ -346,7 +346,7 @@ fn canonical_encoder_rejects_input_counts_above_consumer_limit_before_trailer_po
 fn encoder_admits_sig_op_counts_up_to_the_signature_capacity() {
     let mut buffer = [0u8; 1024];
     let mut source = EncoderBoundarySource::new();
-    source.sig_op_count = MAX_SIGNATURE_RECORDS as u8;
+    source.sig_op_count = u8::try_from(MAX_SIGNATURE_RECORDS).unwrap();
     assert!(encode(&source, &mut buffer).is_ok());
     source.sig_op_count += 1;
     assert_eq!(

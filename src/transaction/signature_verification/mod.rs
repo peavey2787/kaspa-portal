@@ -8,7 +8,10 @@ use crate::{
     crypto::schnorr::{schnorr_verify, SchnorrSignature},
     transaction::{
         interchange::kspt::{analyze_input_script, checked_redeem_bytes},
-        model::{MultisigInfo, ScriptType, SigHashType, Transaction, MAX_SIGS_PER_INPUT},
+        model::{
+            CovenantExecution, MultisigInfo, ScriptType, SigHashType, Transaction,
+            MAX_SIGS_PER_INPUT,
+        },
         sighash::calculate_sighash,
     },
 };
@@ -39,8 +42,8 @@ fn required_for_input(tx: &Transaction, input_index: usize) -> Option<u8> {
 }
 
 fn covenant_required_for_execution(tx: &Transaction, input_index: usize) -> Option<u8> {
-    let (input, resolved) = resolved_execution(tx, input_index).ok()?;
-    let count = active_execution_key_count(input, &resolved)?;
+    let (execution, resolved) = resolved_execution(tx, input_index).ok()?;
+    let count = active_execution_key_count(execution, &resolved)?;
     (count > 0 && usize::from(count) <= MAX_SIGS_PER_INPUT).then_some(count)
 }
 
@@ -51,7 +54,7 @@ fn resolved_execution(
     input_index: usize,
 ) -> Result<
     (
-        &crate::transaction::model::TransactionInput,
+        CovenantExecution,
         crate::contract::covenant::branch::BranchResolution,
     ),
     SignatureValidationError,
@@ -64,21 +67,18 @@ fn resolved_execution(
         .map_err(|_| SignatureValidationError::InvalidModel)?;
     let resolved = crate::contract::covenant::branch::resolve_covenant_branches(redeem)
         .map_err(|_| SignatureValidationError::InvalidBinding)?;
-    validate_covenant_execution_binding(input, resolved.selector_mask())?;
-    Ok((input, resolved))
+    let execution = validate_covenant_execution_binding(input, resolved.selector_mask())?;
+    Ok((execution, resolved))
 }
 
 fn active_execution_key_count(
-    input: &crate::transaction::model::TransactionInput,
+    execution: CovenantExecution,
     resolved: &crate::contract::covenant::branch::BranchResolution,
 ) -> Option<u8> {
     let mut count = 0u8;
     for position in 0..resolved.len() {
         let binding = resolved.key_at(u8::try_from(position).ok()?).ok()?;
-        if binding.matches_selectors(
-            input.covenant_execution_mask,
-            input.covenant_execution_true_mask,
-        ) {
+        if binding.matches_selectors(execution.supplied_mask, execution.supplied_true_mask) {
             count = count.checked_add(1)?;
         }
     }
@@ -90,14 +90,11 @@ fn covenant_position_matches_execution(
     input_index: usize,
     position: u8,
 ) -> Result<(), SignatureValidationError> {
-    let (input, resolved) = resolved_execution(tx, input_index)?;
+    let (execution, resolved) = resolved_execution(tx, input_index)?;
     let binding = resolved
         .key_at(position)
         .map_err(|_| SignatureValidationError::InvalidBinding)?;
-    if binding.matches_selectors(
-        input.covenant_execution_mask,
-        input.covenant_execution_true_mask,
-    ) {
+    if binding.matches_selectors(execution.supplied_mask, execution.supplied_true_mask) {
         Ok(())
     } else {
         Err(SignatureValidationError::InvalidBinding)
@@ -249,30 +246,20 @@ fn position_for_covenant_key(
     input_index: usize,
     key: &[u8; 32],
 ) -> Result<u8, SignatureValidationError> {
-    let (input, resolved) = resolved_execution(tx, input_index)?;
+    let (execution, resolved) = resolved_execution(tx, input_index)?;
     resolved
-        .position_for_key_with_selectors(
-            key,
-            input.covenant_execution_mask,
-            input.covenant_execution_true_mask,
-        )
+        .position_for_key_with_selectors(key, execution.supplied_mask, execution.supplied_true_mask)
         .map_err(|_| SignatureValidationError::InvalidBinding)
 }
 
 fn validate_covenant_execution_binding(
     input: &crate::transaction::model::TransactionInput,
     selector_mask: u16,
-) -> Result<(), SignatureValidationError> {
-    if !input.covenant_execution_present {
-        return Err(SignatureValidationError::InvalidBinding);
-    }
-    if input.covenant_execution_true_mask & !input.covenant_execution_mask != 0 {
-        return Err(SignatureValidationError::InvalidBinding);
-    }
-    if input.covenant_execution_mask != selector_mask {
-        return Err(SignatureValidationError::InvalidBinding);
-    }
-    Ok(())
+) -> Result<CovenantExecution, SignatureValidationError> {
+    input
+        .covenant_execution
+        .filter(|execution| execution.is_well_formed() && execution.supplied_mask == selector_mask)
+        .ok_or(SignatureValidationError::InvalidBinding)
 }
 
 fn verified_count(
@@ -295,55 +282,18 @@ fn verified_kspt_count(
     input_index: usize,
     input: &crate::transaction::model::TransactionInput,
 ) -> Result<u8, SignatureValidationError> {
-    let declared = usize::from(input.sig_count);
-    if declared > MAX_SIGS_PER_INPUT {
-        return Err(SignatureValidationError::InvalidModel);
-    }
     let mut seen = [false; 256];
-    let mut count = 0u8;
-    for (slot_index, slot) in input.sigs.iter().enumerate() {
-        count = verify_kspt_slot(
+    for slot in input.sigs.iter() {
+        mark_signature_position(&mut seen, usize::from(slot.pubkey_pos))?;
+        verify_signature_bytes(
             tx,
             input_index,
-            slot_index,
-            declared,
-            slot,
-            &mut seen,
-            count,
+            slot.pubkey_pos,
+            slot.sighash_type,
+            &slot.signature,
         )?;
     }
-    Ok(count)
-}
-
-fn verify_kspt_slot(
-    tx: &Transaction,
-    input_index: usize,
-    slot_index: usize,
-    declared: usize,
-    slot: &crate::transaction::model::InputSig,
-    seen: &mut [bool; 256],
-    count: u8,
-) -> Result<u8, SignatureValidationError> {
-    if slot_index >= declared {
-        return if slot.present {
-            Err(SignatureValidationError::InvalidModel)
-        } else {
-            Ok(count)
-        };
-    }
-    if !slot.present {
-        return Err(SignatureValidationError::InvalidModel);
-    }
-    let position = usize::from(slot.pubkey_pos);
-    mark_signature_position(seen, position)?;
-    verify_signature_bytes(
-        tx,
-        input_index,
-        slot.pubkey_pos,
-        slot.sighash_type,
-        &slot.signature,
-    )?;
-    Ok(count.saturating_add(1))
+    Ok(input.sigs.count())
 }
 
 fn verified_pskt_count(
@@ -351,57 +301,23 @@ fn verified_pskt_count(
     input_index: usize,
     input: &crate::transaction::model::TransactionInput,
 ) -> Result<u8, SignatureValidationError> {
-    let declared = usize::from(input.incoming_partial_sigs_count);
-    if declared > MAX_SIGS_PER_INPUT {
-        return Err(SignatureValidationError::InvalidModel);
-    }
-    if input.sighash_type != SigHashType::All.to_byte() && declared != 0 {
+    let partial_sigs = &input.incoming_partial_sigs;
+    if input.sighash_type != SigHashType::All.to_byte() && !partial_sigs.is_empty() {
         return Err(SignatureValidationError::InvalidSighash);
     }
     let mut seen = [false; 256];
-    let mut count = 0u8;
-    for (slot_index, slot) in input.incoming_partial_sigs.iter().enumerate() {
-        count = verify_pskt_slot(
+    for slot in partial_sigs.iter() {
+        let position = position_for_pskt_key(tx, input_index, &slot.pubkey)?;
+        mark_signature_position(&mut seen, usize::from(position))?;
+        verify_signature_bytes(
             tx,
             input_index,
-            slot_index,
-            declared,
-            slot,
-            &mut seen,
-            count,
+            position,
+            input.sighash_type,
+            &slot.signature,
         )?;
     }
-    Ok(count)
-}
-
-fn verify_pskt_slot(
-    tx: &Transaction,
-    input_index: usize,
-    slot_index: usize,
-    declared: usize,
-    slot: &crate::transaction::model::IncomingPartialSig,
-    seen: &mut [bool; 256],
-    count: u8,
-) -> Result<u8, SignatureValidationError> {
-    if slot_index >= declared {
-        return if slot.present {
-            Err(SignatureValidationError::InvalidModel)
-        } else {
-            Ok(count)
-        };
-    }
-    if !slot.present {
-        return Err(SignatureValidationError::InvalidModel);
-    }
-    let position = position_for_pskt_key(tx, input_index, &slot.pubkey)?;
-    mark_signature_position(seen, usize::from(position))?;
-    let sighash = tx
-        .inputs
-        .get(input_index)
-        .ok_or(SignatureValidationError::InvalidModel)?
-        .sighash_type;
-    verify_signature_bytes(tx, input_index, position, sighash, &slot.signature)?;
-    Ok(count.saturating_add(1))
+    Ok(partial_sigs.count())
 }
 
 fn mark_signature_position(

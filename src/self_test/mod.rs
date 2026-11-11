@@ -12,3 +12,10 @@ pub mod kspt;
 pub mod schnorr;
 pub mod sighash;
 pub mod xpub;
+
+/// `(passed, total)` for one runner's known-answer checks.
+fn tally(checks: &[bool]) -> (u32, u32) {
+    checks.iter().fold((0, 0), |(passed, total), check| {
+        (passed + u32::from(*check), total + 1)
+    })
+}

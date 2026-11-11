@@ -3,7 +3,7 @@
 
 use crate::{
     primitives::address::KaspaNetwork,
-    transaction::model::{Ms45Hint, SigHashType, Transaction},
+    transaction::model::{Covenant, InputSig, SigHashType, Transaction},
 };
 
 use super::super::{
@@ -14,15 +14,6 @@ use super::super::{
 };
 
 pub(super) struct TransactionSink<'a>(pub(super) &'a mut Transaction);
-
-const fn ms45_hint(value: Ms45Derivation) -> Ms45Hint {
-    Ms45Hint {
-        present: true,
-        cosigner: value.cosigner,
-        chain: value.chain,
-        index: value.index,
-    }
-}
 
 impl DecodeSink for TransactionSink<'_> {
     type Error = PsktError;
@@ -53,7 +44,7 @@ impl DecodeSink for TransactionSink<'_> {
         &mut self,
         index: u32,
         value: Input<'_>,
-        signature_count: u8,
+        _signature_count: u8,
     ) -> Result<(), PsktError> {
         let input = &mut self.0.inputs[index as usize];
         input.previous_outpoint.transaction_id = value.previous_tx_id;
@@ -65,23 +56,30 @@ impl DecodeSink for TransactionSink<'_> {
         script.version = value.script_version;
         script.script_len = value.script.len();
         script.script[..value.script.len()].copy_from_slice(value.script);
-        input.sig_count = signature_count;
+        input.sigs.clear();
         // KSPT carries the project-wide SIGHASH_ALL policy implicitly for
         // unsigned inputs; signature records repeat it when present.
         input.sighash_type = SigHashType::All.to_byte();
         Ok(())
     }
 
-    fn signature(&mut self, input: u32, slot: u8, value: Signature) -> Result<(), PsktError> {
+    /// The grammar delivers an input's records in slot order and never more
+    /// than the model holds, so each one is the next slot.
+    fn signature(&mut self, input: u32, _slot: u8, value: Signature) -> Result<(), PsktError> {
         if value.sighash != SigHashType::All.to_byte() {
             return Err(PsktError::InvalidSigHashType);
         }
-        let slot = &mut self.0.inputs[input as usize].sigs[usize::from(slot)];
-        slot.pubkey_pos = value.position;
-        slot.sighash_type = value.sighash;
-        slot.signature = value.bytes;
-        slot.present = true;
-        Ok(())
+        let added = self.0.inputs[input as usize].sigs.push(InputSig {
+            signature: value.bytes,
+            sighash_type: value.sighash,
+            pubkey_pos: value.position,
+            pubkey_compressed: [0u8; 33],
+        });
+        if added {
+            Ok(())
+        } else {
+            Err(PsktError::TooManySignatures)
+        }
     }
 
     fn redeem(&mut self, input: u32, value: &[u8]) -> Result<(), PsktError> {
@@ -109,34 +107,27 @@ impl DecodeSink for TransactionSink<'_> {
     }
 
     fn stealth(&mut self, tweak: [u8; 32]) -> Result<(), PsktError> {
-        self.0.stealth_tweak = tweak;
-        self.0.has_stealth_tweak = true;
+        self.0.stealth_tweak = Some(tweak);
         Ok(())
     }
 
     fn input_derivation(&mut self, input: u8, value: Derivation) -> Result<(), PsktError> {
-        let input = &mut self.0.inputs[usize::from(input)];
-        input.has_derivation_hint = true;
-        input.derivation_branch = value.branch;
-        input.derivation_index = value.index;
+        self.0.inputs[usize::from(input)].derivation_hint = Some(value);
         Ok(())
     }
 
     fn output_derivation(&mut self, output: u8, value: Derivation) -> Result<(), PsktError> {
-        let output = &mut self.0.outputs[usize::from(output)];
-        output.has_derivation_hint = true;
-        output.derivation_branch = value.branch;
-        output.derivation_index = value.index;
+        self.0.outputs[usize::from(output)].derivation_hint = Some(value);
         Ok(())
     }
 
     fn input_ms45(&mut self, input: u8, value: Ms45Derivation) -> Result<(), PsktError> {
-        self.0.inputs[usize::from(input)].ms45_hint = ms45_hint(value);
+        self.0.inputs[usize::from(input)].ms45_hint = Some(value);
         Ok(())
     }
 
     fn output_ms45(&mut self, output: u8, value: Ms45Derivation) -> Result<(), PsktError> {
-        self.0.outputs[usize::from(output)].ms45_hint = ms45_hint(value);
+        self.0.outputs[usize::from(output)].ms45_hint = Some(value);
         Ok(())
     }
 
@@ -146,18 +137,15 @@ impl DecodeSink for TransactionSink<'_> {
         authorizing_input: u16,
         id: [u8; 32],
     ) -> Result<(), PsktError> {
-        let output = &mut self.0.outputs[usize::from(output)];
-        output.has_covenant = true;
-        output.covenant_auth_input = authorizing_input;
-        output.covenant_id = id;
+        self.0.outputs[usize::from(output)].covenant = Some(Covenant {
+            authorizing_input,
+            id,
+        });
         Ok(())
     }
 
     fn covenant_execution(&mut self, input: u8, value: CovenantExecution) -> Result<(), PsktError> {
-        let input = &mut self.0.inputs[usize::from(input)];
-        input.covenant_execution_present = true;
-        input.covenant_execution_mask = value.supplied_mask;
-        input.covenant_execution_true_mask = value.supplied_true_mask;
+        self.0.inputs[usize::from(input)].covenant_execution = Some(value);
         Ok(())
     }
 }

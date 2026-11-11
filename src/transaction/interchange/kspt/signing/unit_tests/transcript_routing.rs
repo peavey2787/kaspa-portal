@@ -10,7 +10,7 @@ use super::super::{
     signature_state::set_single_signature,
 };
 use super::{set_p2sh, set_two_of_two_multisig, transaction};
-use crate::transaction::model::SigHashType;
+use crate::transaction::model::{EmptySlot, InputSig, SigHashType, MAX_SIGS_PER_INPUT};
 
 fn commitment(input_index: u32, signature_slot: u8) -> NonceCommitment {
     NonceCommitment {
@@ -120,7 +120,7 @@ fn anti_klepto_added_signature_count_is_exact_across_zero_one_and_multiple_input
     for input_index in 0..2 {
         set_single_signature(
             &mut signed_two.inputs[input_index],
-            [0x30 + input_index as u8; 64],
+            [0x30 + u8::try_from(input_index).unwrap(); 64],
             SigHashType::All.to_byte(),
             0,
             [0x02; 33],
@@ -135,28 +135,29 @@ fn anti_klepto_added_signature_count_is_exact_across_zero_one_and_multiple_input
     );
 }
 
-fn transaction_with_present_signatures(
+fn transaction_with_signatures(
     count: usize,
     sighash: SigHashType,
 ) -> crate::transaction::model::Transaction {
     let mut tx = transaction();
-    for slot in 0..count {
-        tx.inputs[0].sigs[slot].present = true;
-        tx.inputs[0].sigs[slot].sighash_type = sighash.to_byte();
-        tx.inputs[0].sigs[slot].pubkey_pos = slot as u8;
+    for position in (0..=u8::MAX).take(count) {
+        assert!(tx.inputs[0].sigs.push(InputSig {
+            sighash_type: sighash.to_byte(),
+            pubkey_pos: position,
+            ..InputSig::EMPTY
+        }));
     }
-    tx.inputs[0].sig_count = count as u8;
     tx.inputs[0].sighash_type = sighash.to_byte();
     tx
 }
 
 #[test]
-fn anti_klepto_per_input_signature_count_rejects_regression_capacity_and_holes() {
-    let original = transaction_with_present_signatures(1, SigHashType::None);
-    let same = transaction_with_present_signatures(1, SigHashType::None);
+fn anti_klepto_per_input_signature_count_rejects_regression_and_reaches_capacity() {
+    let original = transaction_with_signatures(1, SigHashType::None);
+    let same = transaction_with_signatures(1, SigHashType::None);
     assert_eq!(added_signatures_for_input(&original, &same, 0), Ok(0));
 
-    let one_added = transaction_with_present_signatures(2, SigHashType::None);
+    let one_added = transaction_with_signatures(2, SigHashType::None);
     assert_eq!(added_signatures_for_input(&original, &one_added, 0), Ok(1));
 
     let regression = transaction();
@@ -165,25 +166,10 @@ fn anti_klepto_per_input_signature_count_rejects_regression_capacity_and_holes()
         Err(AntiKleptoVerifyError::TransactionMismatch),
     );
 
-    let capacity = transaction().inputs[0].sigs.len();
-    let full = transaction_with_present_signatures(capacity, SigHashType::All);
+    let full = transaction_with_signatures(MAX_SIGS_PER_INPUT, SigHashType::All);
     assert_eq!(
         added_signatures_for_input(&transaction(), &full, 0),
-        Ok(capacity)
-    );
-
-    let mut beyond = transaction_with_present_signatures(capacity, SigHashType::All);
-    beyond.inputs[0].sig_count = (capacity + 1) as u8;
-    assert_eq!(
-        added_signatures_for_input(&transaction(), &beyond, 0),
-        Err(AntiKleptoVerifyError::TransactionMismatch),
-    );
-
-    let mut hole = transaction();
-    hole.inputs[0].sig_count = 1;
-    assert_eq!(
-        added_signatures_for_input(&transaction(), &hole, 0),
-        Err(AntiKleptoVerifyError::InvalidProof),
+        Ok(MAX_SIGS_PER_INPUT)
     );
 }
 
@@ -215,9 +201,10 @@ fn anti_klepto_key_authorization_distinguishes_multisig_covenant_and_missing_key
     redeem[33] = 0xac;
     let mut covenant = transaction();
     set_p2sh(&mut covenant, &redeem);
-    covenant.inputs[0].covenant_execution_present = true;
-    covenant.inputs[0].covenant_execution_mask = 0;
-    covenant.inputs[0].covenant_execution_true_mask = 0;
+    covenant.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 0,
+        supplied_true_mask: 0,
+    });
     assert_eq!(
         pubkey_is_allowed_for_input(&covenant, 0, &covenant_key),
         Ok(true)
@@ -235,34 +222,26 @@ fn anti_klepto_key_authorization_distinguishes_multisig_covenant_and_missing_key
 
 #[test]
 fn anti_klepto_commitment_position_requires_unused_in_range_signature_slot() {
-    let mut tx = transaction();
-    tx.inputs[0].sig_count = 1;
+    let tx = transaction_with_signatures(1, SigHashType::All);
 
     assert!(!commitment_position_is_valid(&tx, 0, 0));
     assert!(commitment_position_is_valid(&tx, 0, 1));
-    assert!(commitment_position_is_valid(
-        &tx,
-        0,
-        tx.inputs[0].sigs.len() - 1
-    ));
-    assert!(!commitment_position_is_valid(
-        &tx,
-        0,
-        tx.inputs[0].sigs.len()
-    ));
+    assert!(commitment_position_is_valid(&tx, 0, MAX_SIGS_PER_INPUT - 1));
+    assert!(!commitment_position_is_valid(&tx, 0, MAX_SIGS_PER_INPUT));
     assert!(!commitment_position_is_valid(&tx, 1, 1));
 }
 
 #[test]
 fn anti_klepto_record_generation_preserves_absolute_signature_slots() {
     let mut tx = transaction();
-    tx.inputs[0].sig_count = 3;
-    for slot in 0..3usize {
-        let signature = &mut tx.inputs[0].sigs[slot];
-        signature.present = true;
-        signature.signature = [0x40 + slot as u8; 64];
-        signature.pubkey_compressed = [0x02; 33];
-        signature.pubkey_compressed[1] = 0x20 + slot as u8;
+    for slot in 0..3u8 {
+        let mut pubkey_compressed = [0x02; 33];
+        pubkey_compressed[1] = 0x20 + slot;
+        assert!(tx.inputs[0].sigs.push(InputSig {
+            signature: [0x40 + slot; 64],
+            pubkey_compressed,
+            ..InputSig::EMPTY
+        }));
     }
     let initial = [1u8];
 

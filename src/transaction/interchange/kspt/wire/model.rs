@@ -12,11 +12,17 @@ pub(crate) use super::super::format::{
 pub use super::super::format::{
     FLAG_SIGNED_OR_COMPLETE, KSPT_MAGIC as MAGIC, KSPT_VERSION_CURRENT as KSPT_VERSION,
 };
-pub use crate::transaction::model::{MAX_REDEEM_SIZE, MAX_SCRIPT_SIZE};
+pub use crate::transaction::model::{
+    Covenant, CovenantExecution, Derivation, Ms45Derivation, MAX_REDEEM_SIZE, MAX_SCRIPT_SIZE,
+};
 /// Most signature records one input may carry.
 pub const MAX_SIGNATURE_RECORDS: usize = crate::transaction::model::MAX_SIGS_PER_INPUT;
 /// Most outputs the grammar can describe.
-pub const MAX_OUTPUTS: u8 = crate::transaction::model::MAX_OUTPUTS as u8;
+pub const MAX_OUTPUTS: u8 = {
+    let max = crate::transaction::model::MAX_OUTPUTS;
+    assert!(max <= u8::MAX as usize, "the output count is one wire byte");
+    max.to_le_bytes()[0]
+};
 pub(crate) const EXTENDED_SCRIPT_LENGTH: u8 = 0xff;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -116,35 +122,6 @@ pub struct Output<'a> {
     pub amount: u64,
     pub script_version: u16,
     pub script: &'a [u8],
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Derivation {
-    pub branch: u8,
-    pub index: u32,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Ms45Derivation {
-    pub cosigner: u32,
-    pub chain: u32,
-    pub index: u32,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CovenantExecution {
-    pub supplied_mask: u16,
-    pub supplied_true_mask: u16,
-}
-
-pub const fn valid_covenant_execution(value: CovenantExecution) -> bool {
-    value.supplied_true_mask & !value.supplied_mask == 0
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Covenant {
-    pub authorizing_input: u16,
-    pub id: [u8; 32],
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

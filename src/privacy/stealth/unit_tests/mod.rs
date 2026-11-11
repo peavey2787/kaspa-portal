@@ -7,7 +7,7 @@ fn raw_transaction(transaction_id: &[u8; 32], script: &[u8]) -> Vec<u8> {
     raw.push(1);
     raw.extend_from_slice(transaction_id);
     raw.extend_from_slice(&7u32.to_le_bytes());
-    raw.extend_from_slice(&(script_length as u32).to_le_bytes());
+    raw.extend_from_slice(&u32::try_from(script_length).unwrap().to_le_bytes());
     raw.extend_from_slice(script);
     raw.resize(raw.len() + script_length.saturating_sub(script.len()), 0);
     raw

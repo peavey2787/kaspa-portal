@@ -26,7 +26,7 @@ fn window(weekday: u8, start_minute: u16, end_minute: u16) -> SigningWindow {
 fn weekly(windows: &[SigningWindow]) -> SigningPolicy {
     let mut policy = SigningPolicy::disabled();
     policy.weekly_enabled = true;
-    policy.weekly_count = windows.len() as u8;
+    policy.weekly_count = u8::try_from(windows.len()).unwrap();
     policy.windows[..windows.len()].copy_from_slice(windows);
     policy
 }
@@ -296,7 +296,7 @@ fn policy_validation_rejects_malformed_window_sets_and_times() {
         Ok(())
     );
     let mut too_many = weekly(&[]);
-    too_many.weekly_count = MAX_WEEKLY_WINDOWS as u8 + 1;
+    too_many.weekly_count = u8::try_from(MAX_WEEKLY_WINDOWS).unwrap() + 1;
     assert_eq!(too_many.validate(), Err(PolicyError::TooManyWindows));
     assert_eq!(weekly(&[]).validate(), Err(PolicyError::InvalidWindow));
     let mut count_without_flag = weekly(&[window(0, 0, 60)]);

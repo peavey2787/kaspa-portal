@@ -193,7 +193,7 @@ impl BranchParser {
     fn enter_branch(&mut self, opcode: u8) -> Result<(), BranchResolveError> {
         // Selector bits are a u16, so at most 16 branches exist in total; open
         // branches never outnumber entered ones, so this also bounds nesting.
-        if self.next_branch >= MAX_COVENANT_BRANCH_DEPTH as u32 {
+        if self.next_branch as usize >= MAX_COVENANT_BRANCH_DEPTH {
             return Err(BranchResolveError::BranchDepthExceeded);
         }
         let bit = 1u16 << self.next_branch;

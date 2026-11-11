@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+The transaction model holds no flag that can disagree with its data.
+
+- Each flag-plus-payload pair in the model is now one `Option` or enum, so a
+  set flag can no longer sit beside unset data, or the reverse.
+  - `TransactionInput` carries:
+    - `derivation_hint: Option<Derivation>`;
+    - `ms45_hint: Option<Ms45Derivation>`, which replaces `Ms45Hint`;
+    - `covenant_execution: Option<CovenantExecution>`;
+    - `redeem_pool_offset: Option<u16>`.
+  - Outputs carry `covenant: Option<Covenant>`.
+  - `Transaction` carries `stealth_tweak: Option<[u8; 32]>`.
+- `sigs` and `incoming_partial_sigs` are `SignatureSlots`. It holds only the
+  signatures that were added, and exposes `len`, `count`, `push`,
+  `replace_with`, `truncate` and `clear`. `sig_count`,
+  `incoming_partial_sigs_count` and the per-slot `present` flag are gone, so a
+  count can no longer overstate the slots or leave a hole. `truncate` takes
+  back the signatures a signer added and wipes their storage.
+- `MultisigConfig::family` is a `MultisigFamily` (`Legacy44`, or `Hd45` with
+  its cosigner index and chain). It replaces `v45`, `cosigner_index` and
+  `chain`.
+- `MultisigStore::configs` holds `Option<MultisigConfig>`. An empty slot is
+  `None`, and `active` is removed. `MultisigStore::wallets` iterates the
+  stored wallets. `find_forged_change` and `trusted_multisig_output_chain`
+  take the store.
+- `TransactionAnalysis` exposes `mass_valid()` and `fee_sufficient()` as
+  methods, derived from the fields they summarise.
+- A beacon verification is read through `is_valid()`, `output()`, `curby()`
+  and `kaspa_evidence_finalized()`, so an invalid result never offers an
+  output.
+
+A signer can tell whether the transaction it signs is the one its owner
+reviewed.
+
+- `Transaction::review_digest()` commits to every fact a review shows or a
+  signature covers: the network, the version, and each input with the coin it
+  spends, its redeem script and its hints. It also commits to each output with
+  its covenant and hints, the locktime, subnetwork, gas, payload and stealth
+  tweak. Signatures are left out, so the digest stays fixed while signers add
+  them. A signer that keeps the digest its owner approved can refuse a
+  transaction that changed since.
+
+Narrowing integer conversions are checked.
+
+- `clippy::cast_possible_truncation`, `undocumented_unsafe_blocks`,
+  `struct_excessive_bools` and `fn_params_excessive_bools` are denied in
+  every crate.
+  - A count or length that could exceed its wire field is refused with that
+    format's own error rather than truncated.
+  - Float conversions go through `primitives::numeric`, which states its
+    saturation rule.
+- Release builds keep overflow checks.
+
 - The password KDF v1 profile (`PasswordKdfParams::current`) drops from 8 MiB to 6 MiB of Argon2id memory; t=3 and p=1 are unchanged. On an M5Stack CoreS3 the 8 MiB of PSRAM is also the heap, so an 8 MiB workspace could never be allocated once the app held any memory, and every password-protected operation failed. v1 ciphertext written before this change no longer opens. The v2 host profile stays at 64 MiB.
 - Typed covenant claims (whitelist, commit-reveal, oracle v1, private swap) pass PSKT summary before they hold a signature: the route is proved, the witness waits, and more than one signature is still refused.
 - `crowdfund_redeem_script` uses one guard per input and `CROWDFUND_MAX_TX_INPUTS` drops from 16 to 8, so the refund path resolves and the script fits `MAX_REDEEM_SIZE`. This changes every crowdfund address. `contract::zk::CROWDFUND_MAX_CONTRIBUTORS` is removed; use `contract::crowdfund::CROWDFUND_MAX_CONTRIBUTORS`.

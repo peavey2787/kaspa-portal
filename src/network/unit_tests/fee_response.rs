@@ -27,7 +27,7 @@ fn fee_response_vector_is_stable() {
 
 fn bytes_field(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + bytes.len());
-    out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&u32::try_from(bytes.len()).unwrap().to_le_bytes());
     out.extend_from_slice(bytes);
     out
 }
@@ -37,12 +37,12 @@ fn fee_payload(normal: &[(f64, f64)], low: &[(f64, f64)]) -> Vec<u8> {
     estimate.extend_from_slice(&1u16.to_le_bytes());
     estimate.extend_from_slice(&2.0f64.to_le_bytes());
     estimate.extend_from_slice(&3.0f64.to_le_bytes());
-    estimate.extend_from_slice(&(normal.len() as u32).to_le_bytes());
+    estimate.extend_from_slice(&u32::try_from(normal.len()).unwrap().to_le_bytes());
     for (rate, seconds) in normal {
         estimate.extend_from_slice(&rate.to_le_bytes());
         estimate.extend_from_slice(&seconds.to_le_bytes());
     }
-    estimate.extend_from_slice(&(low.len() as u32).to_le_bytes());
+    estimate.extend_from_slice(&u32::try_from(low.len()).unwrap().to_le_bytes());
     for (rate, seconds) in low {
         estimate.extend_from_slice(&rate.to_le_bytes());
         estimate.extend_from_slice(&seconds.to_le_bytes());

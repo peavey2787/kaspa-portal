@@ -31,9 +31,9 @@ fn rust_offline_randomness() {
     let generated = beacon.generate(request).expect("generate beacon");
     assert_ne!(generated.output, [0u8; 32]);
     let verification = beacon.verify(&generated).expect("verify beacon");
-    assert!(verification.valid);
-    assert!(verification.kaspa_evidence_finalized);
-    assert!(!verification.uses_curby);
+    assert!(verification.is_valid());
+    assert!(verification.kaspa_evidence_finalized());
+    assert_eq!(verification.curby(), None);
 
     let fixed_secret = VrfSecretKey::from_bytes([0x21; 32]);
     let fixed_public = fixed_secret.public_key();

@@ -1,4 +1,5 @@
 use super::*;
+use crate::primitives::address::KaspaNetwork;
 
 #[test]
 fn transaction_model_constructors_totals_and_reset_are_covered() {
@@ -94,12 +95,12 @@ fn redeem_storage_covers_empty_inline_pool_and_capacity_errors() {
     let inline = [0x51; MAX_SCRIPT_SIZE];
     tx.store_redeem(0, &inline).expect("inline redeem");
     assert_eq!(tx.redeem_bytes(0), inline.as_slice());
-    assert!(!tx.inputs[0].redeem_in_pool);
+    assert_eq!(tx.inputs[0].redeem_pool_offset, None);
 
     let pooled = [0x52; MAX_SCRIPT_SIZE + 1];
     tx.store_redeem(1, &pooled).expect("pooled redeem");
     assert_eq!(tx.redeem_bytes(1), pooled.as_slice());
-    assert!(tx.inputs[1].redeem_in_pool);
+    assert_eq!(tx.inputs[1].redeem_pool_offset, Some(0));
 
     let oversized = [0x53; MAX_REDEEM_SIZE + 1];
     assert_eq!(
@@ -115,18 +116,51 @@ fn redeem_storage_covers_empty_inline_pool_and_capacity_errors() {
 }
 
 #[test]
+fn signature_slots_expose_only_added_signatures_up_to_capacity() {
+    let mut slots = SignatureSlots::<IncomingPartialSig>::default();
+    assert!(slots.is_empty());
+    assert_eq!(slots.count(), 0);
+    let capacity = u8::try_from(MAX_SIGS_PER_INPUT).expect("capacity fits a count byte");
+    for marker in 1..=capacity {
+        assert!(!slots.is_full());
+        assert!(slots.push(IncomingPartialSig {
+            pubkey: [marker; 33],
+            signature: [marker; 64],
+        }));
+        assert_eq!(slots.count(), marker);
+    }
+    assert!(slots.is_full());
+    assert!(!slots.push(IncomingPartialSig::EMPTY));
+    assert_eq!(slots.len(), MAX_SIGS_PER_INPUT);
+    assert_eq!(slots.last().map(|slot| slot.pubkey), Some([capacity; 33]));
+
+    slots[0].signature[0] = 0xee;
+    assert_eq!(slots[0].signature[0], 0xee);
+
+    slots.replace_with(IncomingPartialSig {
+        pubkey: [0x09; 33],
+        signature: [0x09; 64],
+    });
+    assert_eq!(slots.count(), 1);
+    assert_eq!(slots[0].pubkey, [0x09; 33]);
+
+    slots.clear();
+    assert!(slots.is_empty());
+    assert!(slots.push(IncomingPartialSig::EMPTY));
+    assert_eq!(slots.count(), 1);
+}
+
+#[test]
 fn model_value_objects_and_sighash_variants_are_covered() {
     let script = ScriptPublicKey::new();
     assert_eq!(script.version, 0);
     assert!(script.script_bytes().is_empty());
 
-    let input_sig = InputSig::empty();
-    assert!(!input_sig.present);
+    let input_sig = InputSig::EMPTY;
     assert_eq!(input_sig.signature, [0; 64]);
     assert_eq!(input_sig.pubkey_compressed, [0; 33]);
 
-    let incoming = IncomingPartialSig::empty();
-    assert!(!incoming.present);
+    let incoming = IncomingPartialSig::EMPTY;
     assert_eq!(incoming.pubkey, [0; 33]);
     assert_eq!(incoming.signature, [0; 64]);
 
@@ -167,13 +201,28 @@ fn multisig_labels_slots_and_store_capacity_are_covered() {
     let mut short = [0u8; 3];
     assert_eq!(config.label(&mut short), 3);
     assert_eq!(&short, b"2-o");
+    config.family = MultisigFamily::Hd45 {
+        cosigner_index: 1,
+        chain: 1,
+    };
+    let mut hd45_label = [0u8; 16];
+    let length = config.label(&mut hd45_label);
+    assert_eq!(&hd45_label[..length], b"2-of-3 45' S1/C1");
 
     let mut store = MultisigStore::new();
     assert_eq!(store.find_free(), Some(0));
-    store.configs[0].active = true;
+    store.configs[0] = Some(config.clone());
     assert_eq!(store.find_free(), Some(1));
-    store.configs[1].active = true;
+    assert_eq!(store.wallets().count(), 1);
+    store.configs[1] = Some(config);
     assert_eq!(store.find_free(), None);
+    assert_eq!(store.wallets().count(), 2);
+}
+
+fn store_of(config: &MultisigConfig) -> MultisigStore {
+    let mut store = MultisigStore::new();
+    store.configs[1] = Some(config.clone());
+    store
 }
 
 #[test]
@@ -293,7 +342,7 @@ fn multisig_builder_rejects_each_invalid_threshold_shape_before_derivation() {
         (0u8, 1u8),
         (1, 0),
         (2, 1),
-        (1, (MAX_MULTISIG_KEYS + 1) as u8),
+        (1, u8::try_from(MAX_MULTISIG_KEYS + 1).unwrap()),
     ] {
         let mut config = MultisigConfig::new();
         config.m = m;
@@ -324,11 +373,12 @@ fn v106_hd45_script_hash_vector_is_exact() {
     let mut ordered = KPUBS;
     ordered.sort_unstable();
     let mut config = MultisigConfig::new();
-    config.v45 = true;
+    config.family = MultisigFamily::Hd45 {
+        cosigner_index: 1,
+        chain: 0,
+    };
     config.m = 2;
     config.n = 5;
-    config.cosigner_index = 1;
-    config.chain = 0;
     config.addr_index = 0;
     for (slot, encoded) in ordered.iter().enumerate() {
         let parts = crate::wallet::key::xpub::parse_kpub_parts(encoded).expect("canonical v1 kpub");
@@ -340,19 +390,13 @@ fn v106_hd45_script_hash_vector_is_exact() {
         EXPECTED_HASH,
     );
     let mut address = [0u8; crate::primitives::address::MAX_ADDR_LEN];
-    let length = config.address(
-        crate::primitives::address::KaspaNetwork::Mainnet,
-        &mut address,
-    );
+    let length = config.address(KaspaNetwork::Mainnet, &mut address);
     assert_eq!(
         core::str::from_utf8(&address[..length]).unwrap(),
         crate::primitives::address::encode_p2sh_address(&EXPECTED_HASH, "kaspa")
     );
     assert_eq!(
-        MultisigConfig::new().address(
-            crate::primitives::address::KaspaNetwork::Mainnet,
-            &mut address
-        ),
+        MultisigConfig::new().address(KaspaNetwork::Mainnet, &mut address),
         0
     );
 
@@ -375,8 +419,8 @@ fn v106_hd45_script_hash_vector_is_exact() {
     >(&text[..length])
     .expect("grammar");
     let mut restored = MultisigConfig::from_descriptor(&grammar);
-    restored.cosigner_index = config.cosigner_index;
-    restored.chain = config.chain;
+    assert_eq!(restored.family, MultisigFamily::HD45_UNRESOLVED);
+    restored.family = config.family;
     restored.addr_index = config.addr_index;
     assert!(restored.build_script() > 0);
     assert_eq!(
@@ -385,7 +429,7 @@ fn v106_hd45_script_hash_vector_is_exact() {
     );
 
     let mut legacy = config.clone();
-    legacy.v45 = false;
+    legacy.family = MultisigFamily::Legacy44;
     let length = legacy
         .write_descriptor(&mut text)
         .expect("legacy descriptor");
@@ -404,8 +448,7 @@ fn descriptor_backed_hd45_change_verification_rejects_only_forged_claims() {
         b"kpub1:038f332e03a7457270800000002908be01d75735944f29befbdbcd173ab00df2d44c6d5ab51a839413fda90cbf035b986b584de244f5d6a1939192f676a9f2992a63b0f43cdc452dcb40d9dd7081",
     ];
     let mut trusted = MultisigConfig::new();
-    trusted.v45 = true;
-    trusted.active = true;
+    trusted.family = MultisigFamily::HD45_UNRESOLVED;
     trusted.m = 2;
     trusted.n = 2;
     for (slot, encoded) in KPUBS.iter().enumerate() {
@@ -416,8 +459,10 @@ fn descriptor_backed_hd45_change_verification_rejects_only_forged_claims() {
 
     let script_public_key = |config: &MultisigConfig, cosigner: u32, chain: u32, index: u32| {
         let mut derived = config.clone();
-        derived.cosigner_index = cosigner as u8;
-        derived.chain = chain as u8;
+        derived.family = MultisigFamily::Hd45 {
+            cosigner_index: u8::try_from(cosigner).expect("test cosigner"),
+            chain: u8::try_from(chain).expect("test chain"),
+        };
         derived.addr_index = index;
         assert!(derived.build_script() > 0);
         let hash = crate::primitives::hash::blake2b_256(&derived.script[..derived.script_len]);
@@ -432,66 +477,45 @@ fn descriptor_backed_hd45_change_verification_rejects_only_forged_claims() {
 
     let mut tx = Transaction::try_new().expect("transaction storage");
     tx.num_inputs = 1;
-    tx.inputs[0].ms45_hint = Ms45Hint {
-        present: true,
+    tx.inputs[0].ms45_hint = Some(Ms45Derivation {
         cosigner: 0,
         chain: 0,
         index: 7,
-    };
+    });
     tx.inputs[0].utxo_entry.script_public_key = script_public_key(&trusted, 0, 0, 7);
     tx.num_outputs = 1;
-    tx.outputs[0].ms45_hint = Ms45Hint {
-        present: true,
+    tx.outputs[0].ms45_hint = Some(Ms45Derivation {
         cosigner: 0,
         chain: 1,
         index: 3,
-    };
+    });
     tx.outputs[0].script_public_key = script_public_key(&trusted, 0, 1, 3);
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        None
-    );
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
 
     tx.outputs[0].script_public_key.script[2] ^= 1;
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        Some(0)
-    );
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), Some(0));
 
-    tx.outputs[0].ms45_hint = Ms45Hint::none();
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        None
-    );
+    tx.outputs[0].ms45_hint = None;
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
 
     // No eligible descriptor means there is no trusted basis for calling a
-    // change claim forged. Exercise inactive, malformed-input, and
+    // change claim forged. Exercise empty-store, legacy, malformed-input, and
     // descriptor-miss paths independently.
-    assert_eq!(find_forged_change(&tx, &[]), None);
-    let mut inactive = trusted.clone();
-    inactive.active = false;
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&inactive)),
-        None
-    );
-    tx.outputs[0].ms45_hint = Ms45Hint {
-        present: true,
+    assert_eq!(find_forged_change(&tx, &MultisigStore::new()), None);
+    let mut legacy = trusted.clone();
+    legacy.family = MultisigFamily::Legacy44;
+    assert_eq!(find_forged_change(&tx, &store_of(&legacy)), None);
+    tx.outputs[0].ms45_hint = Some(Ms45Derivation {
         cosigner: 0,
         chain: 1,
         index: 3,
-    };
+    });
     let valid_input = tx.inputs[0].utxo_entry.script_public_key.clone();
     tx.inputs[0].utxo_entry.script_public_key = ScriptPublicKey::new();
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        None
-    );
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
     tx.inputs[0].utxo_entry.script_public_key = valid_input.clone();
     tx.inputs[0].utxo_entry.script_public_key.script[2] ^= 1;
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        None
-    );
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
     tx.inputs[0].utxo_entry.script_public_key = valid_input.clone();
 
     // Once the descriptor is trusted, malformed/non-P2SH output claims are
@@ -499,74 +523,31 @@ fn descriptor_backed_hd45_change_verification_rejects_only_forged_claims() {
     // treated as change. Cover each P2SH structural guard separately.
     let valid_output = script_public_key(&trusted, 0, 1, 3);
     tx.outputs[0].script_public_key = ScriptPublicKey::new();
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        None
-    );
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
     for slot in [0usize, 1, 34] {
         let mut malformed = valid_output.clone();
         malformed.script[slot] ^= 1;
         tx.outputs[0].script_public_key = malformed;
-        assert_eq!(
-            find_forged_change(&tx, core::slice::from_ref(&trusted)),
-            None
-        );
+        assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
     }
     tx.outputs[0].script_public_key = valid_input;
     tx.outputs[0].ms45_hint = tx.inputs[0].ms45_hint;
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        None
-    );
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
 
     // Exercise empty traversal boundaries independently: without a trusted
     // input there can be no forged-change claim, and with a trusted input but
     // zero outputs there is nothing to inspect.
     tx.num_inputs = 0;
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        None
-    );
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
     tx.num_inputs = 1;
     tx.inputs[0].utxo_entry.script_public_key = script_public_key(&trusted, 0, 0, 7);
-    tx.inputs[0].ms45_hint = Ms45Hint {
-        present: true,
+    tx.inputs[0].ms45_hint = Some(Ms45Derivation {
         cosigner: 0,
         chain: 0,
         index: 7,
-    };
+    });
     tx.num_outputs = 0;
-    assert_eq!(
-        find_forged_change(&tx, core::slice::from_ref(&trusted)),
-        None
-    );
-}
-
-#[test]
-fn hd45_wallet_identity_and_cosigner_resolution_cover_match_and_miss() {
-    const FIRST: &[u8] = b"kpub1:038f332e03405ab68380000000f0453f0894cc8c84ebf6e6208e0c7916e9ddbd14919f9bbb92b0690b4e353392020327c7136972883eab5a7722ec3d4302f888804ecce61658ae962a2c56bb7571";
-    const SECOND: &[u8] = b"kpub1:038f332e03a7457270800000002908be01d75735944f29befbdbcd173ab00df2d44c6d5ab51a839413fda90cbf035b986b584de244f5d6a1939192f676a9f2992a63b0f43cdc452dcb40d9dd7081";
-    let first = crate::wallet::key::xpub::parse_kpub_parts(FIRST).expect("first kpub");
-    let second = crate::wallet::key::xpub::parse_kpub_parts(SECOND).expect("second kpub");
-
-    let mut config = MultisigConfig::new();
-    config.v45 = true;
-    config.m = 1;
-    config.n = 2;
-    assert!(config.set_cosigner(0, &first));
-    assert!(config.set_cosigner(1, &second));
-    let identical = config.clone();
-    assert!(config.same_wallet_as(&identical));
-
-    let mut different = identical.clone();
-    different.cosigner_chain_codes[1][0] ^= 1;
-    assert!(!config.same_wallet_as(&different));
-
-    assert!(config.resolve_cosigner_index(&second));
-    assert_eq!(config.cosigner_index, 1);
-    let mut missing = second;
-    missing.parent_fp[0] ^= 1;
-    assert!(!config.resolve_cosigner_index(&missing));
+    assert_eq!(find_forged_change(&tx, &store_of(&trusted)), None);
 }
 
 #[test]
@@ -620,7 +601,7 @@ fn hd45_wallet_identity_and_cosigner_resolution_cover_match_miss_and_static() {
     let second = crate::wallet::key::xpub::parse_kpub_parts(SECOND).expect("second kpub");
 
     let mut config = MultisigConfig::new();
-    config.v45 = true;
+    config.family = MultisigFamily::HD45_UNRESOLVED;
     config.m = 1;
     config.n = 2;
     assert!(config.set_cosigner(0, &first));
@@ -633,14 +614,105 @@ fn hd45_wallet_identity_and_cosigner_resolution_cover_match_miss_and_static() {
     assert!(!config.same_wallet_as(&different));
 
     assert!(config.resolve_cosigner_index(&second));
-    assert_eq!(config.cosigner_index, 1);
+    assert_eq!(
+        config.family,
+        MultisigFamily::Hd45 {
+            cosigner_index: 1,
+            chain: 0
+        }
+    );
     let mut missing = second;
     missing.parent_fp[0] ^= 1;
     assert!(!config.resolve_cosigner_index(&missing));
 
     let mut static_multisig = MultisigConfig::new();
     static_multisig.n = 1;
-    static_multisig.cosigner_index = 7;
     assert!(static_multisig.resolve_cosigner_index(&missing));
-    assert_eq!(static_multisig.cosigner_index, 0);
+    assert_eq!(static_multisig.family, MultisigFamily::Legacy44);
+}
+
+#[test]
+fn signature_slots_truncate_keeps_only_the_leading_signatures() {
+    let mut slots = SignatureSlots::<InputSig>::default();
+    for marker in 1..=3u8 {
+        assert!(slots.push(InputSig {
+            pubkey_pos: marker,
+            ..InputSig::EMPTY
+        }));
+    }
+    slots.truncate(5);
+    assert_eq!(slots.count(), 3);
+    slots.truncate(1);
+    assert_eq!(slots.count(), 1);
+    assert_eq!(slots[0].pubkey_pos, 1);
+    assert!(slots.push(InputSig {
+        pubkey_pos: 9,
+        ..InputSig::EMPTY
+    }));
+    assert_eq!(
+        slots.iter().map(|sig| sig.pubkey_pos).collect::<Vec<_>>(),
+        [1, 9]
+    );
+    slots.truncate(0);
+    assert!(slots.is_empty());
+}
+
+fn reviewed_transaction() -> Transaction {
+    let mut tx = Transaction::try_new().expect("transaction storage");
+    tx.network = KaspaNetwork::Testnet;
+    tx.num_inputs = 1;
+    tx.inputs[0].previous_outpoint.transaction_id = [0x11; 32];
+    tx.inputs[0].utxo_entry.amount = 5_000;
+    tx.num_outputs = 2;
+    tx.outputs[0].value = 3_000;
+    tx.outputs[1].value = 1_500;
+    tx.outputs[1].derivation_hint = Some(Derivation {
+        branch: 1,
+        index: 4,
+    });
+    tx
+}
+
+#[test]
+fn review_digest_ignores_signatures_but_binds_every_reviewed_fact() {
+    let mut tx = reviewed_transaction();
+    let approved = tx.review_digest();
+    assert!(tx.inputs[0].sigs.push(InputSig {
+        signature: [0x42; 64],
+        ..InputSig::EMPTY
+    }));
+    assert_eq!(
+        tx.review_digest(),
+        approved,
+        "a signature is not a reviewed fact"
+    );
+
+    let changes: [fn(&mut Transaction); 8] = [
+        |tx| tx.outputs[0].value += 1,
+        |tx| tx.inputs[0].utxo_entry.amount += 1,
+        |tx| tx.inputs[0].previous_outpoint.index = 1,
+        |tx| {
+            tx.outputs[1].derivation_hint = Some(Derivation {
+                branch: 0,
+                index: 4,
+            })
+        },
+        |tx| tx.outputs[1].derivation_hint = None,
+        |tx| tx.network = KaspaNetwork::Mainnet,
+        |tx| tx.stealth_tweak = Some([0; 32]),
+        |tx| tx.num_outputs = 1,
+    ];
+    for change in changes {
+        let mut changed = reviewed_transaction();
+        change(&mut changed);
+        assert_ne!(changed.review_digest(), approved);
+    }
+
+    let mut with_payload = reviewed_transaction();
+    with_payload.set_payload(&[0]).expect("payload fits");
+    assert_ne!(
+        with_payload.review_digest(),
+        approved,
+        "an empty and a one-byte payload differ"
+    );
 }

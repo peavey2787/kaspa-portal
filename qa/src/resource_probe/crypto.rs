@@ -71,6 +71,6 @@ pub fn run(iteration: usize) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
         black_box(valid);
     }
-    black_box((verified, beacon_valid.valid, payment.one_time_pubkey));
+    black_box((verified, beacon_valid.is_valid(), payment.one_time_pubkey));
     Ok(())
 }

@@ -78,9 +78,10 @@ fn covenant_input(owner: [u8; 32], beneficiary: [u8; 32]) -> Transaction {
     redeem.extend_from_slice(&[OP_CHECKSIG, 0x68]);
     tx.inputs[0].redeem_script[..redeem.len()].copy_from_slice(&redeem);
     tx.inputs[0].redeem_script_len = redeem.len();
-    tx.inputs[0].covenant_execution_present = true;
-    tx.inputs[0].covenant_execution_mask = 1;
-    tx.inputs[0].covenant_execution_true_mask = 1;
+    tx.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 1,
+        supplied_true_mask: 1,
+    });
     tx
 }
 
@@ -97,31 +98,44 @@ fn covenant_pskt_key_position_and_execution_binding_cover_all_fail_closed_paths(
     );
     assert_eq!(
         validate_covenant_execution_binding(&tx.inputs[0], 1),
-        Ok(())
+        Ok(tx.inputs[0].covenant_execution.expect("covenant execution"))
     );
 
-    tx.inputs[0].covenant_execution_true_mask = 0;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_true_mask = 0;
     assert_eq!(
         position_for_pskt_key(&tx, 0, &compressed(beneficiary)),
         Ok(1)
     );
 
-    tx.inputs[0].covenant_execution_present = false;
+    tx.inputs[0].covenant_execution = None;
     assert_eq!(
         validate_covenant_execution_binding(&tx.inputs[0], 1),
         Err(SignatureValidationError::InvalidBinding)
     );
 
-    tx.inputs[0].covenant_execution_present = true;
-    tx.inputs[0].covenant_execution_mask = 1;
-    tx.inputs[0].covenant_execution_true_mask = 2;
+    tx.inputs[0].covenant_execution = Some(crate::transaction::model::CovenantExecution {
+        supplied_mask: 1,
+        supplied_true_mask: 2,
+    });
     assert_eq!(
         validate_covenant_execution_binding(&tx.inputs[0], 1),
         Err(SignatureValidationError::InvalidBinding)
     );
 
-    tx.inputs[0].covenant_execution_true_mask = 0;
-    tx.inputs[0].covenant_execution_mask = 3;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_true_mask = 0;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_mask = 3;
     assert_eq!(
         validate_covenant_execution_binding(&tx.inputs[0], 1),
         Err(SignatureValidationError::InvalidBinding)
@@ -132,7 +146,11 @@ fn covenant_pskt_key_position_and_execution_binding_cover_all_fail_closed_paths(
         Err(SignatureValidationError::InvalidModel)
     );
 
-    tx.inputs[0].covenant_execution_mask = 1;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_mask = 1;
     tx.inputs[0].redeem_script[0] = 0x63;
     tx.inputs[0].redeem_script_len = 1;
     assert_eq!(
@@ -168,29 +186,29 @@ fn signature(tx: &Transaction, marker: u8) -> [u8; 64] {
 
 /// Attach compact KSPT signatures from `(marker, position)` signers.
 fn with_kspt_sigs(mut tx: Transaction, signers: &[(u8, u8)]) -> Transaction {
-    for (slot, (marker, position)) in signers.iter().enumerate() {
-        tx.inputs[0].sigs[slot] = crate::transaction::model::InputSig {
+    tx.inputs[0].sigs.clear();
+    for (marker, position) in signers {
+        let signature = crate::transaction::model::InputSig {
             signature: signature(&tx, *marker),
             sighash_type: SIGHASH_ALL,
             pubkey_pos: *position,
-            present: true,
             pubkey_compressed: [0; 33],
         };
+        assert!(tx.inputs[0].sigs.push(signature));
     }
-    tx.inputs[0].sig_count = signers.len() as u8;
     tx
 }
 
 /// Attach standard PSKT partial signatures from `markers`.
 fn with_pskt_sigs(mut tx: Transaction, markers: &[u8]) -> Transaction {
-    for (slot, marker) in markers.iter().enumerate() {
-        tx.inputs[0].incoming_partial_sigs[slot] = crate::transaction::model::IncomingPartialSig {
+    tx.inputs[0].incoming_partial_sigs.clear();
+    for marker in markers {
+        let partial = crate::transaction::model::IncomingPartialSig {
             pubkey: compressed(xonly(*marker)),
             signature: signature(&tx, *marker),
-            present: true,
         };
+        assert!(tx.inputs[0].incoming_partial_sigs.push(partial));
     }
-    tx.inputs[0].incoming_partial_sigs_count = markers.len() as u8;
     tx
 }
 
@@ -223,28 +241,19 @@ fn kspt_status_counts_only_verified_signatures_up_to_the_threshold() {
 }
 
 #[test]
-fn signature_slot_counts_are_bounded_by_the_input_capacity() {
+fn signature_slot_counts_reach_the_input_capacity() {
     let keys = [1, 2, 3, 4, 5];
     let all: Vec<(u8, u8)> = keys.iter().zip(0u8..).map(|(k, p)| (*k, p)).collect();
     let full = || with_kspt_sigs(multisig_input(&keys, 5), &all);
     assert_eq!(kspt_status(&full()), (5, 5));
     assert!(kspt_is_fully_signed(&full()));
-    let mut overdeclared = full();
-    overdeclared.inputs[0].sig_count = MAX_SIGS_PER_INPUT as u8 + 1;
-    assert_eq!(
-        verified_count(&overdeclared, 0, SignatureSource::Kspt),
-        Err(SignatureValidationError::InvalidModel)
-    );
-    assert_eq!(kspt_status(&overdeclared), (0, 5));
-    assert!(!kspt_is_fully_signed(&overdeclared));
+    assert_eq!(full().inputs[0].sigs.len(), MAX_SIGS_PER_INPUT);
 
-    let pskt_full = || with_pskt_sigs(multisig_input(&keys, 5), &keys);
-    assert_eq!(pskt_status(&pskt_full()), (5, 5));
-    let mut pskt_overdeclared = pskt_full();
-    pskt_overdeclared.inputs[0].incoming_partial_sigs_count = MAX_SIGS_PER_INPUT as u8 + 1;
+    let pskt_full = with_pskt_sigs(multisig_input(&keys, 5), &keys);
+    assert_eq!(pskt_status(&pskt_full), (5, 5));
     assert_eq!(
-        verified_count(&pskt_overdeclared, 0, SignatureSource::StandardPskt),
-        Err(SignatureValidationError::InvalidModel)
+        pskt_full.inputs[0].incoming_partial_sigs.len(),
+        MAX_SIGS_PER_INPUT
     );
 }
 
@@ -296,8 +305,16 @@ fn unbranched_covenant(redeem: &[u8]) -> Transaction {
     let mut tx = covenant_input([0; 32], [0; 32]);
     tx.inputs[0].redeem_script[..redeem.len()].copy_from_slice(redeem);
     tx.inputs[0].redeem_script_len = redeem.len();
-    tx.inputs[0].covenant_execution_mask = 0;
-    tx.inputs[0].covenant_execution_true_mask = 0;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_mask = 0;
+    tx.inputs[0]
+        .covenant_execution
+        .as_mut()
+        .expect("covenant execution")
+        .supplied_true_mask = 0;
     tx
 }
 
@@ -335,7 +352,7 @@ fn covenant_signatures_must_match_the_selected_execution_branch() {
         Err(SignatureValidationError::InvalidBinding)
     );
     let mut absent = owner_signed;
-    absent.inputs[0].covenant_execution_present = false;
+    absent.inputs[0].covenant_execution = None;
     assert_eq!(
         covenant_position_matches_execution(&absent, 0, 0),
         Err(SignatureValidationError::InvalidBinding)

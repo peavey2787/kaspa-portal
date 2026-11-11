@@ -1,5 +1,5 @@
 use super::{
-    math::{erfc, gamma_q},
+    math::{erfc, gamma_q, power_of_two},
     normalize, NistResult,
 };
 
@@ -22,7 +22,7 @@ pub fn non_overlapping_template(bits: &[u8], template: &[u8]) -> NistResult {
     if block_size < m {
         return NistResult::not_applicable("non_overlapping_template", "insufficient bits");
     }
-    let lambda = (block_size - m + 1) as f64 / 2f64.powi(m as i32);
+    let lambda = (block_size - m + 1) as f64 / power_of_two(m);
     let counts: Vec<_> = (0..blocks)
         .map(|index| {
             count_non_overlapping(
@@ -60,7 +60,7 @@ pub fn overlapping_template(bits: &[u8], template: &[u8]) -> NistResult {
         .windows(m)
         .filter(|window| *window == template.as_slice())
         .count() as f64;
-    let probability = 1.0 / 2f64.powi(m as i32);
+    let probability = 1.0 / power_of_two(m);
     let mean = (bits.len() - m + 1) as f64 * probability;
     let variance = bits.len() as f64 * (probability - (2 * m - 1) as f64 * probability.powi(2));
     if variance <= 0.0 {

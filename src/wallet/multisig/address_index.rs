@@ -44,7 +44,10 @@ fn scan_hierarchical_path(
 
 fn scan_shape(descriptor: &MultisigDescriptor) -> (u32, u32) {
     if descriptor.is_hd45() {
-        return (descriptor.participant_count() as u32, 2);
+        return (
+            u32::try_from(descriptor.participant_count()).unwrap_or(u32::MAX),
+            2,
+        );
     }
     (1, 1)
 }

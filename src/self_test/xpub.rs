@@ -62,15 +62,7 @@ fn test_sha256d() -> bool {
 
 /// Test account-key derivation produces canonical `kpub1:` text
 fn test_kpub_prefix() -> bool {
-    // Use a known test seed (BIP39 test vector 1)
-    // Mnemonic: "abandon abandon ... about"
-    // Seed (hex): 5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc1...
-    // We'll use a simpler approach: derive from a fixed 64-byte seed
-    let mut seed = [0u8; 64];
-    // Fill with deterministic data for testing
-    for (i, byte) in seed.iter_mut().enumerate() {
-        *byte = (i as u8).wrapping_mul(7).wrapping_add(13);
-    }
+    let seed = patterned_seed(7, 13);
 
     let mut out = [0u8; KPUB_MAX_LEN];
     match derive_and_serialize_kpub(&seed, &mut out) {
@@ -116,10 +108,7 @@ fn test_kaspa_cli_xpub_compatibility() -> bool {
 
 /// Imported account XPrvs preserve derivation and serialize byte-for-byte.
 fn test_account_xprv_recovery_roundtrip() -> bool {
-    let mut seed = [0u8; 64];
-    for (index, byte) in seed.iter_mut().enumerate() {
-        *byte = (index as u8).wrapping_mul(3).wrapping_add(17);
-    }
+    let seed = patterned_seed(3, 17);
     let mut original = [0u8; XPRV_MAX_LEN];
     let Ok(original_length) = derive_and_serialize_xprv(&seed, &mut original) else {
         return false;
@@ -187,10 +176,7 @@ fn test_account_export_vectors() -> bool {
         0xab, 0x09,
     ];
 
-    let mut seed = [0u8; 64];
-    for (index, byte) in seed.iter_mut().enumerate() {
-        *byte = (index as u8).wrapping_mul(3).wrapping_add(17);
-    }
+    let seed = patterned_seed(3, 17);
     let mut payload = [0u8; XPUB_PAYLOAD_LEN];
     if derive_account_raw_kpub_payload(&seed, &mut payload).is_err() || payload != ORIGINAL_PAYLOAD
     {
@@ -219,32 +205,24 @@ fn test_account_export_vectors() -> bool {
     receive.private_key_bytes() == &RECEIVE_7 && change.private_key_bytes() == &CHANGE_4
 }
 
+/// A deterministic 64-byte test seed: byte `i` is `i * multiplier + offset`.
+fn patterned_seed(multiplier: u8, offset: u8) -> [u8; 64] {
+    let mut seed = [0u8; 64];
+    for (byte, index) in seed.iter_mut().zip(0u8..) {
+        *byte = index.wrapping_mul(multiplier).wrapping_add(offset);
+    }
+    seed
+}
+
 /// Run extended public key test suite.
 pub fn run_xpub_tests() -> (u32, u32) {
-    let mut passed = 0u32;
-    let total = 7u32;
-
-    if test_base58_encoding() {
-        passed += 1;
-    }
-    if test_base58check() {
-        passed += 1;
-    }
-    if test_sha256d() {
-        passed += 1;
-    }
-    if test_kpub_prefix() {
-        passed += 1;
-    }
-    if test_kaspa_cli_xpub_compatibility() {
-        passed += 1;
-    }
-    if test_account_xprv_recovery_roundtrip() {
-        passed += 1;
-    }
-    if test_account_export_vectors() {
-        passed += 1;
-    }
-
-    (passed, total)
+    super::tally(&[
+        test_base58_encoding(),
+        test_base58check(),
+        test_sha256d(),
+        test_kpub_prefix(),
+        test_kaspa_cli_xpub_compatibility(),
+        test_account_xprv_recovery_roundtrip(),
+        test_account_export_vectors(),
+    ])
 }
