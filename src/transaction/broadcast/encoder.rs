@@ -9,11 +9,20 @@ pub fn encode_submit_request(
     transaction: &ConsensusTransaction,
     allow_orphan: bool,
 ) -> Result<Vec<u8>, NetworkError> {
+    let mut request = encode_replacement_request(transaction)?;
+    request.push(u8::from(allow_orphan));
+    Ok(request)
+}
+
+/// A `SubmitTransactionReplacement` request: the submit request without its
+/// orphan flag, since a replacement must spend an input already in the mempool.
+pub fn encode_replacement_request(
+    transaction: &ConsensusTransaction,
+) -> Result<Vec<u8>, NetworkError> {
     let transaction_bytes = encode_transaction(transaction)?;
     let mut request = WireWriter::new();
     request.write_u16(1);
     request.write_bytes(&transaction_bytes)?;
-    request.write_u8(u8::from(allow_orphan));
     Ok(request.into_vec())
 }
 

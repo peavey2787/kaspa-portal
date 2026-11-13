@@ -19,6 +19,7 @@ fn wrpc_operation_codes_cover_every_known_and_unknown_value() {
         Operation::Subscribe,
         Operation::GetSink,
         Operation::SubmitTransaction,
+        Operation::SubmitTransactionReplacement,
         Operation::GetBlock,
         Operation::GetBlocks,
         Operation::GetBlockDagInfo,
@@ -28,7 +29,7 @@ fn wrpc_operation_codes_cover_every_known_and_unknown_value() {
         assert_eq!(Operation::from_code(operation.code()), Some(operation));
     }
     for unknown in [
-        0u8, 1, 4, 119, 121, 124, 127, 130, 132, 134, 136, 146, 148, 255,
+        0u8, 1, 4, 119, 121, 124, 127, 130, 132, 134, 136, 145, 148, 255,
     ] {
         assert_eq!(Operation::from_code(unknown), None);
     }

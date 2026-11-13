@@ -246,6 +246,17 @@ impl TransactionApi {
             .map_err(|error| Error::Network(error.to_string()))
     }
 
+    /// Broadcast `transaction` in place of the mempool transaction it
+    /// double-spends; the node requires it to pay a higher feerate.
+    pub async fn broadcast_replacement(
+        &self,
+        transaction: &ConsensusTransaction,
+    ) -> Result<String> {
+        crate::transaction::broadcast::submit_replacement(self.client()?, transaction)
+            .await
+            .map_err(|error| Error::Network(error.to_string()))
+    }
+
     fn client(&self) -> Result<&NetworkClient> {
         self.client.as_ref().ok_or_else(|| {
             Error::Config("this transaction operation requires a configured Kaspa endpoint".into())

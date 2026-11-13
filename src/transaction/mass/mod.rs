@@ -34,13 +34,20 @@ pub struct TransactionAnalysis {
     pub transient_mass: u64,
     pub normalized_transient_mass: u64,
     pub storage_mass: u64,
+    /// The mass a node ranks the transaction by: the normalized maximum of
+    /// its compute, transient and storage masses.
     pub normalized_mass: u64,
     pub maximum_mass: u64,
     pub fee_sompi: u64,
+    /// The mass a node's minimum relay fee is charged on: compute or
+    /// normalized transient mass, whichever is larger.
     pub fee_mass: u64,
+    /// The feerate a node ranks the transaction by: fee per gram of
+    /// `normalized_mass`.
     pub fee_rate_sompi_per_gram: u64,
     pub minimum_fee_sompi: u64,
     pub recommended_fee_rate_sompi_per_gram: u64,
+    /// `normalized_mass` at the recommended rate.
     pub recommended_fee_sompi: u64,
 }
 
@@ -110,7 +117,8 @@ impl TransactionAnalysis {
         self.mass_verdicts()[3]
     }
 
-    /// The fee pays at least the recommended rate for the transaction's mass.
+    /// The fee pays at least the recommended rate for the mass a node ranks
+    /// the transaction by.
     #[must_use]
     pub fn fee_sufficient(&self) -> bool {
         self.fee_sompi >= self.recommended_fee_sompi
@@ -146,10 +154,10 @@ pub(crate) fn analyze_verified(
         .ok_or_else(|| "minimum fee overflow".to_string())?;
     let recommended_rate =
         recommended_fee_rate_sompi_per_gram.max(MIN_STANDARD_FEE_RATE_SOMPI_PER_GRAM);
-    let recommended_fee_sompi = fee_mass
+    let recommended_fee_sompi = normalized_mass
         .checked_mul(recommended_rate)
         .ok_or_else(|| "recommended fee overflow".to_string())?;
-    let fee_rate_sompi_per_gram = fee_sompi.checked_div(fee_mass).unwrap_or(0);
+    let fee_rate_sompi_per_gram = fee_sompi.checked_div(normalized_mass).unwrap_or(0);
 
     Ok(TransactionAnalysis {
         estimated_serialized_bytes,

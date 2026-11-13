@@ -177,7 +177,7 @@ impl NativeWebSocketTransport {
             match self.call_once(operation, payload).await {
                 Ok(value) => return Ok(value),
                 Err(error)
-                    if operation != Operation::SubmitTransaction
+                    if !operation.is_submission()
                         && !retried_stale_connection
                         && reconnectable_transport_error(&error) =>
                 {

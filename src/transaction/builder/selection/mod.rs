@@ -1,8 +1,6 @@
-mod automatic;
 mod consolidation;
 mod explicit;
 
-pub use automatic::{select_automatic, select_automatic_with_limit};
 pub use consolidation::select_for_consolidation;
 pub use explicit::select_explicit;
 

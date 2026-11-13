@@ -132,6 +132,7 @@ When a computed fee makes the would-be change output dust, Portal omits that cha
 | `sign_compact_kspt_with_entropy` | `wire: &[u8]`, `private_key: &[u8; 32]`, `sighash_type: SigHashType`, `signing_entropy: &[u8; 32]` | `Result<SignedResponse>` |
 | `apply_sequence_commit_proof` | `wire_hex: &str`, `proof: &SequenceCommitProof` | `Result<String>` |
 | `broadcast` | `transaction: &ConsensusTransaction` | `async Result<String>` |
+| `broadcast_replacement` | `transaction: &ConsensusTransaction` (double-spends a mempool transaction at a higher feerate) | `async Result<String>` new transaction id |
 
 ### Transaction request objects
 
@@ -500,6 +501,7 @@ Decoded transaction lookup includes the transaction payload together with transa
 | `applySequenceCommitProof(wireHex, subnetworkIdHex, gas, transactionVersion, payload)` | sequence-commit lane fields | updated wire string |
 | `broadcast(wireHex)` | finalized/reviewable wire hex | `Promise<string>` transaction identifier/response |
 | `broadcastWire(wireHex)` | browser convenience alias | `Promise<string>` transaction identifier/response |
+| `broadcastReplacement(wireHex)` | finalized/reviewable wire hex that double-spends a mempool transaction at a higher feerate | `Promise<string>` new transaction identifier |
 
 ### `KaspaPskb`
 

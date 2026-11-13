@@ -4,19 +4,26 @@ use crate::{
     primitives::numeric::ceil_to_u64,
     transaction::builder::{
         model::{PlannedOutput, UnsignedTransactionPlan},
-        planning::{amounts, plan_consolidation, plan_payment},
-        selection::{select_automatic_with_limit, select_explicit, select_for_consolidation},
+        planning::amounts,
+        selection::select_explicit,
     },
     transaction::interchange::pskt::pskb,
     wallet::account::WalletData,
 };
 
+/// The feerate (sompi per gram) a send is priced at when the node gives no
+/// estimate, and the rate an offline PSKB is priced at.
 const DEFAULT_PLANNER_FEE_RATE: u64 = 110;
 const MINIMUM_PLANNER_FEE: u64 = 300_000;
+/// The most UTXOs an automatic send spends.
+const AUTOMATIC_SEND_INPUTS: usize = 8;
 
-#[path = "standard/payload.rs"]
-mod payload;
-pub(super) use payload::create_send_with_payload_from_utxos;
+#[path = "standard/priced.rs"]
+mod priced;
+pub(super) use priced::{
+    create_consolidation_from_utxos, create_send_from_utxos, create_send_selected_from_utxos,
+    SendPricing,
+};
 
 pub async fn create_send(
     wallet: &WalletData,
@@ -25,15 +32,15 @@ pub async fn create_send(
     fee: u64,
     client: &NetworkClient,
 ) -> Result<String, String> {
-    let prepared = prepare_send(wallet, destination, amount, fee)?;
-    let addresses = wallet
-        .receive_addresses
-        .iter()
-        .chain(wallet.change_addresses.iter())
-        .cloned()
-        .collect::<Vec<_>>();
-    let utxos = crate::network::queries::utxos::fetch_for_addresses(client, &addresses).await?;
-    create_send_from_utxos(wallet, &prepared, utxos)
+    create_send_limited(
+        wallet,
+        destination,
+        amount,
+        fee,
+        AUTOMATIC_SEND_INPUTS,
+        client,
+    )
+    .await
 }
 
 pub async fn create_send_with_payload(
@@ -51,27 +58,12 @@ pub async fn create_send_with_payload(
         ));
     }
     let prepared = prepare_send(wallet, destination, amount, requested_fee)?;
-    let addresses = wallet
-        .receive_addresses
-        .iter()
-        .chain(wallet.change_addresses.iter())
-        .cloned()
-        .collect::<Vec<_>>();
-    let utxos = crate::network::queries::utxos::fetch_for_addresses(client, &addresses).await?;
-    let fee_rate = crate::network::queries::fees::get(client)
-        .await
-        .ok()
-        .and_then(|estimate| ceil_to_u64(estimate.normal_sompi_per_gram))
-        .unwrap_or(DEFAULT_PLANNER_FEE_RATE);
-    create_send_with_payload_from_utxos(
-        wallet,
-        &prepared,
-        amount,
-        requested_fee,
+    let utxos = wallet_utxos(wallet, client).await?;
+    let pricing = SendPricing {
         payload,
-        utxos,
-        fee_rate,
-    )
+        fee_rate: planner_fee_rate(client).await,
+    };
+    create_send_from_utxos(wallet, &prepared, pricing, utxos, AUTOMATIC_SEND_INPUTS)
 }
 
 pub async fn create_send_limited(
@@ -83,26 +75,12 @@ pub async fn create_send_limited(
     client: &NetworkClient,
 ) -> Result<String, String> {
     let prepared = prepare_send(wallet, destination, amount, fee)?;
-    let addresses = wallet
-        .receive_addresses
-        .iter()
-        .chain(wallet.change_addresses.iter())
-        .cloned()
-        .collect::<Vec<_>>();
-    crate::network::queries::utxos::fetch_for_addresses(client, &addresses)
-        .await
-        .and_then(|utxos| create_limited_send_from_utxos(wallet, &prepared, utxos, max_inputs))
-}
-
-pub(super) fn create_limited_send_from_utxos(
-    wallet: &WalletData,
-    prepared: &PreparedSend,
-    utxos: Vec<UtxoEntry>,
-    max_inputs: usize,
-) -> Result<String, String> {
-    select_automatic_with_limit(utxos, prepared.required, max_inputs).and_then(|selected| {
-        encode_payment(wallet, selected, prepared.output.clone(), prepared.fee)
-    })
+    let utxos = wallet_utxos(wallet, client).await?;
+    let pricing = SendPricing {
+        payload: &[],
+        fee_rate: planner_fee_rate(client).await,
+    };
+    create_send_from_utxos(wallet, &prepared, pricing, utxos, max_inputs)
 }
 
 pub async fn create_send_selected(
@@ -114,14 +92,12 @@ pub async fn create_send_selected(
     client: &NetworkClient,
 ) -> Result<String, String> {
     let prepared = prepare_send(wallet, destination, amount, fee)?;
-    let addresses = wallet
-        .receive_addresses
-        .iter()
-        .chain(wallet.change_addresses.iter())
-        .cloned()
-        .collect::<Vec<_>>();
-    let utxos = crate::network::queries::utxos::fetch_for_addresses(client, &addresses).await?;
-    create_send_selected_from_utxos(wallet, &prepared, indices, utxos)
+    let selected = select_explicit(wallet_utxos(wallet, client).await?, indices)?;
+    let pricing = SendPricing {
+        payload: &[],
+        fee_rate: planner_fee_rate(client).await,
+    };
+    create_send_selected_from_utxos(wallet, &prepared, pricing, selected)
 }
 
 pub async fn create_consolidation(
@@ -129,16 +105,12 @@ pub async fn create_consolidation(
     fee: u64,
     client: &NetworkClient,
 ) -> Result<String, String> {
-    let addresses = wallet
-        .receive_addresses
-        .iter()
-        .chain(wallet.change_addresses.iter())
-        .cloned()
-        .collect::<Vec<_>>();
-    let utxos = crate::network::queries::utxos::fetch_for_addresses(client, &addresses).await?;
-    create_consolidation_from_utxos(wallet, fee, utxos)
+    let utxos = wallet_utxos(wallet, client).await?;
+    create_consolidation_from_utxos(wallet, fee, utxos, planner_fee_rate(client).await)
 }
 
+/// Build a send from caller-chosen UTXOs without a node, priced at the
+/// default planner feerate.
 pub fn create_pskb_with_utxos(
     wallet: &WalletData,
     destination: &str,
@@ -147,19 +119,47 @@ pub fn create_pskb_with_utxos(
     selected: Vec<UtxoEntry>,
 ) -> Result<String, String> {
     let prepared = prepare_send(wallet, destination, amount, requested_fee)?;
-    if selected.is_empty() {
-        return Err("No UTXOs provided".into());
-    }
-    let selected_total = crate::transaction::builder::selection::checked_total(&selected)?;
-    let fee = storage_mass_fee(&selected, selected_total, amount, requested_fee)?;
-    encode_payment(wallet, selected, prepared.output, fee)
+    let pricing = SendPricing {
+        payload: &[],
+        fee_rate: DEFAULT_PLANNER_FEE_RATE,
+    };
+    create_send_selected_from_utxos(wallet, &prepared, pricing, selected)
+}
+
+/// Every UTXO on the wallet's receive and change addresses.
+async fn wallet_utxos(
+    wallet: &WalletData,
+    client: &NetworkClient,
+) -> Result<Vec<UtxoEntry>, String> {
+    let addresses = wallet
+        .receive_addresses
+        .iter()
+        .chain(wallet.change_addresses.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+    crate::network::queries::utxos::fetch_for_addresses(client, &addresses).await
+}
+
+/// The node's normal-priority feerate, or the default when it gives none.
+async fn planner_fee_rate(client: &NetworkClient) -> u64 {
+    crate::network::queries::fees::get(client)
+        .await
+        .ok()
+        .and_then(|estimate| ceil_to_u64(estimate.normal_sompi_per_gram))
+        .unwrap_or(DEFAULT_PLANNER_FEE_RATE)
 }
 
 #[derive(Clone, Debug)]
 pub(super) struct PreparedSend {
     output: PlannedOutput,
-    required: u64,
     fee: u64,
+}
+
+impl PreparedSend {
+    /// The least fee this send pays, whatever its mass.
+    fn minimum_fee(&self) -> u64 {
+        MINIMUM_PLANNER_FEE.max(self.fee)
+    }
 }
 
 /// Validate a single-recipient send; the destination must be on the
@@ -171,7 +171,7 @@ pub(super) fn prepare_send(
     fee: u64,
 ) -> Result<PreparedSend, String> {
     validate_recipient_amount(amount)?;
-    let required = amounts::checked_required(amount, fee)?;
+    amounts::checked_required(amount, fee)?;
     let output = PlannedOutput::new(
         amount,
         crate::primitives::address::address_to_script_pubkey_on(
@@ -179,48 +179,7 @@ pub(super) fn prepare_send(
             wallet.address_prefix()?,
         )?,
     );
-    Ok(PreparedSend {
-        output,
-        required,
-        fee,
-    })
-}
-
-pub(super) fn create_send_from_utxos(
-    wallet: &WalletData,
-    prepared: &PreparedSend,
-    utxos: Vec<UtxoEntry>,
-) -> Result<String, String> {
-    let selected = select_automatic_with_limit(utxos, prepared.required, 8)?;
-    encode_payment(wallet, selected, prepared.output.clone(), prepared.fee)
-}
-
-pub(super) fn create_send_selected_from_utxos(
-    wallet: &WalletData,
-    prepared: &PreparedSend,
-    indices: &[usize],
-    utxos: Vec<UtxoEntry>,
-) -> Result<String, String> {
-    let selected = select_explicit(utxos, indices)?;
-    encode_payment(wallet, selected, prepared.output.clone(), prepared.fee)
-}
-
-pub(super) fn create_consolidation_from_utxos(
-    wallet: &WalletData,
-    fee: u64,
-    utxos: Vec<UtxoEntry>,
-) -> Result<String, String> {
-    let selected = select_for_consolidation(utxos, 5)?;
-    encode_plan(&plan_consolidation(wallet, selected, fee)?)
-}
-
-fn encode_payment(
-    wallet: &WalletData,
-    selected: Vec<UtxoEntry>,
-    output: PlannedOutput,
-    fee: u64,
-) -> Result<String, String> {
-    encode_plan(&plan_payment(wallet, selected, vec![output], fee)?)
+    Ok(PreparedSend { output, fee })
 }
 
 fn encode_plan(plan: &UnsignedTransactionPlan) -> Result<String, String> {
@@ -237,25 +196,10 @@ pub(super) fn validate_recipient_amount(amount: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// Estimate the fee a single-recipient send of `amount` from `selected`
+/// needs at `fee_rate`, accounting for the storage mass of its change (or
+/// the whole remainder, once that change is storage-dust).
 pub(super) fn storage_mass_fee(
-    selected: &[UtxoEntry],
-    selected_total: u64,
-    amount: u64,
-    requested_fee: u64,
-) -> Result<u64, String> {
-    let outputs = [34usize, 34usize];
-    storage_mass_fee_with_payload(
-        selected,
-        selected_total,
-        amount,
-        requested_fee,
-        0,
-        &outputs,
-        DEFAULT_PLANNER_FEE_RATE,
-    )
-}
-
-pub(super) fn storage_mass_fee_with_payload(
     selected: &[UtxoEntry],
     selected_total: u64,
     amount: u64,
@@ -296,8 +240,7 @@ pub(super) fn storage_mass_fee_with_payload(
                 selected.len(),
                 &[(amount, 1u64)],
                 output_script_lengths
-                    .first()
-                    .copied()
+                    .get(..1)
                     .ok_or_else(|| "missing output script length for fee estimate".to_string())?,
                 payload_len,
                 fee_rate,
@@ -318,7 +261,7 @@ pub(super) fn storage_mass_fee_with_payload(
         let script_lengths = output_script_lengths
             .get(..2)
             .ok_or_else(|| "missing output script length for fee estimate".to_string())?;
-        let required_fee = required_mass_fee_for_scripts(
+        let required_fee = required_mass_fee(
             &inputs,
             selected.len(),
             &[(amount, 1u64), (change, 1u64)],
@@ -336,27 +279,7 @@ pub(super) fn storage_mass_fee_with_payload(
     Err("payload-aware storage-mass fee calculation did not converge".into())
 }
 
-fn required_mass_fee(
-    inputs: &[(u64, u64)],
-    input_count: usize,
-    outputs: &[(u64, u64)],
-    output_script_length: usize,
-    payload_len: usize,
-    fee_rate: u64,
-    minimum_fee: u64,
-) -> Result<u64, String> {
-    required_mass_fee_for_scripts(
-        inputs,
-        input_count,
-        outputs,
-        &[output_script_length],
-        payload_len,
-        fee_rate,
-        minimum_fee,
-    )
-}
-
-fn required_mass_fee_for_scripts(
+pub(super) fn required_mass_fee(
     inputs: &[(u64, u64)],
     input_count: usize,
     outputs: &[(u64, u64)],

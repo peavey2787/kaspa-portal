@@ -225,6 +225,16 @@ async fn wait_for_output(portal: &KaspaPortal, address: &str, txid: &str) {
     panic!("broadcast transaction {txid} did not appear at {address} within 90 seconds");
 }
 
+/// The node parsed the request and refused it on its merits: a malformed
+/// request would fail to deserialize instead.
+fn assert_node_refused(message: &str) {
+    assert!(message.contains("RPC error:"), "{message}");
+    assert!(
+        !message.to_ascii_lowercase().contains("serializ"),
+        "{message}"
+    );
+}
+
 async fn broadcast_consensus(
     portal: &KaspaPortal,
     transaction: &ConsensusTransaction,
@@ -439,8 +449,8 @@ async fn rust_funded_standard_network_transactions() {
         "adaptive payload fee must be sufficient"
     );
     eprintln!(
-        "funded {network_name} payload fee: {payload_fee} sompi (recommended {} sompi)",
-        analysis.recommended_fee_sompi
+        "funded {network_name} payload fee paid: {} sompi (recommended {} sompi)",
+        analysis.fee_sompi, analysis.recommended_fee_sompi
     );
 
     let ordinary = tx
@@ -462,6 +472,13 @@ async fn rust_funded_standard_network_transactions() {
         .expect("finalize analyzed payload transaction");
     let payload_txid = broadcast_consensus(&portal, &signed_payload, destination).await;
     assert_eq!(payload_txid.len(), 64);
+    let replacement = tx
+        .broadcast_replacement(&signed_payload)
+        .await
+        .expect_err("a confirmed transaction has nothing in the mempool to replace")
+        .to_string();
+    eprintln!("funded {network_name} replacement of a confirmed transaction: {replacement}");
+    assert_node_refused(&replacement);
 
     let post_send_utxos = portal
         .wallet()
@@ -479,20 +496,19 @@ async fn rust_funded_standard_network_transactions() {
     assert!(tx.review(&consolidation, address_prefix).is_ok());
 
     let (descriptor, multisig_address) = multisig_fixture(network);
-    let (signed_multisig_funding, funding_analysis, funding_fee) =
-        plan_signed_send_with_adaptive_fee(
-            &portal,
-            &wallet,
-            &imported,
-            &multisig_address,
-            SPEND_AMOUNT_SOMPI,
-            None,
-            &network_name,
-        )
-        .await;
+    let (signed_multisig_funding, funding_analysis, _) = plan_signed_send_with_adaptive_fee(
+        &portal,
+        &wallet,
+        &imported,
+        &multisig_address,
+        SPEND_AMOUNT_SOMPI,
+        None,
+        &network_name,
+    )
+    .await;
     eprintln!(
-        "funded {network_name} multisig-funding fee: {funding_fee} sompi (recommended {} sompi)",
-        funding_analysis.recommended_fee_sompi
+        "funded {network_name} multisig-funding fee paid: {} sompi (recommended {} sompi)",
+        funding_analysis.fee_sompi, funding_analysis.recommended_fee_sompi
     );
     let multisig_funding_tx = tx
         .finalize(&signed_multisig_funding)

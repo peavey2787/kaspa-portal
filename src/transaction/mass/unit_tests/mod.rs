@@ -13,12 +13,18 @@ use crate::transaction::interchange::{
     },
 };
 
+const SPENT: u64 = 1_000_000_000;
+
 /// Spend 10 KAS, paying `fee` sompi, so storage mass stays well within limits.
 fn verified(fee: u64) -> VerifiedTransaction {
-    const SPENT: u64 = 1_000_000_000;
+    verified_output(SPENT.wrapping_sub(fee))
+}
+
+/// Spend 10 KAS into one output of `output` sompi.
+fn verified_output(output: u64) -> VerifiedTransaction {
     let mut document = unsigned_document(None, 0x11);
     document["inputs"][0]["utxoEntry"]["amount"] = json!(SPENT.to_string());
-    document["outputs"][0]["amount"] = json!(SPENT.wrapping_sub(fee).to_string());
+    document["outputs"][0]["amount"] = json!(output.to_string());
     verify_for_broadcast(
         &pskb(&sign_first_input(document, &[0x11])),
         Limits::grammar(),
@@ -66,6 +72,33 @@ fn analysis_raises_the_rate_floor_and_judges_the_fee_against_it() {
     assert_eq!(raised.recommended_fee_rate_sompi_per_gram, 101);
     assert_eq!(raised.recommended_fee_sompi, 1_261 * 101);
     assert!(!raised.fee_sufficient());
+}
+
+#[test]
+fn a_storage_heavy_spend_is_priced_and_ranked_by_its_storage_mass() {
+    // 10 KAS into one 0.2 KAS output: storage mass 10^12/(2*10^7) - 10^12/10^9.
+    let analysis = analyze_verified(&verified_output(20_000_000), 120).expect("analysis");
+    assert_eq!(analysis.storage_mass, 49_000);
+    assert_eq!(analysis.normalized_mass, 49_000);
+    assert_eq!(analysis.fee_mass, 1_261);
+    assert_eq!(analysis.minimum_fee_sompi, 126_100);
+    assert_eq!(analysis.recommended_fee_sompi, 49_000 * 120);
+    assert_eq!(analysis.fee_sompi, SPENT - 20_000_000);
+    assert_eq!(
+        analysis.fee_rate_sompi_per_gram,
+        (SPENT - 20_000_000) / 49_000
+    );
+    assert!(analysis.fee_sufficient());
+
+    // The 980,000,000-sompi fee is exactly 20,000 sompi per storage gram. One
+    // sompi per gram more is not met, although compute mass alone would ask
+    // for only 1,261 * 20,001.
+    let exact = analyze_verified(&verified_output(20_000_000), 20_000).expect("analysis");
+    assert!(exact.fee_sufficient());
+    let above = analyze_verified(&verified_output(20_000_000), 20_001).expect("analysis");
+    assert_eq!(above.recommended_fee_sompi, 49_000 * 20_001);
+    assert!(above.fee_sompi > above.fee_mass * 20_001);
+    assert!(!above.fee_sufficient());
 }
 
 #[test]

@@ -861,6 +861,19 @@ wasm_e2e = "wasm_funded_standard_network_transactions"
 note = "Browser convenience combines wire finalization with broadcast."
 
 [[capability]]
+id = "transaction.broadcast_replacement"
+domain = "transaction"
+rust_symbol = "TransactionApi::broadcast_replacement"
+wasm_symbols = ["WasmTransaction::broadcast_replacement"]
+execution = "funded_standard"
+funds_required = true
+resource_profile = "network"
+e2e_status = "covered"
+rust_e2e = "rust_funded_standard_network_transactions"
+wasm_e2e = "wasm_funded_standard_network_transactions"
+note = "The node must parse the replacement and refuse it, since a confirmed transaction has nothing in the mempool to replace."
+
+[[capability]]
 id = "pskb.encode"
 domain = "transaction"
 rust_symbol = "PskbApi::encode"

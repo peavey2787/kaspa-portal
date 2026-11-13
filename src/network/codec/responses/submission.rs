@@ -23,6 +23,27 @@ pub fn decode(data: &[u8]) -> Result<String, NetworkError> {
     }
 }
 
+/// Decode a `SubmitTransactionReplacement` response: the new transaction id,
+/// then the replaced transaction. Only the id is read; the replaced
+/// transaction's payload may hold any bytes, so the body is never scanned for
+/// error text.
+pub fn decode_replacement(data: &[u8]) -> Result<String, NetworkError> {
+    match data.first() {
+        None => Err(NetworkError::UnexpectedResponse(
+            "empty transaction replacement response".into(),
+        )),
+        Some(0) => Err(NetworkError::RemoteError(decode_tagged_error(data))),
+        Some(_) => unwrap_success(data)
+            .get(2..34)
+            .map(hex::encode)
+            .ok_or_else(|| {
+                NetworkError::UnexpectedResponse(
+                    "transaction replacement response holds no transaction id".into(),
+                )
+            }),
+    }
+}
+
 fn extract_error_message(data: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(data);
     let start = [

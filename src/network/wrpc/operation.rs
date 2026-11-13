@@ -4,6 +4,7 @@ pub enum Operation {
     #[cfg(any(target_arch = "wasm32", test))]
     GetSink,
     SubmitTransaction,
+    SubmitTransactionReplacement,
     GetBlock,
     GetBlocks,
     GetBlockDagInfo,
@@ -22,6 +23,7 @@ impl Operation {
             Self::GetBlocks => 129,
             Self::GetBlockDagInfo => 131,
             Self::GetUtxosByAddresses => 135,
+            Self::SubmitTransactionReplacement => 146,
             Self::GetFeeEstimate => 147,
         }
     }
@@ -36,8 +38,18 @@ impl Operation {
             129 => Some(Self::GetBlocks),
             131 => Some(Self::GetBlockDagInfo),
             135 => Some(Self::GetUtxosByAddresses),
+            146 => Some(Self::SubmitTransactionReplacement),
             147 => Some(Self::GetFeeEstimate),
             _ => None,
         }
+    }
+
+    /// Whether this operation hands the node a transaction. A submission is
+    /// never retried: the node may have accepted the first attempt.
+    pub const fn is_submission(self) -> bool {
+        matches!(
+            self,
+            Self::SubmitTransaction | Self::SubmitTransactionReplacement
+        )
     }
 }

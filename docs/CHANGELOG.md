@@ -64,6 +64,35 @@ Narrowing integer conversions are checked.
 - The CI mutation gate needs outcomes from all 16 shards and rejects an
   outcome file listed twice. Before, a shard that crashed or failed to upload
   its outcomes dropped its mutants from the gate without failing it.
+- Every standard send and consolidation now pays the node's normal feerate
+  (default 110 sompi/gram) on its complete mass. Before, `create_send`,
+  `create_send_limited`, `create_send_selected` and `create_consolidation`
+  paid the caller's fee as given, so a 0.2 KAS payment paid 300,000 sompi on
+  about 50,000 grams of KIP-9 storage mass (6 sompi/gram), below the standard
+  minimum, and was never mined.
+  - Automatic, limited and payload sends share one planner. It keeps the
+    cheapest largest-first selection within the input limit, and the caller's
+    fee is now a floor.
+  - Selected sends, offline PSKBs (`create_pskb_with_utxos`, priced at 110
+    sompi/gram) and consolidations price the exact plan they spend.
+  - `transaction::builder::selection::{select_automatic,
+    select_automatic_with_limit}` are removed. Nothing selects by a fixed
+    amount any more.
+- `TransactionAnalysis` judges the fee by the mass a node ranks the
+  transaction by: the normalized maximum of compute, transient and storage
+  mass. Before, `recommended_fee_sompi`, `fee_rate_sompi_per_gram` and
+  `fee_sufficient()` used compute and transient mass only, so they called that
+  300,000-sompi payment sufficient. `fee_mass` and `minimum_fee_sompi` keep
+  the node's relay minimum, which leaves storage mass out.
+- A send stuck in the mempool can be replaced. The node rejects a plain
+  resubmission that spends the same input, and keeps an RPC-submitted
+  transaction indefinitely.
+  - `broadcast::submit_replacement`, `TransactionApi::broadcast_replacement`
+    and the browser `broadcastReplacement(wireHex)` submit a transaction
+    through `SubmitTransactionReplacement` (wRPC operation 146). The node
+    takes the replacement only when it pays a higher feerate than every
+    transaction it replaces, and returns the new transaction id.
+  - Like a submission, a replacement is never retried automatically.
 
 - The password KDF v1 profile (`PasswordKdfParams::current`) drops from 8 MiB to 6 MiB of Argon2id memory; t=3 and p=1 are unchanged. On an M5Stack CoreS3 the 8 MiB of PSRAM is also the heap, so an 8 MiB workspace could never be allocated once the app held any memory, and every password-protected operation failed. v1 ciphertext written before this change no longer opens. The v2 host profile stays at 64 MiB.
 - Typed covenant claims (whitelist, commit-reveal, oracle v1, private swap) pass PSKT summary before they hold a signature: the route is proved, the witness waits, and more than one signature is still refused.

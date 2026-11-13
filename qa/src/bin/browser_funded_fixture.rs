@@ -19,6 +19,7 @@ use kaspa_portal::{
             },
             pskt::pipeline::sign_pskt,
         },
+        mass::TransactionAnalysis,
         model::SigHashType,
     },
     wallet::{
@@ -111,7 +112,7 @@ async fn plan_signed_send_with_adaptive_fee(
     destination: &str,
     amount: u64,
     payload: Option<&[u8]>,
-) -> (String, u64) {
+) -> (String, u64, TransactionAnalysis) {
     let tx = portal.transaction();
     let mut fee = PRIORITY_FEE_SOMPI;
     for _ in 0..6 {
@@ -135,7 +136,7 @@ async fn plan_signed_send_with_adaptive_fee(
             "signed funded browser transaction exceeds mass limits"
         );
         if analysis.fee_sufficient() {
-            return (signed_wire, fee);
+            return (signed_wire, fee, analysis);
         }
         fee = next_adaptive_fee(fee, analysis.recommended_fee_sompi);
     }
@@ -227,7 +228,7 @@ async fn build_standard_fixture() -> Value {
     let source = if let Some(source) = existing_multisig.first().cloned() {
         source
     } else {
-        let (signed_fund_wire, fund_fee) = plan_signed_send_with_adaptive_fee(
+        let (signed_fund_wire, _, fund_analysis) = plan_signed_send_with_adaptive_fee(
             &portal,
             &wallet,
             &FixtureSigner {
@@ -240,7 +241,10 @@ async fn build_standard_fixture() -> Value {
             None,
         )
         .await;
-        eprintln!("browser funded {network_name} multisig-funding fee: {fund_fee} sompi");
+        eprintln!(
+            "browser funded {network_name} multisig-funding fee paid: {} sompi",
+            fund_analysis.fee_sompi
+        );
         let txid = broadcast_bootstrap(&portal, &signed_fund_wire, &multisig_address).await;
         portal
             .chain()
@@ -259,7 +263,7 @@ async fn build_standard_fixture() -> Value {
         .expect("refresh funded wallet");
     let destination = fresh_wallet.receive_addresses[1].clone();
     let payload = format!("kaspa-portal-wasm-e2e-{network_name}");
-    let (signed_broadcast, adaptive_fee) = plan_signed_send_with_adaptive_fee(
+    let (signed_broadcast, adaptive_fee, broadcast_analysis) = plan_signed_send_with_adaptive_fee(
         &portal,
         &fresh_wallet,
         &FixtureSigner {
@@ -272,7 +276,10 @@ async fn build_standard_fixture() -> Value {
         Some(payload.as_bytes()),
     )
     .await;
-    eprintln!("browser funded {network_name} broadcast fee: {adaptive_fee} sompi");
+    eprintln!(
+        "browser funded {network_name} broadcast fee paid: {} sompi",
+        broadcast_analysis.fee_sompi
+    );
     let multisig_amount = source
         .amount
         .checked_sub(MULTISIG_PRIORITY_FEE_SOMPI)
@@ -291,6 +298,10 @@ async fn build_standard_fixture() -> Value {
         "wallet": fresh_wallet,
         "destination": destination,
         "signedBroadcastWire": signed_broadcast,
+        // The live rate the signed broadcast was verified sufficient at.
+        "broadcastFeeRateSompiPerGram": broadcast_analysis
+            .recommended_fee_rate_sompi_per_gram
+            .to_string(),
         "multisig": {
             "descriptor": descriptor,
             "sourcesJson": sources_json,

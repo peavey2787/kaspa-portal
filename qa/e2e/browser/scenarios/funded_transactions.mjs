@@ -20,6 +20,9 @@ export async function wasm_funded_standard_network_transactions(page, funded) {
     const selected = await transaction.planSelectedSend(walletJson, funded.destination, '10000000', fee, '[0]');
     if (typeof payloadPlan !== 'string') throw new Error('planSendWithPayload did not return a PSKB wire');
     const analysis = JSON.parse(await transaction.analyze(funded.signedBroadcastWire));
+    const verifiedAnalysis = JSON.parse(transaction.analyzeWithFeeRate(
+      funded.signedBroadcastWire, funded.broadcastFeeRateSompiPerGram,
+    ));
 
     const txid = await transaction.broadcast(funded.signedBroadcastWire);
     let observed = false;
@@ -36,6 +39,13 @@ export async function wasm_funded_standard_network_transactions(page, funded) {
       duplicateRejected = true;
     }
 
+    let replacementRefusal = '';
+    try {
+      await transaction.broadcastReplacement(funded.signedBroadcastWire);
+    } catch (error) {
+      replacementRefusal = String(error?.message ?? error);
+    }
+
     const consolidation = await transaction.planConsolidation(walletJson, fee);
     const multisig = await transaction.planMultisigConsolidation(JSON.stringify({
       descriptorText: funded.multisig.descriptor,
@@ -49,14 +59,21 @@ export async function wasm_funded_standard_network_transactions(page, funded) {
     const reviews = [planned, selected, consolidation, multisig]
       .map((wire) => JSON.parse(transaction.review(wire, funded.addressPrefix)));
     portal.disconnect();
-    return { txid, observed, duplicateRejected, analysis, reviews };
+    return { txid, observed, duplicateRejected, replacementRefusal, analysis, verifiedAnalysis, reviews };
   }, { funded });
 
   expect(result.txid).toHaveLength(64);
   expect(result.observed).toBe(true);
   expect(result.duplicateRejected).toBe(true);
-  expect(result.analysis.mass_valid ?? result.analysis.massValid).toBe(true);
-  expect(result.analysis.fee_sufficient ?? result.analysis.feeSufficient).toBe(true);
+  // The node parsed the replacement and refused it: a confirmed transaction
+  // has nothing in the mempool to replace.
+  expect(result.replacementRefusal).toContain('RPC error:');
+  expect(result.replacementRefusal.toLowerCase()).not.toContain('serializ');
+  expect(result.analysis.massValid).toBe(true);
+  // The live estimate moves after the fixture signs, so sufficiency is judged
+  // at the rate the fixture verified; the relay minimum does not move.
+  expect(BigInt(result.analysis.feeSompi)).toBeGreaterThanOrEqual(BigInt(result.analysis.minimumFeeSompi));
+  expect(result.verifiedAnalysis.feeSufficient).toBe(true);
   expect(result.reviews).toHaveLength(4);
   for (const review of result.reviews) expect(review.input_count ?? review.inputCount).toBeGreaterThan(0);
 }

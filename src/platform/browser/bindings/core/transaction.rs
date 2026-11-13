@@ -327,6 +327,16 @@ impl WasmTransaction {
         self.inner.broadcast(&transaction).await.map_err(js_error)
     }
 
+    /// Broadcast in place of the mempool transaction this one double-spends.
+    #[wasm_bindgen(js_name = broadcastReplacement)]
+    pub async fn broadcast_replacement(&self, wire_hex: &str) -> Result<String, JsValue> {
+        let transaction = self.inner.finalize(wire_hex).map_err(js_error)?;
+        self.inner
+            .broadcast_replacement(&transaction)
+            .await
+            .map_err(js_error)
+    }
+
     #[wasm_bindgen(js_name = broadcastWire)]
     pub async fn broadcast_wire(&self, wire_hex: &str) -> Result<String, JsValue> {
         self.broadcast(wire_hex).await

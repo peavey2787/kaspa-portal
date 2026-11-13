@@ -106,12 +106,29 @@ fn storage_mass_uses_relaxed_harmonic_rule_for_two_by_two_plurality() {
     assert_eq!(mass, 88_889);
 }
 
+/// A plain two-output send's estimated fee at the default 110 sompi/gram.
+fn default_rate_fee(
+    selected: &[crate::chain::utxo::UtxoEntry],
+    selected_total: u64,
+    amount: u64,
+    requested_fee: u64,
+) -> Result<u64, String> {
+    super::super::standard::storage_mass_fee(
+        selected,
+        selected_total,
+        amount,
+        requested_fee,
+        0,
+        &[34, 34],
+        110,
+    )
+}
+
 #[test]
 fn storage_mass_fee_accounts_for_omitted_dust_change_as_fee() {
     let dust_selected = vec![super::utxo(0x51, 0, 15_000_000)];
     assert_eq!(
-        super::super::standard::storage_mass_fee(&dust_selected, 15_000_000, 10_000_000, 0,)
-            .expect("dust-change fee"),
+        default_rate_fee(&dust_selected, 15_000_000, 10_000_000, 0).expect("dust-change fee"),
         5_000_000
     );
 
@@ -120,7 +137,7 @@ fn storage_mass_fee_accounts_for_omitted_dust_change_as_fee() {
     // omitted and the full 20M input-minus-payment remainder is the actual fee.
     let oscillating_selected = vec![super::utxo(0x52, 0, 30_000_000)];
     assert_eq!(
-        super::super::standard::storage_mass_fee(&oscillating_selected, 30_000_000, 10_000_000, 0,)
+        default_rate_fee(&oscillating_selected, 30_000_000, 10_000_000, 0)
             .expect("stable dust-boundary fee"),
         20_000_000
     );
@@ -130,14 +147,13 @@ fn storage_mass_fee_accounts_for_omitted_dust_change_as_fee() {
 fn storage_mass_fee_converges_for_non_dust_change() {
     let selected = vec![super::utxo(0x53, 0, 100_000_000)];
     assert_eq!(
-        super::super::standard::storage_mass_fee(&selected, 100_000_000, 20_000_000, 0,)
-            .expect("non-dust-change fee"),
+        default_rate_fee(&selected, 100_000_000, 20_000_000, 0).expect("non-dust-change fee"),
         5_884_120
     );
 }
 
 #[test]
-fn automatic_selection_and_amount_helpers_cover_error_and_tie_boundaries() {
+fn amount_helpers_cover_error_and_tie_boundaries() {
     use crate::transaction::builder::planning::amounts::{checked_required, checked_sum, is_dust};
 
     assert!(is_dust(0));
@@ -153,30 +169,6 @@ fn automatic_selection_and_amount_helpers_cover_error_and_tie_boundaries() {
         &checked_sum([u64::MAX, 1]),
         "Amount total exceeds supported monetary range",
     );
-
-    assert!(super::super::selection::select_automatic_with_limit(
-        vec![super::utxo(0x10, 0, 1)],
-        1,
-        0,
-    )
-    .unwrap_err()
-    .contains("at least 1"));
-
-    let exact = super::super::selection::select_automatic_with_limit(
-        vec![super::utxo(0x10, 0, 5), super::utxo(0x11, 1, 10)],
-        10,
-        1,
-    )
-    .expect("largest input exactly satisfies target");
-    assert_eq!(exact.len(), 1);
-    assert_eq!(exact[0].amount, 10);
-
-    assert!(super::super::selection::select_automatic_with_limit(
-        vec![super::utxo(0x10, 0, u64::MAX), super::utxo(0x11, 1, 1)],
-        u64::MAX,
-        2,
-    )
-    .is_ok());
 }
 
 #[test]

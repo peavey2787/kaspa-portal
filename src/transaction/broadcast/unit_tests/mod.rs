@@ -216,3 +216,89 @@ fn submission_unwrap_reads_the_declared_length_after_the_tag() {
     );
     assert_eq!(decode_tagged_error(&[0, 1, 0, 0, 0, b'x']), "x");
 }
+
+#[test]
+fn a_replacement_request_is_the_submit_request_without_its_orphan_flag() {
+    let transaction = ConsensusTransaction {
+        tx_version: 0,
+        input_encoding: InputEncoding::Budgeted,
+        inputs: Vec::new(),
+        outputs: Vec::new(),
+        locktime: 0,
+        subnetwork_id: [0; 20],
+        gas: 0,
+        payload: vec![0x5a; 3],
+        storage_mass: 0,
+    };
+    let replacement =
+        encoder::encode_replacement_request(&transaction).expect("replacement should encode");
+    for allow_orphan in [false, true] {
+        let submit = encoder::encode_submit_request(&transaction, allow_orphan)
+            .expect("submission should encode");
+        assert_eq!(submit[..submit.len() - 1], replacement[..]);
+        assert_eq!(submit.last(), Some(&u8::from(allow_orphan)));
+    }
+}
+
+#[test]
+fn a_replacement_response_yields_only_the_new_transaction_id() {
+    // The replaced transaction follows the id; its payload text must not be
+    // read as a node error.
+    let mut body = vec![1, 0];
+    body.extend_from_slice(&[0x55; 32]);
+    body.extend_from_slice(b"Rejected transaction error: payload text");
+    let mut response = vec![1];
+    response.extend_from_slice(&u32::try_from(body.len()).unwrap().to_le_bytes());
+    response.extend_from_slice(&body);
+    assert_eq!(
+        submission::decode_replacement(&response).expect("replacement id"),
+        "55".repeat(32)
+    );
+
+    let mut rejected = vec![0];
+    rejected.extend_from_slice(&9u32.to_le_bytes());
+    rejected.extend_from_slice(b"fee rate low");
+    assert_eq!(
+        submission::decode_replacement(&rejected)
+            .unwrap_err()
+            .to_string(),
+        crate::network::error::NetworkError::RemoteError("fee rate ".into()).to_string()
+    );
+    assert_eq!(
+        submission::decode_replacement(&[]).unwrap_err().to_string(),
+        crate::network::error::NetworkError::UnexpectedResponse(
+            "empty transaction replacement response".into()
+        )
+        .to_string()
+    );
+    let mut short = vec![1];
+    short.extend_from_slice(&33u32.to_le_bytes());
+    short.extend_from_slice(&[0x66; 33]);
+    assert_eq!(
+        submission::decode_replacement(&short)
+            .unwrap_err()
+            .to_string(),
+        crate::network::error::NetworkError::UnexpectedResponse(
+            "transaction replacement response holds no transaction id".into()
+        )
+        .to_string()
+    );
+}
+
+#[test]
+fn only_transaction_submissions_are_never_retried() {
+    use crate::network::wrpc::operation::Operation;
+
+    assert!(Operation::SubmitTransaction.is_submission());
+    assert!(Operation::SubmitTransactionReplacement.is_submission());
+    for operation in [
+        Operation::Subscribe,
+        Operation::GetBlock,
+        Operation::GetBlocks,
+        Operation::GetBlockDagInfo,
+        Operation::GetUtxosByAddresses,
+        Operation::GetFeeEstimate,
+    ] {
+        assert!(!operation.is_submission(), "{operation:?}");
+    }
+}

@@ -63,7 +63,7 @@ Native networking is connection-oriented. `NativeWebSocketTransport` owns a driv
 - routes server notifications independently, so a BlockAdded frame can arrive between a request and its response;
 - records successful subscription payloads and replays them with fresh request IDs after reconnect;
 - bounds queued notifications and tears down a timed-out socket so a late response cannot be associated with a later request;
-- never automatically retries `SubmitTransaction`, avoiding duplicate-broadcast ambiguity; and
+- never automatically retries `SubmitTransaction` or `SubmitTransactionReplacement`, avoiding duplicate-broadcast ambiguity; and
 - responds to explicit `disconnect()` through a separate shutdown channel even when the RPC command queue is full.
 
 The public native BlockAdded decoder/API lives in `network`; transport/WebSocket details remain in `platform/native`. `KaspaPortal::start_live_indexer()` is orchestration at the portal boundary rather than an `indexer -> network` dependency. The live-indexer task is shared across Portal clones and is aborted when the final shared runtime is dropped.
