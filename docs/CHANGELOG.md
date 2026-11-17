@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- A covenant deposit can be held to the exact amount asked for.
+  `CovenantDustPolicy` is now `CovenantFundingPolicy`, and `Preserve` is now
+  `AdjustToSelection`. The new `Exact` refuses hand-picked UTXOs that fall
+  short of the amount plus fee; previously the covenant was funded with
+  whatever they held, less the fee.
+  - A shipment-escrow script dispatches on its exact input amount and locks any
+    other value forever, so a quietly smaller deposit was unrecoverable.
+  - The browser `planCovenant` cannot tell which family it funds, so it always
+    uses `Exact`.
+- `quinn-udp` moves to 0.5.16 for RUSTSEC-2026-0538, in which a receive loop
+  can spin after a truncated datagram. The dependency gate accepts
+  RUSTSEC-2026-0543 (chrono unmaintained): chrono is locked only as an
+  optional dependency of `serde_with` under `ark-serialize`, and no build
+  compiles it.
+
 The transaction model holds no flag that can disagree with its data.
 
 - Each flag-plus-payload pair in the model is now one `Option` or enum, so a

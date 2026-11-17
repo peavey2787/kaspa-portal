@@ -11,7 +11,7 @@ pub mod selection;
 #[cfg(feature = "std")]
 pub use covenant::{
     build as build_covenant, build_with_binding as build_covenant_with_binding,
-    CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding, KIP9_MIN_CHANGE_SOMPI,
+    CovenantBuildRequest, CovenantEncoding, CovenantFundingPolicy, KIP9_MIN_CHANGE_SOMPI,
 };
 #[cfg(feature = "std")]
 pub use pskb::{

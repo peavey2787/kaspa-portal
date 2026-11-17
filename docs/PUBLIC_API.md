@@ -487,7 +487,7 @@ Decoded transaction lookup includes the transaction payload together with transa
 | `planConsolidation(walletJson, feeSompi)` | wallet JSON, fee decimal | `Promise<string>` wire |
 | `scanMultisigBranch(descriptor, cosigner, depth, prefix)` | descriptor, two `u32` values, prefix | `Promise<string>` scan result |
 | `planMultisigConsolidation(requestJson)` | `{descriptorText, sources, destinationAddress, amountSompi, feeSompi, cosigner, changeIndexHint}` | `Promise<string>` wire |
-| `planCovenant(requestJson)` | `{wallet, covenantAddress, sendAmountSompi, feeSompi, changeAddress, utxoIndicesCsv, encoding}`; `encoding` is `{kind: "payload", payloadHex, tagGenesis}` or `{kind: "boundGenesis"}` | `Promise<string>` wire |
+| `planCovenant(requestJson)` | `{wallet, covenantAddress, sendAmountSompi, feeSompi, changeAddress, utxoIndicesCsv, encoding}`; `encoding` is `{kind: "payload", payloadHex, tagGenesis}` or `{kind: "boundGenesis"}`; the covenant receives exactly `sendAmountSompi`, and selected UTXOs short of it plus the fee are refused | `Promise<string>` wire |
 | `planCovenantWithBinding(requestJson)` | same as `planCovenant` | `Promise<string>` JSON with wire and optional covenant ID |
 | `planFromUtxos(walletJson, destination, amountSompi, feeSompi, utxosJson)` | explicit UTXO JSON | wire string |
 | `setPayload(wireHex, payload)` | wire hex and payload bytes | updated wire string |

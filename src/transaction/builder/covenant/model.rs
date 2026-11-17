@@ -31,15 +31,20 @@ impl<'a> CovenantEncoding<'a> {
     }
 }
 
-/// What a manually selected covenant send does with change below the KIP-9
-/// storage-mass floor.
+/// How far a manually selected covenant deposit may stray from the amount
+/// asked for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CovenantDustPolicy {
-    /// Keep the change output as requested.
-    Preserve,
-    /// Fold the change into the covenant output, so the whole selection
-    /// (less the fee) funds the covenant.
+pub enum CovenantFundingPolicy {
+    /// A selection short of the amount plus fee deposits what it holds, less
+    /// the fee; change is kept as an output.
+    AdjustToSelection,
+    /// As `AdjustToSelection`, and change below the KIP-9 storage-mass floor
+    /// is folded into the covenant output.
     FoldSubKip9Change,
+    /// The covenant receives exactly the amount asked for, because its script
+    /// dispatches on that amount and holds any other value forever. A
+    /// selection short of the amount plus fee is refused.
+    Exact,
 }
 
 pub struct CovenantBuildRequest<'a> {
@@ -49,6 +54,6 @@ pub struct CovenantBuildRequest<'a> {
     pub fee: u64,
     pub change_address: &'a str,
     pub utxo_indices_csv: &'a str,
-    pub dust_policy: CovenantDustPolicy,
+    pub funding_policy: CovenantFundingPolicy,
     pub encoding: CovenantEncoding<'a>,
 }

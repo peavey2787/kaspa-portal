@@ -14,6 +14,10 @@ ACCEPTED_ADVISORIES = {
     # derivative is unmaintained; it is a proc-macro that arkworks 0.6 runs
     # at compile time and contributes no runtime code.
     "RUSTSEC-2024-0388",
+    # chrono is unmaintained; Cargo locks it only as an optional dependency of
+    # serde_with, which ark-serialize 0.6 enables behind a feature no build
+    # turns on. `cargo tree -i chrono --all-features --target all` is empty.
+    "RUSTSEC-2026-0543",
 }
 
 

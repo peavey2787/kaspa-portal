@@ -11,7 +11,7 @@ use kaspa_portal::{
     transaction::{
         builder::{
             kip22::{encode_spend, Kip22Coin},
-            CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding,
+            CovenantBuildRequest, CovenantFundingPolicy, CovenantEncoding,
             MultisigConsolidationRequest, PskbOutputPlan,
         },
         consensus::ConsensusTransaction,
@@ -583,7 +583,7 @@ async fn rust_funded_covenant_network_transactions() {
             fee: PRIORITY_FEE_SOMPI,
             change_address,
             utxo_indices_csv: "",
-            dust_policy: CovenantDustPolicy::Preserve,
+            funding_policy: CovenantFundingPolicy::AdjustToSelection,
             encoding: CovenantEncoding::Payload {
                 payload_hex: "706f7274616c2d653265",
                 tag_genesis: false,
@@ -601,7 +601,7 @@ async fn rust_funded_covenant_network_transactions() {
             fee: PRIORITY_FEE_SOMPI,
             change_address,
             utxo_indices_csv: "",
-            dust_policy: CovenantDustPolicy::Preserve,
+            funding_policy: CovenantFundingPolicy::AdjustToSelection,
             encoding: CovenantEncoding::Payload {
                 payload_hex: "706f7274616c2d626f756e64",
                 tag_genesis: true,

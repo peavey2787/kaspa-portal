@@ -8,7 +8,7 @@ use wasm_bindgen::JsValue;
 use crate::{
     chain::utxo::UtxoEntry,
     transaction::builder::{
-        CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding, GlobalThreadPolicy,
+        CovenantBuildRequest, CovenantEncoding, CovenantFundingPolicy, GlobalThreadPolicy,
         GlobalThreadTopupRequest, GlobalThreadWithdrawalRequest, MultisigConsolidationRequest,
     },
     wallet::account::derivation::WalletData,
@@ -87,7 +87,9 @@ impl CovenantPlanJson {
             fee: decimal(&self.fee_sompi, "fee")?,
             change_address: &self.change_address,
             utxo_indices_csv: &self.utxo_indices_csv,
-            dust_policy: CovenantDustPolicy::Preserve,
+            // The binding cannot tell which family it funds, so it never deposits
+            // less than was asked for.
+            funding_policy: CovenantFundingPolicy::Exact,
             encoding: match &self.encoding {
                 CovenantEncodingJson::Payload {
                     payload_hex,

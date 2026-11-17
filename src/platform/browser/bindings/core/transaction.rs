@@ -138,7 +138,9 @@ impl WasmTransaction {
     /// Plan a covenant send from one camelCase request object: `wallet`,
     /// `covenantAddress`, `sendAmountSompi`, `feeSompi`, `changeAddress`,
     /// `utxoIndicesCsv` and `encoding` (`{kind: "payload", payloadHex,
-    /// tagGenesis}` or `{kind: "boundGenesis"}`).
+    /// tagGenesis}` or `{kind: "boundGenesis"}`). The covenant receives
+    /// exactly `sendAmountSompi`: selected UTXOs short of it plus the fee are
+    /// refused, never deposited as a smaller amount.
     #[wasm_bindgen(js_name = planCovenant)]
     pub async fn plan_covenant(&self, request_json: &str) -> Result<String, JsValue> {
         let request: CovenantPlanJson = decode(request_json)?;

@@ -94,7 +94,7 @@ fn covenant_planning_covers_manual_adjustment_payload_and_genesis_policy() {
         CovenantPlanInput {
             send_amount: 200_000,
             fee: 1,
-            dust_policy: super::model::CovenantDustPolicy::Preserve,
+            funding_policy: super::model::CovenantFundingPolicy::AdjustToSelection,
             utxo_indices_csv: "0",
             encoding: CovenantEncoding::Payload {
                 payload_hex: "",
@@ -115,7 +115,7 @@ fn covenant_planning_covers_manual_adjustment_payload_and_genesis_policy() {
         CovenantPlanInput {
             send_amount: 0,
             fee: 1,
-            dust_policy: super::model::CovenantDustPolicy::Preserve,
+            funding_policy: super::model::CovenantFundingPolicy::AdjustToSelection,
             utxo_indices_csv: "",
             encoding: CovenantEncoding::Payload {
                 payload_hex: "",
@@ -148,7 +148,7 @@ fn covenant_planning_rejects_insufficient_small_and_invalid_genesis_funding() {
     let base = |encoding, send_amount, csv| CovenantPlanInput {
         send_amount,
         fee: 1,
-        dust_policy: super::model::CovenantDustPolicy::Preserve,
+        funding_policy: super::model::CovenantFundingPolicy::AdjustToSelection,
         utxo_indices_csv: csv,
         encoding,
         covenant_script: &script,
@@ -245,7 +245,7 @@ fn covenant_request_preparation_covers_payload_bound_and_invalid_hex_paths() {
             send_amount: 20_000_000,
             fee: 1_000,
             change_address,
-            dust_policy: super::model::CovenantDustPolicy::Preserve,
+            funding_policy: super::model::CovenantFundingPolicy::AdjustToSelection,
             utxo_indices_csv: "",
             encoding,
         }
@@ -322,7 +322,7 @@ fn covenant_builder_boundary_rejects_invalid_addresses_before_network_io() {
         send_amount: 20_000_000,
         fee: 300_000,
         change_address: "not-an-address",
-        dust_policy: super::model::CovenantDustPolicy::Preserve,
+        funding_policy: super::model::CovenantFundingPolicy::AdjustToSelection,
         utxo_indices_csv: "",
         encoding: CovenantEncoding::BoundGenesis,
     };
@@ -397,7 +397,7 @@ fn covenant_adjustment_and_change_boundaries_are_amount_exact() {
     let input = |send_amount, fee, csv, encoding, payload| CovenantPlanInput {
         send_amount,
         fee,
-        dust_policy: super::model::CovenantDustPolicy::Preserve,
+        funding_policy: super::model::CovenantFundingPolicy::AdjustToSelection,
         utxo_indices_csv: csv,
         encoding,
         covenant_script: &covenant_script,
@@ -476,6 +476,53 @@ fn covenant_adjustment_and_change_boundaries_are_amount_exact() {
 }
 
 #[test]
+fn exact_funding_refuses_a_short_manual_selection_and_deposits_the_amount_asked_for() {
+    use super::{
+        builder::{encode_from_utxos, CovenantPlanInput},
+        model::{CovenantEncoding, CovenantFundingPolicy},
+    };
+
+    let covenant_script = [0x51, 0xac];
+    let change_script = [0x20, 0x01, 0xac];
+    let build = |amount| {
+        encode_from_utxos(
+            CovenantPlanInput {
+                send_amount: 10_000_000,
+                fee: 300_000,
+                funding_policy: CovenantFundingPolicy::Exact,
+                utxo_indices_csv: "0",
+                encoding: CovenantEncoding::Payload {
+                    payload_hex: "",
+                    tag_genesis: false,
+                },
+                covenant_script: &covenant_script,
+                change_script: &change_script,
+                payload: Some(&[]),
+            },
+            vec![utxo(0x77, amount)],
+        )
+    };
+
+    // The same coin that `AdjustToSelection` deposits as 9,900,000 sompi.
+    assert_eq!(
+        build(10_200_000).unwrap_err(),
+        "Insufficient funds: 10200000 < 10300000"
+    );
+    assert_eq!(
+        build(10_299_999).unwrap_err(),
+        "Insufficient funds: 10299999 < 10300000"
+    );
+
+    let covered = decode_covenant_wire(&build(10_300_000).expect("exactly covered"));
+    assert_eq!(covered[0]["outputs"].as_array().unwrap().len(), 1);
+    assert_eq!(covered[0]["outputs"][0]["amount"], "10000000");
+
+    let with_change = decode_covenant_wire(&build(10_350_000).expect("covered with change"));
+    assert_eq!(with_change[0]["outputs"][0]["amount"], "10000000");
+    assert_eq!(with_change[0]["outputs"][1]["amount"], "50000");
+}
+
+#[test]
 fn tagged_genesis_policy_observes_zero_send_and_exact_floor_boundaries() {
     use super::{
         builder::{encode_from_utxos, CovenantPlanInput},
@@ -492,7 +539,7 @@ fn tagged_genesis_policy_observes_zero_send_and_exact_floor_boundaries() {
             CovenantPlanInput {
                 send_amount,
                 fee: 1,
-                dust_policy: super::model::CovenantDustPolicy::Preserve,
+                funding_policy: super::model::CovenantFundingPolicy::AdjustToSelection,
                 utxo_indices_csv: "",
                 encoding: CovenantEncoding::Payload {
                     payload_hex: "",
@@ -531,10 +578,10 @@ fn tagged_genesis_policy_observes_zero_send_and_exact_floor_boundaries() {
 }
 
 #[test]
-fn covenant_dust_policy_folds_only_opted_in_manual_sub_kip9_change() {
+fn covenant_funding_policy_folds_only_opted_in_manual_sub_kip9_change() {
     use super::{
         builder::{encode_from_utxos, CovenantPlanInput},
-        model::{CovenantDustPolicy, CovenantEncoding},
+        model::{CovenantEncoding, CovenantFundingPolicy},
     };
 
     let covenant_script = [0x51, 0xac];
@@ -548,7 +595,7 @@ fn covenant_dust_policy_folds_only_opted_in_manual_sub_kip9_change() {
             CovenantPlanInput {
                 send_amount: 10_000_000,
                 fee: 1,
-                dust_policy: policy,
+                funding_policy: policy,
                 utxo_indices_csv: "0",
                 encoding: CovenantEncoding::Payload {
                     payload_hex: "",
@@ -562,12 +609,13 @@ fn covenant_dust_policy_folds_only_opted_in_manual_sub_kip9_change() {
         )
     };
 
-    let preserved = decode_covenant_wire(&build(CovenantDustPolicy::Preserve).expect("preserved"));
+    let preserved =
+        decode_covenant_wire(&build(CovenantFundingPolicy::AdjustToSelection).expect("preserved"));
     assert_eq!(preserved[0]["outputs"].as_array().unwrap().len(), 2);
     assert_eq!(preserved[0]["outputs"][1]["amount"], "5000000");
 
     let folded =
-        decode_covenant_wire(&build(CovenantDustPolicy::FoldSubKip9Change).expect("folded"));
+        decode_covenant_wire(&build(CovenantFundingPolicy::FoldSubKip9Change).expect("folded"));
     assert_eq!(folded[0]["outputs"].as_array().unwrap().len(), 1);
     assert_eq!(folded[0]["outputs"][0]["amount"], "15000000");
 }
@@ -648,10 +696,10 @@ fn covenant_fee_shape_preserves_p2sh_accounting_and_overflow_checks() {
 }
 
 #[test]
-fn dust_policy_short_circuit_terms_are_independent() {
+fn change_fold_short_circuit_terms_are_independent() {
     assert_eq!(
-        super::builder::apply_dust_policy(
-            super::model::CovenantDustPolicy::Preserve,
+        super::builder::apply_change_fold(
+            super::model::CovenantFundingPolicy::AdjustToSelection,
             100,
             101,
             0,
@@ -660,8 +708,8 @@ fn dust_policy_short_circuit_terms_are_independent() {
         Ok(100),
     );
     assert_eq!(
-        super::builder::apply_dust_policy(
-            super::model::CovenantDustPolicy::FoldSubKip9Change,
+        super::builder::apply_change_fold(
+            super::model::CovenantFundingPolicy::FoldSubKip9Change,
             100,
             101,
             0,
@@ -670,8 +718,8 @@ fn dust_policy_short_circuit_terms_are_independent() {
         Ok(100),
     );
     assert_eq!(
-        super::builder::apply_dust_policy(
-            super::model::CovenantDustPolicy::FoldSubKip9Change,
+        super::builder::apply_change_fold(
+            super::model::CovenantFundingPolicy::FoldSubKip9Change,
             100,
             101,
             0,
@@ -684,8 +732,8 @@ fn dust_policy_short_circuit_terms_are_independent() {
     let fee = 10_000;
     let total = selected + fee + super::model::KIP9_MIN_CHANGE_SOMPI;
     assert_eq!(
-        super::builder::apply_dust_policy(
-            super::model::CovenantDustPolicy::FoldSubKip9Change,
+        super::builder::apply_change_fold(
+            super::model::CovenantFundingPolicy::FoldSubKip9Change,
             selected,
             total,
             fee,

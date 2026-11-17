@@ -1,6 +1,6 @@
 use super::{
     fee::DepositFeePolicy,
-    model::{CovenantBuildRequest, CovenantDustPolicy, CovenantEncoding, KIP9_MIN_CHANGE_SOMPI},
+    model::{CovenantBuildRequest, CovenantEncoding, CovenantFundingPolicy, KIP9_MIN_CHANGE_SOMPI},
     selection,
 };
 use crate::{
@@ -21,7 +21,7 @@ pub(super) struct PreparedRequest {
 pub(crate) struct CovenantPlanInput<'a> {
     pub(crate) send_amount: u64,
     pub(crate) fee: u64,
-    pub(crate) dust_policy: CovenantDustPolicy,
+    pub(crate) funding_policy: CovenantFundingPolicy,
     pub(crate) utxo_indices_csv: &'a str,
     pub(crate) encoding: CovenantEncoding<'a>,
     pub(crate) covenant_script: &'a [u8],
@@ -64,7 +64,7 @@ pub async fn build_with_binding(
         CovenantPlanInput {
             send_amount: request.send_amount,
             fee: request.fee,
-            dust_policy: request.dust_policy,
+            funding_policy: request.funding_policy,
             utxo_indices_csv: request.utxo_indices_csv,
             encoding: request.encoding,
             covenant_script: &prepared.covenant_script,
@@ -150,24 +150,26 @@ fn adjusted_send(
     target: u64,
     used_manual_selection: bool,
 ) -> Result<u64, String> {
-    let selected =
-        selected_send_amount(input.send_amount, total, fee, target, used_manual_selection)?;
+    let may_adjust = used_manual_selection && input.funding_policy != CovenantFundingPolicy::Exact;
+    let selected = selected_send_amount(input.send_amount, total, fee, target, may_adjust)?;
     let adjusted = apply_send_policies(input, selected, total, fee, used_manual_selection)?;
     validate_genesis_minimum(input, adjusted)?;
     Ok(adjusted)
 }
 
+/// Only a manual selection under a policy that allows it may deposit less
+/// than was asked for.
 fn selected_send_amount(
     requested: u64,
     total: u64,
     fee: u64,
     target: u64,
-    used_manual_selection: bool,
+    may_adjust: bool,
 ) -> Result<u64, String> {
     if total >= target {
         return Ok(requested);
     }
-    if total <= fee || !used_manual_selection {
+    if total <= fee || !may_adjust {
         return Err(format!("Insufficient funds: {total} < {target}"));
     }
     let adjusted = total
@@ -184,8 +186,8 @@ fn apply_send_policies(
     used_manual_selection: bool,
 ) -> Result<u64, String> {
     let adjusted = apply_genesis_send_policy(input, selected, total, fee)?;
-    apply_dust_policy(
-        input.dust_policy,
+    apply_change_fold(
+        input.funding_policy,
         adjusted,
         total,
         fee,
@@ -207,20 +209,20 @@ fn apply_genesis_send_policy(
         .ok_or("Covenant genesis adjustment underflow".to_string())
 }
 
-pub(super) fn apply_dust_policy(
-    policy: CovenantDustPolicy,
+pub(super) fn apply_change_fold(
+    policy: CovenantFundingPolicy,
     selected: u64,
     total: u64,
     fee: u64,
     used_manual_selection: bool,
 ) -> Result<u64, String> {
-    if policy != CovenantDustPolicy::FoldSubKip9Change || !used_manual_selection {
+    if policy != CovenantFundingPolicy::FoldSubKip9Change || !used_manual_selection {
         return Ok(selected);
     }
     let change = total
         .checked_sub(selected)
         .and_then(|remaining| remaining.checked_sub(fee))
-        .ok_or_else(|| "Covenant dust-policy arithmetic underflow".to_string())?;
+        .ok_or_else(|| "Covenant change arithmetic underflow".to_string())?;
     if change == 0 || change >= KIP9_MIN_CHANGE_SOMPI {
         return Ok(selected);
     }
