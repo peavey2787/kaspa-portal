@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Both run-all scripts check the formatting of the `qa/` workspace, as CI
+  does. Before, a misformatted QA test passed locally and failed CI.
 - A covenant deposit can be held to the exact amount asked for.
   `CovenantDustPolicy` is now `CovenantFundingPolicy`, and `Preserve` is now
   `AdjustToSelection`. The new `Exact` refuses hand-picked UTXOs that fall

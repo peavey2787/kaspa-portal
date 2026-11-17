@@ -11,7 +11,7 @@ use kaspa_portal::{
     transaction::{
         builder::{
             kip22::{encode_spend, Kip22Coin},
-            CovenantBuildRequest, CovenantFundingPolicy, CovenantEncoding,
+            CovenantBuildRequest, CovenantEncoding, CovenantFundingPolicy,
             MultisigConsolidationRequest, PskbOutputPlan,
         },
         consensus::ConsensusTransaction,

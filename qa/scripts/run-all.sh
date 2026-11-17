@@ -74,6 +74,7 @@ if [[ "$resume_stage" != "rust-e2e" && "$resume_stage" != "live-e2e" && "$resume
   echo '==> Formatting QA'
   if cargo fmt --version >/dev/null 2>&1; then
     cargo fmt --all -- --check
+    cargo fmt --manifest-path qa/Cargo.toml --all -- --check
   fi
 fi
 

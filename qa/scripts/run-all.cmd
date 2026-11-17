@@ -157,6 +157,8 @@ if errorlevel 1 (
 ) else (
     call :run cargo fmt --all -- --check
     if errorlevel 1 exit /b 1
+    call :run cargo fmt --manifest-path qa\Cargo.toml --all -- --check
+    if errorlevel 1 exit /b 1
 )
 
 :rust_e2e_qa
